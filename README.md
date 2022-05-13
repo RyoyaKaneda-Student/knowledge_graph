@@ -1,4 +1,4 @@
-project_name
+ナレッジグラフ
 ==============================
 
 A short description of the project.
