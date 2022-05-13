@@ -52,22 +52,10 @@ for s1, p1, o1 in g.triples((None, RDF.type, prefix_dict.kgc.Situation)):
             if not s * o == 0:
                 situation_matrix[s][o] = type_to_index(p.n3(g.namespace_manager))
 
-print(type_list)
-print(situation_matrix)
+# print(type_list)
+# print(situation_matrix)
 
-vecs = np.array(situation_matrix)
-
-tsne = TSNE(n_components=2, random_state=0)
-x = tsne.fit_transform(vecs[1:])
-
-X = []
-Y = []
-for j in range(len(x)):
-    X.append(x[j][0])
-    Y.append(x[j][1])
-
-fig, ax = plt.subplots(figsize=(15, 15))
-ax.scatter(X, Y)
-for i in range(situation_len):
-    ax.annotate(f'{i+1}', (X[i], Y[i]))
-plt.show()
+for s, p, o in g.triples((None, None, None)):
+    s = s.n3(g.namespace_manager)
+    o = o.n3(g.namespace_manager)
+    print(s, p, o)
