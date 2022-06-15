@@ -32,7 +32,12 @@ def make_g(usetitle):
 
 
 def change_name(g, s, p, o):
-    return s.n3(g.namespace_manager), p.n3(g.namespace_manager), o.n3(g.namespace_manager)
+    s, p, o = s.n3(g.namespace_manager), p.n3(g.namespace_manager), o.n3(g.namespace_manager)
+    result = re.findall(fr"<http://kgc.knowledge-graph.jp/data/predicate/(.*)>", s)
+    if len(result) > 0:
+
+        print(result)
+    return s, p, o
 
 
 def make_ERdicts(g, Edict=None, Rdict=None):
@@ -54,40 +59,57 @@ def make_ERdicts(g, Edict=None, Rdict=None):
     Rlist = sorted(set(Rlist), key=Rlist.index)
     # id付
     lenEdict, lenRdict = len(Edict), len(Rdict)
-    Edict = Edict.update({i+lenEdict: l for i, l in enumerate(Elist)})
-    Rdict = Rdict.update({i+lenRdict: l for i, l in enumerate(Rlist)})
+    Edict.update({l: i+lenEdict for i, l in enumerate(Elist)})
+    Rdict.update({l: i+lenRdict for i, l in enumerate(Rlist)})
     return Edict, Rdict
 
 
 def make_triple(g, Edict, Rdict):
     # triple に関する処理
     triples = []
-    tmp01, tmp02 = {}, {}
     for s, p, o in g.triples((None, None, None)):
-        s, p, o = s.n3(g.namespace_manager), p.n3(g.namespace_manager), o.n3(g.namespace_manager)
+        s, p, o = change_name(g, s, p, o)
         _s, _p, _o = Edict[s], Rdict[p], Edict[o]
 
         triples.append((_s, _p, _o))
 
-    for s in range(max(Edict.values()) + 1):
-        for p in range((max(Rdict.values()) + 1) * 2):
-            tmp01[(s, p)] = []
-            tmp02[(s, p)] = []
-
-    return triples, tmp01, tmp02
+    return triples
 
 
-def make_():
+def make_souce_label(g, Edict, Rdict):
     # source, label に関する処理
     sources = {}
     labels = {}
     for s, p, o in g.triples((None, None, None)):
-        s, p, o = s.n3(g.namespace_manager), p.n3(g.namespace_manager), o.n3(g.namespace_manager)
-        _s, _p, _o = Ef[s], R[p], Et[o]
+        s, p, o = change_name(g, s, p, o)
+        _s, _p, _o = Edict[s], Rdict[p], Edict[o]
         if p == "kgc:source" and '@en' in o:
             sources[_o] = o
         elif p == "rdfs:label":
             labels[_o] = o
+
+    return sources, labels
+
+
+def make_story_list(g, usetitle):
+    # Story に関する処理
+    stories = []
+    s_taiou = {}  # [s] = (new s)
+    for s, p, o in g.triples((None, RDF.type, None)):
+        s, p, o = change_name(g, s, p, o)
+        if o in ("kgc:Situation", "kgc:Statement", "kgc:Thought"):
+            result = re.findall(fr'({usetitle}:)(\d+)([a-z]?)', s)
+            if len(result) == 0:
+                continue
+            result = result[0]
+            s_ = result[0] + result[1].zfill(4) + result[2]
+            s_taiou[s] = s_
+            stories.append(s_)
+
+    stories = sorted(stories)
+    print(stories)
+    return stories, s_taiou
+
 
 def function01(usetitle):
     g, prefix_dict = make_g(usetitle)
@@ -182,36 +204,18 @@ def function02(usetitle):
 
     Edict, Rdict = make_ERdicts(g)
 
-    triples, tmp01, tmp02 = make_triple(g, Edict, Rdict)
+    triples = make_triple(g, Edict, Rdict)
+
+    tmp01, tmp02 = {}, {}
+    for s in range(max(Edict.values()) + 1):
+        for p in range((max(Rdict.values()) + 1) * 2):
+            tmp01[(s, p)] = []
+            tmp02[(s, p)] = []
 
     # source, label に関する処理
-    sources = {}
-    labels = {}
-    for s, p, o in g.triples((None, None, None)):
-        s, p, o = s.n3(g.namespace_manager), p.n3(g.namespace_manager), o.n3(g.namespace_manager)
-        _s, _p, _o = Ef[s], R[p], Et[o]
-        if p == "kgc:source" and '@en' in o:
-            sources[_o] = o
-        elif p == "rdfs:label":
-            labels[_o] = o
+    sources, labels = make_souce_label(g, Edict, Rdict)
 
-    # Story に関する処理
-    stories = []
-    s_taiou = {}  # [index] = (new s)
-    for s, p, o in g.triples((None, RDF.type, None)):
-        s, p, o = change_name(s, p, o)
-        if o in ("kgc:Situation", "kgc:Statement", "kgc:Thought"):
-            # print(s, p, o)
-            result = re.findall(fr'({usetitle}:)(\d+)([a-z]?)', s)
-            if len(result) == 0:
-                continue
-            result = result[0]
-            s_ = result[0] + result[1].zfill(4) + result[2]
-            s_taiou[Ef[s]] = s_
-            stories.append(s_)
-
-    stories = sorted(stories)
-    print(stories)
+    stories, s_taiou = make_story_list(g, usetitle)
 
     df = pd.DataFrame(triples)
     df.to_csv(f"data/processed/{usetitle}/ids.tsv", header=False, index=False, sep='\t')
@@ -224,10 +228,41 @@ def function02(usetitle):
     with open(f"data/processed/{usetitle}/test.pickle", "wb") as f:
         pickle.dump(df.values, f)
 
-    return Ef, R, Et, revE, revR, triples
+
+def function03(titles):
+    Edict, Rdict = {}, {}
+    for jaName, tagName in titles.items():
+        g, prefix_dict = make_g(tagName)
+
+        Edict, Rdict = make_ERdicts(g, Edict, Rdict)
+
+        triples = make_triple(g, Edict, Rdict)
+
+        # source, label に関する処理
+        sources, labels = make_souce_label(g, Edict, Rdict)
+
+        stories, s_taiou = make_story_list(g, tagName)
+
+    tmp01, tmp02 = {}, {}
+    for s in range(max(Edict.values()) + 1):
+        for p in range((max(Rdict.values()) + 1) * 2):
+            tmp01[(s, p)] = []
+            tmp02[(s, p)] = []
+
+    df = pd.DataFrame(triples)
+    df.to_csv(f"data/processed/ALL/ids.tsv", header=False, index=False, sep='\t')
+    with open(f"data/processed/ALL/to_skip.pickle", "wb") as f:
+        pickle.dump({'lhs': tmp01, 'rhs': tmp02}, f)
+    with open(f"data/processed/ALL/train.pickle", "wb") as f:
+        pickle.dump(df.values, f)
+    with open(f"data/processed/ALL/valid.pickle", "wb") as f:
+        pickle.dump(df.values, f)
+    with open(f"data/processed/ALL/test.pickle", "wb") as f:
+        pickle.dump(df.values, f)
+    return Edict, Rdict
 
 
-def main():
+def main2():
     titles = {
         "僧坊荘園": "AbbeyGrange",
         "花婿失踪事件": "ACaseOfIdentity",
@@ -243,6 +278,27 @@ def main():
     for jaName, tagName in titles.items():
         dict_[tagName] = function01(tagName)
     print("complete")
+
+
+def main3():
+    titles = {
+        "僧坊荘園": "AbbeyGrange",
+        "花婿失踪事件": "ACaseOfIdentity",
+        "背中の曲がった男": "CrookedMan",
+        "踊る人形": "DancingMen",
+        "悪魔の足": "DevilsFoot",
+        "入院患者": "ResidentPatient",
+        "白銀号事件": "SilverBlaze",
+        "マダラのひも": "SpeckledBand"
+    }
+
+    Edict, Rdict = function03(titles)
+    print(Edict.keys())
+    print("complete")
+
+
+def main():
+    main3()
 
 
 if __name__ == '__main__':
