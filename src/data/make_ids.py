@@ -35,8 +35,9 @@ def change_name(g, s, p, o):
     s, p, o = s.n3(g.namespace_manager), p.n3(g.namespace_manager), o.n3(g.namespace_manager)
     result = re.findall(fr"<http://kgc.knowledge-graph.jp/data/predicate/(.*)>", s)
     if len(result) > 0:
-
-        print(result)
+        s = re.sub("([A-Z])", lambda x: "_" + x.group(1).lower(), result[0])
+        if s[0] == '_':
+            s = s[1:]
     return s, p, o
 
 
@@ -59,8 +60,8 @@ def make_ERdicts(g, Edict=None, Rdict=None):
     Rlist = sorted(set(Rlist), key=Rlist.index)
     # id付
     lenEdict, lenRdict = len(Edict), len(Rdict)
-    Edict.update({l: i+lenEdict for i, l in enumerate(Elist)})
-    Rdict.update({l: i+lenRdict for i, l in enumerate(Rlist)})
+    Edict.update({l: i + lenEdict for i, l in enumerate(Elist)})
+    Rdict.update({l: i + lenRdict for i, l in enumerate(Rlist)})
     return Edict, Rdict
 
 
@@ -249,17 +250,14 @@ def function03(titles):
             tmp01[(s, p)] = []
             tmp02[(s, p)] = []
 
-    df = pd.DataFrame(triples)
-    df.to_csv(f"data/processed/ALL/ids.tsv", header=False, index=False, sep='\t')
-    with open(f"data/processed/ALL/to_skip.pickle", "wb") as f:
-        pickle.dump({'lhs': tmp01, 'rhs': tmp02}, f)
-    with open(f"data/processed/ALL/train.pickle", "wb") as f:
-        pickle.dump(df.values, f)
-    with open(f"data/processed/ALL/valid.pickle", "wb") as f:
-        pickle.dump(df.values, f)
-    with open(f"data/processed/ALL/test.pickle", "wb") as f:
-        pickle.dump(df.values, f)
-    return Edict, Rdict
+    args = {}
+    args['Edict'] = Edict
+    args['Rdict'] = Rdict
+    args['triples'] = triples
+    args['lrhs'] = {'lhs': tmp01, 'rhs': tmp02}
+    args['df'] = pd.DataFrame(triples)
+
+    return args
 
 
 def main2():
@@ -292,13 +290,51 @@ def main3():
         "マダラのひも": "SpeckledBand"
     }
 
-    Edict, Rdict = function03(titles)
+    args = function03(titles)
+    df = args['df']
+    Edict = args['Edict']
+    df.to_csv(f"data/processed/ALL/ids.tsv", header=False, index=False, sep='\t')
+    with open(f"data/processed/ALL/to_skip.pickle", "wb") as f:
+        pickle.dump(args['lrhs'], f)
+    with open(f"data/processed/ALL/train.pickle", "wb") as f:
+        pickle.dump(df.values, f)
+    with open(f"data/processed/ALL/valid.pickle", "wb") as f:
+        pickle.dump(df.values, f)
+    with open(f"data/processed/ALL/test.pickle", "wb") as f:
+        pickle.dump(df.values, f)
     print(Edict.keys())
     print("complete")
 
 
+def main4():
+    titles = {
+        "僧坊荘園": "AbbeyGrange",
+        "花婿失踪事件": "ACaseOfIdentity",
+        "背中の曲がった男": "CrookedMan",
+        "踊る人形": "DancingMen",
+        "悪魔の足": "DevilsFoot",
+        "入院患者": "ResidentPatient",
+        "白銀号事件": "SilverBlaze",
+        "マダラのひも": "SpeckledBand"
+    }
+
+    args = function03(titles)
+    df = args['df']
+    Edict = args['Edict']
+    kill_id = Edict['<http://kgc.knowledge-graph.jp/data/predicate/kill>']
+    hide_id = Edict['<http://kgc.knowledge-graph.jp/data/predicate/hide>']
+    test = np.ndarray(
+        [(Edict['SpeckledBand:Roylott'], kill_id, Edict['SpeckledBand:Julia']),
+         (Edict['DevilsFoot:Mortimer'], kill_id, Edict['DevilsFoot:Brenda']),
+         (Edict['DevilsFoot:Standale'], kill_id, Edict['DevilsFoot:mortimer']),
+         (Edict['ACaseOfIdentity:Windybank'], hide_id, Edict['ACaseOfIdentity:hozma'])]
+    )
+    with open(f"data/processed/ALL/test.pickle", "wb") as f:
+        pickle.dump(test, f)
+
+
 def main():
-    main3()
+    main4()
 
 
 if __name__ == '__main__':
