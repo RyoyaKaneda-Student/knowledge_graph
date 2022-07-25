@@ -24,7 +24,7 @@ def is_integer(n):
 
 def make_g(usetitle):
     g = Graph()
-    g.parse(f'data/external/2020v2/{usetitle}.ttl')
+    g.parse(f'KGdata/external/2020v2/{usetitle}.ttl')
     g.bind(usetitle, f"http://kgc.knowledge-graph.jp/data/{usetitle}/", override=True)
     prefix_dict = {item[0]: Namespace(item[1]) for item in g.namespaces()}
     prefix_dict = AttrDict(prefix_dict)
@@ -231,14 +231,14 @@ def function01(usetitle):
     # print(stories)
 
     df = pd.DataFrame(triples)
-    df.to_csv(f"data/processed/{usetitle}/ids.tsv", header=False, index=False, sep='\t')
-    with open(f"data/processed/{usetitle}/to_skip.pickle", "wb") as f:
+    df.to_csv(f"KGdata/processed/{usetitle}/ids.tsv", header=False, index=False, sep='\t')
+    with open(f"KGdata/processed/{usetitle}/to_skip.pickle", "wb") as f:
         pickle.dump({'lhs': tmp01, 'rhs': tmp02}, f)
-    with open(f"data/processed/{usetitle}/train.pickle", "wb") as f:
+    with open(f"KGdata/processed/{usetitle}/train.pickle", "wb") as f:
         pickle.dump(df.values, f)
-    with open(f"data/processed/{usetitle}/valid.pickle", "wb") as f:
+    with open(f"KGdata/processed/{usetitle}/valid.pickle", "wb") as f:
         pickle.dump(df.values, f)
-    with open(f"data/processed/{usetitle}/test.pickle", "wb") as f:
+    with open(f"KGdata/processed/{usetitle}/test.pickle", "wb") as f:
         pickle.dump(df.values, f)
 
     return Ef, R, Et, revE, revR, triples
@@ -263,14 +263,14 @@ def function02(usetitle):
     stories, s_taiou = make_story_list(g, usetitle)
 
     df = pd.DataFrame(triples)
-    df.to_csv(f"data/processed/{usetitle}/ids.tsv", header=False, index=False, sep='\t')
-    with open(f"data/processed/{usetitle}/to_skip.pickle", "wb") as f:
+    df.to_csv(f"KGdata/processed/{usetitle}/ids.tsv", header=False, index=False, sep='\t')
+    with open(f"KGdata/processed/{usetitle}/to_skip.pickle", "wb") as f:
         pickle.dump({'lhs': tmp01, 'rhs': tmp02}, f)
-    with open(f"data/processed/{usetitle}/train.pickle", "wb") as f:
+    with open(f"KGdata/processed/{usetitle}/train.pickle", "wb") as f:
         pickle.dump(df.values, f)
-    with open(f"data/processed/{usetitle}/valid.pickle", "wb") as f:
+    with open(f"KGdata/processed/{usetitle}/valid.pickle", "wb") as f:
         pickle.dump(df.values, f)
-    with open(f"data/processed/{usetitle}/test.pickle", "wb") as f:
+    with open(f"KGdata/processed/{usetitle}/test.pickle", "wb") as f:
         pickle.dump(df.values, f)
 
 
@@ -334,10 +334,10 @@ def main3():
     df = args['df']
     Edict = args['Edict']
     Rdict = args['Rdict']
-    df.to_csv(f"data/processed/ALL/ids.tsv", header=False, index=False, sep='\t')
+    df.to_csv(f"KGdata/processed/ALL/ids.tsv", header=False, index=False, sep='\t')
 
-    df.to_csv(f"data/processed/ALL/train", header=False, index=False, sep='\t')
-    df.to_csv(f"data/processed/ALL/valid", header=False, index=False, sep='\t')
+    df.to_csv(f"KGdata/processed/ALL/train", header=False, index=False, sep='\t')
+    df.to_csv(f"KGdata/processed/ALL/valid", header=False, index=False, sep='\t')
 
     print(Edict.keys())
 
@@ -354,7 +354,7 @@ def main3():
     test = np.array(test)
 
     df = pd.DataFrame(test)
-    df.to_csv(f"data/processed/ALL/test", header=False, index=False, sep='\t')
+    df.to_csv(f"KGdata/processed/ALL/test", header=False, index=False, sep='\t')
 
     print("complete")
 
@@ -397,11 +397,11 @@ def main4():
     df_valid = pd.DataFrame(_valid)
     df__test = pd.DataFrame(_test)
 
-    df.to_csv(f"data/processed/ALL2/ids.tsv", header=False, index=False, sep='\t')
+    df.to_csv(f"KGdata/processed/ALL2/ids.tsv", header=False, index=False, sep='\t')
 
-    df_train.to_csv(f"data/processed/ALL2/train", header=False, index=False, sep='\t')
-    df_valid.to_csv(f"data/processed/ALL2/valid", header=False, index=False, sep='\t')
-    df__test.to_csv(f"data/processed/ALL2/test", header=False, index=False, sep='\t')
+    df_train.to_csv(f"KGdata/processed/ALL2/train", header=False, index=False, sep='\t')
+    df_valid.to_csv(f"KGdata/processed/ALL2/valid", header=False, index=False, sep='\t')
+    df__test.to_csv(f"KGdata/processed/ALL2/test", header=False, index=False, sep='\t')
 
 
 def main():
