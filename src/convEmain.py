@@ -1,11 +1,13 @@
 import json
 import torch
+import torch.nn as nn
 import pickle
 import numpy as np
 import argparse
 import sys
 import os
 import math
+from logging import Logger
 
 from os.path import join
 import torch.backends.cudnn as cudnn
@@ -19,7 +21,6 @@ from spodernet.preprocessing.processors import JsonLoaderProcessors, Tokenizer, 
 from spodernet.preprocessing.processors import ConvertTokenToIdx, ApplyFunction, ToLower, DictKey2ListMapper, \
     ApplyFunction, StreamToBatch
 from spodernet.utils.global_config import Config, Backends
-from spodernet.utils.logger import Logger, LogLevel
 from spodernet.preprocessing.batching import StreamBatcher
 from spodernet.preprocessing.pipeline import Pipeline
 from spodernet.preprocessing.processors import TargetIdx2MultiTarget
@@ -33,6 +34,35 @@ np.set_printoptions(precision=3)
 cudnn.benchmark = False
 
 ''' Preprocess knowledge graph using spodernet. '''
+
+
+def setup_logger(name, logfile, console_level=None) -> Logger:
+    import logging
+    name = name
+    console_level = logging.DEBUG if console_level == 'debug' else logging.INFO
+
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+
+    # create file handler which logs even DEBUG messages
+    fh = logging.FileHandler(logfile)
+    fh.setLevel(logging.DEBUG)
+    fh_formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(filename)s - %(name)s - %(funcName)s - %(message)s')
+    fh.setFormatter(fh_formatter)
+
+    # create console handler with a INFO log level
+    ch = logging.StreamHandler()
+    ch.setLevel(console_level)
+    ch_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', '%Y-%m-%d %H:%M:%S')
+    ch.setFormatter(ch_formatter)
+
+    # add the handlers to the logger
+    logger.addHandler(fh)
+    logger.addHandler(ch)
+
+    logger.propagate = False
+    return logger
 
 
 def preprocess(dataset_name, delete_data=False):
@@ -55,7 +85,7 @@ def preprocess(dataset_name, delete_data=False):
 
     # process full vocabulary and save it to disk
     d.set_path(full_path)
-    p = Pipeline(args.KGdata, delete_data, keys=input_keys, skip_transformation=True)
+    p = Pipeline(dataset_name, delete_data, keys=input_keys, skip_transformation=True)
     p.add_sent_processor(ToLower())
     p.add_sent_processor(CustomTokenizer(lambda x: x.split(' ')), keys=['e2_multi1', 'e2_multi2'])
     p.add_token_processor(AddToVocab())
@@ -75,7 +105,147 @@ def preprocess(dataset_name, delete_data=False):
         p.execute(d)
 
 
-def main(args, model_path):
+def select_model(param, vocab, *, logger, ) -> nn.Module:
+    model_name = param.model
+    if model_name is None:
+        model = ConvE(param, vocab['e1'].num_token, vocab['rel'].num_token)
+    elif model_name == 'conve':
+        model = ConvE(param, vocab['e1'].num_token, vocab['rel'].num_token)
+    elif model_name == 'distmult':
+        model = DistMult(param, vocab['e1'].num_token, vocab['rel'].num_token)
+    elif model_name == 'complex':
+        model = Complex(param, vocab['e1'].num_token, vocab['rel'].num_token)
+    else:
+        raise Exception(f"Unknown model! :{model_name}")
+        pass
+    return model
+
+
+def train(
+        args, vocab, num_entities, device, *, logger,
+        train_batcher, dev_rank_batcher, test_rank_batcher,
+        model_path, is_optuna=False,
+):
+    model = select_model(args)
+    model_path_tmp = f"{model_path}.tmp"
+    train_batcher.at_batch_prepared_observers.insert(
+        1, TargetIdx2MultiTarget(num_entities, 'e2_multi1', 'e2_multi1_binary')
+    )
+
+    eta = ETAHook('train', print_every_x_batches=args.log_interval)
+    train_batcher.subscribe_to_events(eta)
+    train_batcher.subscribe_to_start_of_epoch_event(eta)
+    train_batcher.subscribe_to_events(LossHook('train', print_every_x_batches=args.log_interval))
+
+    model.to(device)
+
+    def save_model_func(_model_path):
+        print('saving to {0}'.format(_model_path))
+        torch.save(model.state_dict(), _model_path)
+
+    def load_model_func(_model_path):
+        model_params = torch.load(_model_path)
+        print(model)
+        # total_param_size = []
+        # params = [(key, value.size(), value.numel()) for key, value in model_params.items()]
+        # for key, size, count in params:
+        #     total_param_size.append(count)
+        #     print(key, size, count)
+        # print(np.array(total_param_size).sum())
+        model.load_state_dict(model_params)
+        return model
+
+    def valid_func():
+        return ranking_and_hits(model, dev_rank_batcher, vocab, 'dev_evaluation', log=logger)
+
+    def test_func():
+        return ranking_and_hits(model, test_rank_batcher, vocab, 'test_evaluation', log=logger)
+
+    if args.resume:
+        load_model_func(model_path)
+        model.eval()
+        if not is_optuna: test_func()
+        valid_func()
+    else:
+        model.init()
+        pass
+
+    total_param_size = []
+    params = [value.numel() for value in model.parameters()]
+
+    opt = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.l2)
+    max_mrr = 0
+    for epoch in range(args.epochs):
+        model.train()
+        for i, str2var in enumerate(train_batcher):
+            opt.zero_grad()
+            e1 = str2var['e1']
+            rel = str2var['rel']
+            e2_multi = str2var['e2_multi1_binary'].float()
+            # label smoothing
+            e2_multi = ((1.0 - args.label_smoothing) * e2_multi) + (1.0 / e2_multi.size(1))
+
+            pred = model.forward(e1, rel)
+            loss = model.loss(pred, e2_multi)
+            loss.backward()
+            opt.step()
+
+            train_batcher.state.loss = loss.cpu()
+
+        model.eval()
+        with torch.no_grad():
+            if epoch % 5 == 0 and epoch > 0:
+                _, _, _, _, _, mean_reciprocal_rank = valid_func()
+                test_func()
+                if max_mrr < mean_reciprocal_rank:
+                    save_model_func(model_path_tmp)
+
+    load_model_func(model_path_tmp)
+    if is_optuna:
+        os.remove(model_path_tmp)
+        model.eval()
+        with torch.no_grad():
+            _, _, _, _, _, mean_reciprocal_rank = ranking_and_hits(
+                model, test_rank_batcher, vocab, 'test_evaluation', log=logger
+            )
+            return mean_reciprocal_rank
+    else:
+        os.rename(model_path_tmp, model_path)
+        return None
+
+
+def conve1train(args, model_path, *, logger):
+    device = torch.device("cpu")
+    if Config.cuda:
+        device = torch.device("cuda")
+    elif args.device == 'mpu':
+        device = torch.device("mps")
+
+    if args.preprocess: preprocess(args.KGdata, delete_data=True)
+    input_keys = ['e1', 'rel', 'rel_eval', 'e2', 'e2_multi1', 'e2_multi2']
+    p = Pipeline(args.KGdata, keys=input_keys)
+    p.load_vocabs()
+    vocab = p.state['vocab']
+
+    num_entities = vocab['e1'].num_token
+
+    train_batcher = StreamBatcher(args.KGdata, 'train', args.batch_size, randomize=True, keys=input_keys,
+                                  loader_threads=args.loader_threads)
+    dev_rank_batcher = StreamBatcher(args.KGdata, 'dev_ranking', args.test_batch_size, randomize=False,
+                                     loader_threads=args.loader_threads, keys=input_keys)
+    test_rank_batcher = StreamBatcher(args.KGdata, 'test_ranking', args.test_batch_size, randomize=False,
+                                      loader_threads=args.loader_threads, keys=input_keys)
+    train(
+        args,
+        vocab, num_entities, device,
+        train_batcher=train_batcher,
+        dev_rank_batcher=dev_rank_batcher,
+        test_rank_batcher=test_rank_batcher,
+        is_optuna=False, model_path=model_path
+    )
+
+
+def conve_optuna(args, model_sub_dir, model_name, *, logger):
     device = torch.device("cpu")
     if Config.cuda:
         device = torch.device("cuda")
@@ -97,83 +267,29 @@ def main(args, model_path):
     test_rank_batcher = StreamBatcher(args.KGdata, 'test_ranking', args.test_batch_size, randomize=False,
                                       loader_threads=args.loader_threads, keys=input_keys)
 
-    if args.model is None:
-        model = ConvE(args, vocab['e1'].num_token, vocab['rel'].num_token)
-    elif args.model == 'conve':
-        model = ConvE(args, vocab['e1'].num_token, vocab['rel'].num_token)
-    elif args.model == 'distmult':
-        model = DistMult(args, vocab['e1'].num_token, vocab['rel'].num_token)
-    elif args.model == 'complex':
-        model = Complex(args, vocab['e1'].num_token, vocab['rel'].num_token)
-    else:
-        # log.info('Unknown model: {0}', args.model)
-        pass
-        raise Exception("Unknown model!")
+    def optimize():
+        args.model = "conve"
+        args.lr = 1e-4
+        args.l2 = 1e-4
+        model_dir = os.path.join(model_sub_dir, "op{}".format(1))
+        os.makedirs(model_dir, exist_ok=False)
+        model_path = os.path.join(model_dir, model_name)
+        train(
+            args,
+            vocab, num_entities, device,
+            train_batcher=train_batcher,
+            dev_rank_batcher=dev_rank_batcher,
+            test_rank_batcher=test_rank_batcher,
+            is_optuna=True, model_path=model_path,
+            logger=logger
+        )
 
-    train_batcher.at_batch_prepared_observers.insert(1, TargetIdx2MultiTarget(num_entities, 'e2_multi1',
-                                                                              'e2_multi1_binary'))
-
-    eta = ETAHook('train', print_every_x_batches=args.log_interval)
-    train_batcher.subscribe_to_events(eta)
-    train_batcher.subscribe_to_start_of_epoch_event(eta)
-    train_batcher.subscribe_to_events(LossHook('train', print_every_x_batches=args.log_interval))
-
-    model.to(device)
-
-    if args.resume:
-        model_params = torch.load(model_path)
-        print(model)
-        total_param_size = []
-        params = [(key, value.size(), value.numel()) for key, value in model_params.items()]
-        for key, size, count in params:
-            total_param_size.append(count)
-            print(key, size, count)
-        print(np.array(total_param_size).sum())
-        model.load_state_dict(model_params)
-        model.eval()
-        ranking_and_hits(model, test_rank_batcher, vocab, 'test_evaluation')
-        ranking_and_hits(model, dev_rank_batcher, vocab, 'dev_evaluation')
-    else:
-        model.init()
-        pass
-
-    total_param_size = []
-    params = [value.numel() for value in model.parameters()]
-    print(params)
-    print(np.sum(params))
-
-    opt = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.l2)
-    for epoch in range(args.epochs):
-        model.train()
-        for i, str2var in enumerate(train_batcher):
-            opt.zero_grad()
-            e1 = str2var['e1']
-            rel = str2var['rel']
-            e2_multi = str2var['e2_multi1_binary'].float()
-            # label smoothing
-            e2_multi = ((1.0 - args.label_smoothing) * e2_multi) + (1.0 / e2_multi.size(1))
-
-            pred = model.forward(e1, rel)
-            loss = model.loss(pred, e2_multi)
-            loss.backward()
-            opt.step()
-
-            train_batcher.state.loss = loss.cpu()
-
-        print('saving to {0}'.format(model_path))
-        torch.save(model.state_dict(), model_path)
-
-        model.eval()
-        with torch.no_grad():
-            if epoch % 5 == 0 and epoch > 0:
-                ranking_and_hits(model, dev_rank_batcher, vocab, 'dev_evaluation')
-            if epoch % 5 == 0:
-                if epoch > 0:
-                    ranking_and_hits(model, test_rank_batcher, vocab, 'test_evaluation')
+    optimize()
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(description='Link prediction for knowledge graphs')
+    parser.add_argument('--log-file', type=str, default='./convE_main.log', help='log file')
     parser.add_argument('--batch-size', type=int, default=128, help='input batch size for training (default: 128)')
     parser.add_argument('--test-batch-size', type=int, default=128,
                         help='input batch size for testing/validation (default: 128)')
@@ -209,6 +325,7 @@ if __name__ == '__main__':
     parser.add_argument('--label-smoothing', type=float, default=0.1, help='Label smoothing value to use. Default: 0.1')
     parser.add_argument('--hidden-size', type=int, default=9728,
                         help='The side of the hidden layer. The required size changes with the size of the embeddings. Default: 9728 (embedding size 200).')
+    parser.add_argument('--optuna', action='store_true', help='optuna', default=False)
 
     args = parser.parse_args()
 
@@ -216,10 +333,17 @@ if __name__ == '__main__':
     Config.backend = 'pytorch'
     Config.cuda = True if args.device == 'cuda' else False
     Config.embedding_dim = args.embedding_dim
-    # Logger.GLOBAL_LOG_LEVEL = LogLevel.DEBUG
+    logger = setup_logger(__name__, logfile=args.log_file)
 
     model_name = '{2}_{0}_{1}'.format(args.input_drop, args.hidden_drop, args.model)
-    model_path = 'saved_models/{0}_{1}.model'.format(args.KGdata, model_name)
-
     torch.manual_seed(args.seed)
-    main(args, model_path)
+    if not args.optuna:
+        model_path = 'saved_models/{0}_{1}.model'.format(args.KGdata, model_name)
+        conve1train(args, model_path, logger=logger)
+    else:
+        model_sub_dir = 'saved_models/optuna/'
+        conve_optuna(args, model_sub_dir, model_name, logger=logger)
+
+
+if __name__ == '__main__':
+    main()

@@ -75,7 +75,7 @@ target/
 # Jupyter NB Checkpoints
 .ipynb_checkpoints/
 
-# exclude data from source control by default
+# exclude KGdata from source control by default
 /data/
 
 # Mac OS-specific storage files
@@ -87,3 +87,7 @@ target/
 
 # Mypy cache
 .mypy_cache/
+
+# savad data
+/saved_models/
+/github_sankou/
