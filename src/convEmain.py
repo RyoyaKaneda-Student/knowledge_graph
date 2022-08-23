@@ -12,8 +12,11 @@ from logging import Logger
 from os.path import join
 import torch.backends.cudnn as cudnn
 
+import optuna
+from optuna import Trial
+
 from evaluation import ranking_and_hits
-from model import ConvE, DistMult, Complex
+from model import ConvE, DistMult, Complex, TransformerE
 
 from spodernet.preprocessing.pipeline import Pipeline, DatasetStreamer
 from spodernet.preprocessing.processors import JsonLoaderProcessors, Tokenizer, AddToVocab, SaveLengthsToState, \
@@ -62,6 +65,8 @@ def setup_logger(name, logfile, console_level=None) -> Logger:
     logger.addHandler(ch)
 
     logger.propagate = False
+
+    logger.info("logger set complete. ")
     return logger
 
 
@@ -105,16 +110,18 @@ def preprocess(dataset_name, delete_data=False):
         p.execute(d)
 
 
-def select_model(param, vocab, *, logger, ) -> nn.Module:
-    model_name = param.model
+def select_model(args, vocab, *, logger, ) -> nn.Module:
+    model_name = args.model
     if model_name is None:
-        model = ConvE(param, vocab['e1'].num_token, vocab['rel'].num_token)
+        model = ConvE(args, vocab['e1'].num_token, vocab['rel'].num_token)
     elif model_name == 'conve':
-        model = ConvE(param, vocab['e1'].num_token, vocab['rel'].num_token)
+        model = ConvE(args, vocab['e1'].num_token, vocab['rel'].num_token)
     elif model_name == 'distmult':
-        model = DistMult(param, vocab['e1'].num_token, vocab['rel'].num_token)
+        model = DistMult(args, vocab['e1'].num_token, vocab['rel'].num_token)
     elif model_name == 'complex':
-        model = Complex(param, vocab['e1'].num_token, vocab['rel'].num_token)
+        model = Complex(args, vocab['e1'].num_token, vocab['rel'].num_token)
+    elif model_name == 'transformere':
+        model = TransformerE(args, vocab['e1'].num_token, vocab['rel'].num_token)
     else:
         raise Exception(f"Unknown model! :{model_name}")
         pass
@@ -122,30 +129,37 @@ def select_model(param, vocab, *, logger, ) -> nn.Module:
 
 
 def train(
-        args, vocab, num_entities, device, *, logger,
-        train_batcher, dev_rank_batcher, test_rank_batcher,
+        args, vocab, num_entities, input_keys, device, *, logger,
         model_path, is_optuna=False,
 ):
-    model = select_model(args)
+    train_batcher = StreamBatcher(args.KGdata, 'train', args.batch_size, randomize=False, keys=input_keys,
+                                  loader_threads=args.loader_threads)
+    dev_rank_batcher = StreamBatcher(args.KGdata, 'dev_ranking', args.test_batch_size, randomize=False,
+                                     loader_threads=args.loader_threads, keys=input_keys)
+    test_rank_batcher = StreamBatcher(args.KGdata, 'test_ranking', args.test_batch_size, randomize=False,
+                                      loader_threads=args.loader_threads, keys=input_keys)
+
+    model = select_model(args, vocab, logger=logger)
     model_path_tmp = f"{model_path}.tmp"
     train_batcher.at_batch_prepared_observers.insert(
         1, TargetIdx2MultiTarget(num_entities, 'e2_multi1', 'e2_multi1_binary')
     )
 
-    eta = ETAHook('train', print_every_x_batches=args.log_interval)
+    eta = ETAHook('train', print_every_x_batches=args.log_interval, log=logger)
     train_batcher.subscribe_to_events(eta)
     train_batcher.subscribe_to_start_of_epoch_event(eta)
-    train_batcher.subscribe_to_events(LossHook('train', print_every_x_batches=args.log_interval))
+    train_batcher.subscribe_to_events(LossHook('train', print_every_x_batches=args.log_interval, log=logger))
 
     model.to(device)
 
+    logger.info("training ready")
+
     def save_model_func(_model_path):
-        print('saving to {0}'.format(_model_path))
         torch.save(model.state_dict(), _model_path)
 
     def load_model_func(_model_path):
         model_params = torch.load(_model_path)
-        print(model)
+        # print(model)
         # total_param_size = []
         # params = [(key, value.size(), value.numel()) for key, value in model_params.items()]
         # for key, size, count in params:
@@ -156,10 +170,11 @@ def train(
         return model
 
     def valid_func():
-        return ranking_and_hits(model, dev_rank_batcher, vocab, 'dev_evaluation', log=logger)
+        return ranking_and_hits(model, dev_rank_batcher, vocab, 'dev_evaluation', log=logger if not is_optuna else None)
 
     def test_func():
-        return ranking_and_hits(model, test_rank_batcher, vocab, 'test_evaluation', log=logger)
+        return ranking_and_hits(model, test_rank_batcher, vocab, 'test_evaluation',
+                                log=logger) if not is_optuna else None
 
     if args.resume:
         load_model_func(model_path)
@@ -175,43 +190,104 @@ def train(
 
     opt = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.l2)
     max_mrr = 0
+
+    min_loss = float('inf')
+    early_stopping_counter = 0
+    tmp_loss = []
+
     for epoch in range(args.epochs):
         model.train()
+        sum_train = 0
         for i, str2var in enumerate(train_batcher):
             opt.zero_grad()
             e1 = str2var['e1']
             rel = str2var['rel']
             e2_multi = str2var['e2_multi1_binary'].float()
             # label smoothing
-            e2_multi = ((1.0 - args.label_smoothing) * e2_multi) + (1.0 / e2_multi.size(1))
+            # e2_multi = ((1.0 - args.label_smoothing) * e2_multi) + (1.0 / e2_multi.size(1))
+
+            sum_train += (e2_multi[e2_multi != 0]).sum()
 
             pred = model.forward(e1, rel)
             loss = model.loss(pred, e2_multi)
+            tmp_loss.append(loss.item())
             loss.backward()
             opt.step()
 
             train_batcher.state.loss = loss.cpu()
 
+        logger.debug(f"sum_train: {sum_train}")
         model.eval()
         with torch.no_grad():
-            if epoch % 5 == 0 and epoch > 0:
+            if (epoch + 1) % 5 == 0:
                 _, _, _, _, _, mean_reciprocal_rank = valid_func()
                 test_func()
                 if max_mrr < mean_reciprocal_rank:
                     save_model_func(model_path_tmp)
+
+        loss = (sum(tmp_loss) / len(tmp_loss))
+        logger.info("loss {0}".format(loss))
+        if min_loss > loss:
+            early_stopping_counter = 0
+            min_loss = loss
+        else:
+            early_stopping_counter += 1
+        if early_stopping_counter == 10:
+            break
 
     load_model_func(model_path_tmp)
     if is_optuna:
         os.remove(model_path_tmp)
         model.eval()
         with torch.no_grad():
-            _, _, _, _, _, mean_reciprocal_rank = ranking_and_hits(
-                model, test_rank_batcher, vocab, 'test_evaluation', log=logger
-            )
-            return mean_reciprocal_rank
+            _, _, _, _, _, mean_reciprocal_rank = valid_func()
+            return mean_reciprocal_rank.item()
     else:
         os.rename(model_path_tmp, model_path)
         return None
+
+
+def test(
+        args, vocab, num_entities, input_keys, device, *, logger,
+        model_path, is_optuna=False,
+):
+    # train_batcher = StreamBatcher(args.KGdata, 'train', args.batch_size, randomize=True, keys=input_keys,
+    #                               loader_threads=args.loader_threads)
+    dev_rank_batcher = StreamBatcher(args.KGdata, 'dev_ranking', args.test_batch_size, randomize=False,
+                                     loader_threads=args.loader_threads, keys=input_keys)
+    test_rank_batcher = StreamBatcher(args.KGdata, 'test_ranking', args.test_batch_size, randomize=False,
+                                      loader_threads=args.loader_threads, keys=input_keys)
+
+    model = select_model(args, vocab, logger=logger)
+    model.init()
+    model.to(device)
+
+    logger.info("test ready")
+
+    def load_model_func(_model_path):
+        model_params = torch.load(_model_path)
+        # print(model)
+        # total_param_size = []
+        # params = [(key, value.size(), value.numel()) for key, value in model_params.items()]
+        # for key, size, count in params:
+        #     total_param_size.append(count)
+        #     print(key, size, count)
+        # print(np.array(total_param_size).sum())
+        model.load_state_dict(model_params)
+        return model
+
+    def valid_func():
+        return ranking_and_hits(model, dev_rank_batcher, vocab, 'dev_evaluation', log=logger if not is_optuna else None)
+
+    def test_func():
+        return ranking_and_hits(model, test_rank_batcher, vocab, 'test_evaluation',
+                                log=logger) if not is_optuna else None
+
+    model.eval()
+
+    load_model_func(model_path)
+    valid_func()
+    test_func()
 
 
 def conve1train(args, model_path, *, logger):
@@ -229,25 +305,26 @@ def conve1train(args, model_path, *, logger):
 
     num_entities = vocab['e1'].num_token
 
-    train_batcher = StreamBatcher(args.KGdata, 'train', args.batch_size, randomize=True, keys=input_keys,
-                                  loader_threads=args.loader_threads)
-    dev_rank_batcher = StreamBatcher(args.KGdata, 'dev_ranking', args.test_batch_size, randomize=False,
-                                     loader_threads=args.loader_threads, keys=input_keys)
-    test_rank_batcher = StreamBatcher(args.KGdata, 'test_ranking', args.test_batch_size, randomize=False,
-                                      loader_threads=args.loader_threads, keys=input_keys)
-    train(
-        args,
-        vocab, num_entities, device,
-        train_batcher=train_batcher,
-        dev_rank_batcher=dev_rank_batcher,
-        test_rank_batcher=test_rank_batcher,
-        is_optuna=False, model_path=model_path
-    )
+    if args.test:
+        test(
+            args,
+            vocab, num_entities, input_keys, device,
+            is_optuna=False, model_path=model_path,
+            logger=logger
+        )
+    else:
+        train(
+            args,
+            vocab, num_entities, input_keys, device,
+            is_optuna=False, model_path=model_path,
+            logger=logger
+        )
 
 
 def conve_optuna(args, model_sub_dir, model_name, *, logger):
     device = torch.device("cpu")
     if Config.cuda:
+        logger.info("use CUDA")
         device = torch.device("cuda")
     elif args.device == 'mpu':
         device = torch.device("mps")
@@ -260,31 +337,25 @@ def conve_optuna(args, model_sub_dir, model_name, *, logger):
 
     num_entities = vocab['e1'].num_token
 
-    train_batcher = StreamBatcher(args.KGdata, 'train', args.batch_size, randomize=True, keys=input_keys,
-                                  loader_threads=args.loader_threads)
-    dev_rank_batcher = StreamBatcher(args.KGdata, 'dev_ranking', args.test_batch_size, randomize=False,
-                                     loader_threads=args.loader_threads, keys=input_keys)
-    test_rank_batcher = StreamBatcher(args.KGdata, 'test_ranking', args.test_batch_size, randomize=False,
-                                      loader_threads=args.loader_threads, keys=input_keys)
-
-    def optimize():
+    def objective(trial: Trial):
         args.model = "conve"
-        args.lr = 1e-4
-        args.l2 = 1e-4
-        model_dir = os.path.join(model_sub_dir, "op{}".format(1))
+        args.lr = trial.suggest_loguniform('lr', 1e-6, 1e-2)
+        args.l2 = trial.suggest_loguniform('l2', 1e-6, 1e-2)
+        model_dir = os.path.join(model_sub_dir, "op{}".format(trial.number))
         os.makedirs(model_dir, exist_ok=False)
         model_path = os.path.join(model_dir, model_name)
-        train(
+        return train(
             args,
-            vocab, num_entities, device,
-            train_batcher=train_batcher,
-            dev_rank_batcher=dev_rank_batcher,
-            test_rank_batcher=test_rank_batcher,
+            vocab, num_entities, input_keys, device,
             is_optuna=True, model_path=model_path,
             logger=logger
         )
 
-    optimize()
+    study = optuna.create_study(
+        study_name='conve', storage=f'sqlite:///./{model_sub_dir}/optuna_study.db', load_if_exists=True,
+        direction='maximize'
+    )
+    study.optimize(objective, n_trials=20)
 
 
 def main():
@@ -302,7 +373,8 @@ def main():
                         help='Dataset to use: {FB15k-237, YAGO3-10, WN18RR, umls, nations, kinship}, default: FB15k-237')
     parser.add_argument('--l2', type=float, default=0.0,
                         help='Weight decay value to use in the optimizer. Default: 0.0')
-    parser.add_argument('--model', type=str, default='conve', help='Choose from: {conve, distmult, complex}')
+    parser.add_argument('--model', type=str, default='conve',
+                        help='Choose from: {conve, distmult, complex, transformere}')
     parser.add_argument('--device', type=str, default='cpu',
                         help='Choose from: {cpu, cuda, mpu}', choices=['cpu', 'cuda', 'mpu'])
     parser.add_argument('--embedding-dim', type=int, default=200,
@@ -310,6 +382,10 @@ def main():
     parser.add_argument('--embedding-shape1', type=int, default=20,
                         help='The first dimension of the reshaped 2D embedding. '
                              'The second dimension is infered. Default: 20')
+    parser.add_argument('--nhead', type=int, default=8,
+                        help='number of head in transformer. Default: 8')  #
+    parser.add_argument('--transformer-drop', type=float, default=0.1,
+                        help='Dropout for the transformer. Default: 0.1.')  #
     parser.add_argument('--hidden-drop', type=float, default=0.3, help='Dropout for the hidden layer. Default: 0.3.')
     parser.add_argument('--input-drop', type=float, default=0.2, help='Dropout for the input embeddings. Default: 0.2.')
     parser.add_argument('--feat-drop', type=float, default=0.2,
@@ -326,6 +402,7 @@ def main():
     parser.add_argument('--hidden-size', type=int, default=9728,
                         help='The side of the hidden layer. The required size changes with the size of the embeddings. Default: 9728 (embedding size 200).')
     parser.add_argument('--optuna', action='store_true', help='optuna', default=False)
+    parser.add_argument('--test', action='store_true', help='optuna', default=False)
 
     args = parser.parse_args()
 
@@ -333,7 +410,7 @@ def main():
     Config.backend = 'pytorch'
     Config.cuda = True if args.device == 'cuda' else False
     Config.embedding_dim = args.embedding_dim
-    logger = setup_logger(__name__, logfile=args.log_file)
+    logger = setup_logger(__name__, logfile=args.log_file, console_level='debug')
 
     model_name = '{2}_{0}_{1}'.format(args.input_drop, args.hidden_drop, args.model)
     torch.manual_seed(args.seed)

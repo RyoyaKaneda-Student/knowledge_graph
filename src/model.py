@@ -4,6 +4,7 @@ from torch.autograd import Variable
 
 from torch.nn.init import xavier_normal_, xavier_uniform_
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from torch.nn import TransformerEncoderLayer, TransformerEncoder
 
 
 class Complex(torch.nn.Module):
@@ -90,7 +91,6 @@ class ConvE(torch.nn.Module):
         self.bn2 = torch.nn.BatchNorm1d(args.embedding_dim)
         self.register_parameter('b', Parameter(torch.zeros(num_entities)))
         self.fc = torch.nn.Linear(args.hidden_size, args.embedding_dim)
-        print(num_entities, num_relations)
 
     def init(self):
         xavier_normal_(self.emb_e.weight.data)
@@ -120,15 +120,56 @@ class ConvE(torch.nn.Module):
         return pred
 
 
+class TransformerE(torch.nn.Module):
+    def __init__(self, args, num_entities, num_relations):
+        super(TransformerE, self).__init__()
+        self.emb_e = torch.nn.Embedding(num_entities, args.embedding_dim, padding_idx=0)
+        self.emb_rel = torch.nn.Embedding(num_relations, args.embedding_dim, padding_idx=0)
+        self.inp_drop = torch.nn.Dropout(args.input_drop)
+        self.hidden_drop = torch.nn.Dropout(args.hidden_drop)
+        self.loss = torch.nn.BCELoss()
+
+        self.encoder_layer = TransformerEncoderLayer(
+            d_model=args.embedding_dim*2, nhead=args.nhead, dropout=args.transformer_drop, batch_first=True
+        )
+        self.transformer_encoder = TransformerEncoder(self.encoder_layer, 4)
+        self.fc = torch.nn.Linear(args.hidden_size, args.embedding_dim)
+
+    def init(self):
+        xavier_normal_(self.emb_e.weight.data)
+        xavier_normal_(self.emb_rel.weight.data)
+
+    def forward(self, e1, rel):
+        e1_embedded = self.emb_e(e1)
+        rel_embedded = self.emb_rel(rel)
+        x = torch.concat([e1_embedded, rel_embedded])
+        x = self.inp_drop(x)
+
+        x = self.transformer_encoder(x)
+        x = F.relu(x)
+
+        x = self.fc(x)
+        x = self.hidden_drop(x)
+        x = self.bn2(x)
+        x = F.relu(x)
+        x = torch.mm(x, self.emb_e.weight.transpose(1, 0))
+        x += self.b.expand_as(x)
+        pred = torch.sigmoid(x)
+
+        return pred
+
+
 # Add your own model here
 
 class MyModel(torch.nn.Module):
-    def __init__(self, num_entities, num_relations):
+    def __init__(self, args, num_entities, num_relations, nhead=8):
         super(DistMult, self).__init__()
         self.emb_e = torch.nn.Embedding(num_entities, args.embedding_dim, padding_idx=0)
         self.emb_rel = torch.nn.Embedding(num_relations, args.embedding_dim, padding_idx=0)
         self.inp_drop = torch.nn.Dropout(args.input_drop)
         self.loss = torch.nn.BCELoss()
+        encoder_layer = TransformerEncoderLayer(d_model=args.embedding_dim, nhead=8, dropout=0.1, batch_first=True)
+        transformer_encoder = TransformerEncoder(encoder_layer, 4)
 
     def init(self):
         xavier_normal_(self.emb_e.weight.data)
@@ -143,6 +184,7 @@ class MyModel(torch.nn.Module):
         # and output scores for all entities (you will need a projection layer
         # with output size num_relations (from constructor above)
 
+        output = None
         # generate output scores here
         prediction = torch.sigmoid(output)
 

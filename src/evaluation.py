@@ -7,12 +7,15 @@ from torch.autograd import Variable
 from sklearn import metrics
 
 
-def ranking_and_hits(model, dev_rank_batcher, vocab, name, *, log):
-    log.info('')
-    log.info('-' * 50)
-    log.info(name)
-    log.info('-' * 50)
-    log.info('')
+def ranking_and_hits(model, dev_rank_batcher, vocab, name, *, log=None):
+    def log_info(x):
+        if log is not None: log.info(x)
+
+    log_info('')
+    log_info('-' * 50)
+    log_info(name)
+    log_info('-' * 50)
+    log_info('')
     hits_left = []
     hits_right = []
     hits = []
@@ -24,6 +27,7 @@ def ranking_and_hits(model, dev_rank_batcher, vocab, name, *, log):
         hits_right.append([])
         hits.append([])
 
+    # loss = 0
     for i, str2var in enumerate(dev_rank_batcher):
         e1 = str2var['e1']
         e2 = str2var['e2']
@@ -88,19 +92,19 @@ def ranking_and_hits(model, dev_rank_batcher, vocab, name, *, log):
         dev_rank_batcher.state.loss = [0]
 
     for i in range(10):
-        log.info('Hits left @{0}: {1}'.format(i + 1, np.mean(hits_left[i])))
-        log.info('Hits right @{0}: {1}'.format(i + 1, np.mean(hits_right[i])))
-        log.info('Hits @{0}: {1}'.format(i + 1, np.mean(hits[i])))
+        log_info('Hits left @{0}: {1}'.format(i + 1, np.mean(hits_left[i])))
+        log_info('Hits right @{0}: {1}'.format(i + 1, np.mean(hits_right[i])))
+        log_info('Hits @{0}: {1}'.format(i + 1, np.mean(hits[i])))
 
     mean_rank_left, mean_rank_right, mean_rank = np.mean(ranks_left), np.mean(ranks_right), np.mean(ranks)
-    log.info('Mean rank left: {0}', mean_rank_left)
-    log.info('Mean rank right: {0}', mean_rank_right)
-    log.info('Mean rank: {0}', mean_rank)
+    log_info('Mean rank left: {0}'.format(mean_rank_left))
+    log_info('Mean rank right: {0}'.format(mean_rank_right))
+    log_info('Mean rank: {0}'.format(mean_rank))
     mean_reciprocal_rank_left = np.mean(1. / np.array(ranks_left))
     mean_reciprocal_rank_right = np.mean(1. / np.array(ranks_right))
     mean_reciprocal_rank = np.mean(1. / np.array(ranks))
-    log.info('Mean reciprocal rank left: {0}', mean_reciprocal_rank_left)
-    log.info('Mean reciprocal rank right: {0}', mean_reciprocal_rank_right)
-    log.info('Mean reciprocal rank: {0}', mean_reciprocal_rank)
+    log_info('Mean reciprocal rank left: {0}'.format(mean_reciprocal_rank_left))
+    log_info('Mean reciprocal rank right: {0}'.format(mean_reciprocal_rank_right))
+    log_info('Mean reciprocal rank: {0}'.format(mean_reciprocal_rank))
     return (mean_rank_left, mean_rank_right, mean_rank,
             mean_reciprocal_rank_left, mean_reciprocal_rank_right, mean_reciprocal_rank)

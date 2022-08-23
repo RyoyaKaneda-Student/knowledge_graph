@@ -91,3 +91,5 @@ target/
 # savad data
 /saved_models/
 /github_sankou/
+
+log/
