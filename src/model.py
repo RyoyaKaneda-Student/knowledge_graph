@@ -89,6 +89,7 @@ class ConvE(torch.nn.Module):
         self.bn0 = torch.nn.BatchNorm2d(1)
         self.bn1 = torch.nn.BatchNorm2d(32)
         self.bn2 = torch.nn.BatchNorm1d(args.embedding_dim)
+
         self.register_parameter('b', Parameter(torch.zeros(num_entities)))
         self.fc = torch.nn.Linear(args.hidden_size, args.embedding_dim)
 
@@ -123,17 +124,26 @@ class ConvE(torch.nn.Module):
 class TransformerE(torch.nn.Module):
     def __init__(self, args, num_entities, num_relations):
         super(TransformerE, self).__init__()
-        self.emb_e = torch.nn.Embedding(num_entities, args.embedding_dim, padding_idx=0)
-        self.emb_rel = torch.nn.Embedding(num_relations, args.embedding_dim, padding_idx=0)
-        self.inp_drop = torch.nn.Dropout(args.input_drop)
-        self.hidden_drop = torch.nn.Dropout(args.hidden_drop)
+        embedding_dim = args.embedding_dim
+        input_drop = args.input_drop
+        hidden_drop = args.hidden_drop
+        nhead = args.nhead
+        transformer_drop = args.transformer_drop
+        num_layers = 4
+
+        self.emb_e = torch.nn.Embedding(num_entities, embedding_dim, padding_idx=0)
+        self.emb_rel = torch.nn.Embedding(num_relations, embedding_dim, padding_idx=0)
+        self.inp_drop = torch.nn.Dropout(input_drop)
+        self.hidden_drop = torch.nn.Dropout(hidden_drop)
         self.loss = torch.nn.BCELoss()
 
         self.encoder_layer = TransformerEncoderLayer(
-            d_model=args.embedding_dim*2, nhead=args.nhead, dropout=args.transformer_drop, batch_first=True
+            d_model=embedding_dim, nhead=nhead, dropout=transformer_drop, batch_first=True
         )
-        self.transformer_encoder = TransformerEncoder(self.encoder_layer, 4)
-        self.fc = torch.nn.Linear(args.hidden_size, args.embedding_dim)
+        self.transformer_encoder = TransformerEncoder(self.encoder_layer, num_layers)
+        self.fc = torch.nn.Linear(embedding_dim * 2, embedding_dim)
+        self.bn2 = torch.nn.BatchNorm1d(embedding_dim)
+        self.register_parameter('b', Parameter(torch.zeros(num_entities)))
 
     def init(self):
         xavier_normal_(self.emb_e.weight.data)
@@ -142,11 +152,12 @@ class TransformerE(torch.nn.Module):
     def forward(self, e1, rel):
         e1_embedded = self.emb_e(e1)
         rel_embedded = self.emb_rel(rel)
-        x = torch.concat([e1_embedded, rel_embedded])
+        x = torch.cat([e1_embedded, rel_embedded], dim=1)
         x = self.inp_drop(x)
 
         x = self.transformer_encoder(x)
         x = F.relu(x)
+        x = torch.flatten(x, start_dim=1)
 
         x = self.fc(x)
         x = self.hidden_drop(x)

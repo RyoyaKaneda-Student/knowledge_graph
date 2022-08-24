@@ -198,8 +198,6 @@ class MyTestCase(unittest.TestCase):
             e2s_all = e2s_all[row]  # 複製
             row = [i for i in range(len(column))]
 
-            assert e2s_all[row, column].shape == column.shape
-            assert torch.count_nonzero(e2s_all[row, column]).item() == len(column)
             tmp = torch.count_nonzero(e2s_all).item()
             e2s_all[row, column] = False
             assert torch.count_nonzero(e2s_all[row, column]).item() == 0
@@ -221,8 +219,37 @@ class MyTestCase(unittest.TestCase):
             for i in range(10):
                 hit_[i] += torch.count_nonzero(ranks <= (i + 1))
 
-
         logger.debug("==========check02 end==========")
+
+    def test04(self):
+        from utils.setup import setup_logger
+        logger = setup_logger("test", "./test.log", 'debug')
+        kg_data = 'WN18RR'
+        batch_size = 8
+
+        # load data
+        logger.info(_info_str(f"load data start."))
+        data_helper1 = load_data(kg_data, eco_memory=False)
+        data_helper2 = load_data(kg_data, eco_memory=True)
+        assert data_helper1.data.e_length == data_helper2.data.e_length
+        assert len(data_helper1.er_list) == len(data_helper2.er_list)
+        logger.info(_info_str(f"load data complete."))
+
+        logger.debug("==========check01==========")
+
+        dataset1 = MyDatasetWithFilter(data_helper1.er_list, data_helper1.label, target_num=2, del_if_no_tail=True)
+        dataset2 = MyDatasetMoreEcoWithFilter(data_helper2.er_list, data_helper2._label_sparce, target_num=2,
+                                              len_e=data_helper2.data.e_length, del_if_no_tail=True)
+        assert len(dataset1) == len(dataset2)
+        for i in range(len(dataset1)):
+            er1, e2s_target1, e2s_all1 = dataset1[i]
+            er2, e2s_target2, e2s_all2 = dataset2[i]
+
+            assert torch.equal(er1, er2)
+            assert torch.equal(e2s_target1, e2s_target2)
+            assert torch.equal(e2s_all1, e2s_all2)
+
+        logger.debug("==========check01 end==========")
 
 
 if __name__ == '__main__':

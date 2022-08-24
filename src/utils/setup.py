@@ -1,4 +1,5 @@
 # coding: UTF-8
+import dataclasses
 import os
 from typing import Tuple
 import sys
@@ -8,7 +9,6 @@ from logging import Logger
 from argparse import Namespace
 
 import torch
-
 from .torch import get_device
 
 
@@ -49,15 +49,15 @@ def setup_logger(name, logfile, console_level=None) -> Logger:
 def setup(setup_parser, project_dir) -> Tuple[Namespace, Logger, torch.device]:
     from dotenv import load_dotenv
     load_dotenv()
-    _args = setup_parser()
-    _logger = setup_logger(__name__, f"{project_dir}/{_args.logfile}", console_level=_args.console_level)
-    _device = get_device(device_name=_args.device_name, logger=_logger)
+    args: Namespace = setup_parser()
+    logger: Logger = setup_logger(__name__, f"{project_dir}/{args.logfile}", console_level=args.console_level)
+    device: torch.device = get_device(device_name=args.device_name, logger=logger)
     # process id
-    _args.pid = os.getpid()
-    return _args, _logger, _device
+    args.pid = os.getpid()
+    return args, logger, device
 
 
-def save_param(args):
+def save_param(args: Namespace):
     args = vars(args)
     if 'param_file' in args and args['param_file'] is not None:
         param_file = args['param_file']

@@ -1,7 +1,10 @@
 # coding: UTF-8
 import os
 import sys
+from enum import Enum
 from pathlib import Path
+
+import optuna
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 sys.path.append(os.path.join(PROJECT_DIR, 'src'))
@@ -11,6 +14,7 @@ from logging import Logger
 from typing import List, Dict, Tuple, Optional, Callable, Union
 import dataclasses
 from tqdm import tqdm
+from argparse import Namespace
 # Machine learning
 import h5py
 import numpy as np
@@ -21,11 +25,24 @@ from torch.utils.data import Dataset
 from torch import nn
 from torch.utils.data.dataloader import DataLoader
 # Made by me
+from utils.utils import force_gc, force_gc_after_function
+from utils.str_process import line_up_key_value, blank_or_NOT
 from utils.setup import setup, save_param
+from utils.torch import force_cpu
 from model import ConvE, DistMult, Complex, TransformerE
 
 PROCESSED_DATA_PATH = './data/processed/'
 EXTERNAL_DATA_PATH = './data/external/'
+
+MODEL_TMP_PATH = 'saved_models/.tmp/check-point.{}.model'
+
+
+CPU: str = 'cpu'
+TRAIN: str = 'train'
+TEST: str = 'test'
+MRR: str = 'mrr'
+HIT_: str = 'hit_'
+
 
 KGDATA_ALL = ['FB15k-237', 'WN18RR', 'YAGO3-10']
 name2model = {
@@ -53,9 +70,15 @@ def setup_parser():
     parser.add_argument('--no-show-bar', help='バーを表示しない', action='store_true')
     parser.add_argument('--device-name', help='cpu or cuda or mps', type=str, default='cpu',
                         choices=['cpu', 'cuda', 'mps'])
+    # select function
+    parser.add_argument('--function', help='function', type=str, choices=['do_1train', 'do_optuna'])
+    # optuna setting
+    parser.add_argument('--optuna-file', help='optuna file', type=str)
+    parser.add_argument('--study-name', help='optuna study-name', type=str)
 
     parser.add_argument('--KGdata', help=' or '.join(KGDATA_ALL), type=str,
                         choices=KGDATA_ALL)
+    parser.add_argument('--eco-memory', help='メモリに優しく', action='store_true')
     parser.add_argument('--model', type=str,
                         help='Choose from: {conve, distmult, complex, transformere}')
     parser.add_argument('--embedding-dim', type=int, default=200,
@@ -67,6 +90,7 @@ def setup_parser():
     parser.add_argument('--do-train', help='do-train', action='store_true')
     parser.add_argument('--do-valid', help='do-valid', action='store_true')
     parser.add_argument('--do-test', help='do-test', action='store_true')
+    parser.add_argument('--valid-interval', type=int, default=1, help='valid-interval', )
 
     parser.add_argument('--embedding-shape1', type=int, default=20,
                         help='The first dimension of the reshaped 2D embedding. '
@@ -91,7 +115,6 @@ def setup_parser():
     parser.add_argument('--nhead', type=int, default=8, help='nhead. Default: 8.')
     parser.add_argument('--transformer-drop', type=float, default=0.1, help='transformer-drop. Default: 0.1.')
 
-
     # コマンドライン引数をパースして対応するハンドラ関数を実行
     _args = parser.parse_args()
 
@@ -109,17 +132,16 @@ def _select_model(args, model_name, e_length, r_length) -> nn.Module:
 
 
 def _load_model(model: nn.Module, model_path: str, device, *, delete_file=False):
-    model.to('cpu')
-    model.load_state_dict(torch.load(model_path))
-    if delete_file:
-        os.remove(model_path)
-    model.to(device)
+    with force_cpu(model, device):
+        model.load_state_dict(torch.load(model_path))
+        if delete_file:
+            os.remove(model_path)
+    return model
 
 
 def _save_model(model: nn.Module, model_path: str, device):
-    model.to('cpu')
-    torch.save(model.state_dict(), model_path)
-    model.to(device)
+    with force_cpu(model, device):
+        torch.save(model.state_dict(), model_path)
 
 
 def _get_loader(_loader, no_show_bar):
@@ -277,6 +299,51 @@ class MyDatasetWithFilter(MyDatasetEcoMemory):
 
 
 @dataclasses.dataclass(init=False)
+class MyDatasetMoreEcoMemory(Dataset):
+    data: torch.Tensor
+    label_sparce_all: List[Tuple[np.ndarray, torch.Tensor]]
+    target_num: int
+    item1_tmp: torch.Tensor
+
+    def __init__(self, data: np.ndarray, label_sparce_all: List[Tuple[np.ndarray, np.ndarray]], target_num: int,
+                 len_e: int, del_if_no_tail=False):
+        label_sparce_all = [(_data, torch.from_numpy(_data_type)) for (_data, _data_type) in label_sparce_all]
+        if del_if_no_tail:
+            index_, label_sparce_all = zip(*[
+                (i, item) for i, item in enumerate(label_sparce_all) if np.any(item[1] == target_num)
+            ])
+            data = data[index_, :]
+
+        self.data = torch.from_numpy(data)
+        self.label_sparce_all = label_sparce_all
+        self.target_num = target_num
+        self.item1_tmp = torch.tensor([0] * len_e, dtype=torch.int8)
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        er = self.data[index]
+        data, data_type = self.label_sparce_all[index]
+        e2s = self.item1_tmp.clone()
+        e2s[data] = data_type
+        e2s = (e2s == self.target_num).to(torch.float32)
+        return er, e2s
+
+    def __len__(self) -> int:
+        return len(self.data)
+
+
+@dataclasses.dataclass(init=False)
+class MyDatasetMoreEcoWithFilter(MyDatasetMoreEcoMemory):
+    def __getitem__(self, index: int
+                    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        er = self.data[index]
+        data, data_type = self.label_sparce_all[index]
+        e2s_all = self.item1_tmp.clone()
+        e2s_all[data] = data_type
+        e2s_target = (e2s_all == self.target_num).to(torch.float32)
+        return er, e2s_target, e2s_all
+
+
+@dataclasses.dataclass(init=False)
 class MyTripleDataset(Dataset):
     er: torch.Tensor
     tail: torch.Tensor
@@ -301,7 +368,7 @@ class MyTripleDataset(Dataset):
 
 
 class MyDataHelper:
-    def __init__(self, info_path, train_path, valid_path, test_path, del_zero2zero=True, *, logger=None):
+    def __init__(self, info_path, train_path, valid_path, test_path, del_zero2zero=True, *, logger=None, eco_memory):
         super().__init__()
         my_data = MyTrainTestData(info_path, train_path, valid_path, test_path, del_zero2zero)
 
@@ -320,16 +387,23 @@ class MyDataHelper:
             row, data, data_type = row.item(), data.item(), data_type.item()
             er_tails[row].append((data, data_type))
 
-        labels = np.zeros((len(er_list), e_length), dtype=np.int8)
+        label, label_sparce = None, None
+        if not eco_memory:
+            label = np.zeros((len(er_list), e_length), dtype=np.int8)
 
-        for index, tails in enumerate(er_tails):
-            tails_data, tails_data_type = zip(*tails)
-            np.put(labels[index], tails_data, tails_data_type)
-            del tails
+            for index, tails in enumerate(er_tails):
+                tails_data, tails_data_type = zip(*tails)
+                np.put(label[index], tails_data, tails_data_type)
+                del tails
+        else:
+            label_sparce = [zip(*tails) for tails in er_tails]
+            label_sparce = [[np.array(data), np.array(data_type, dtype=np.int8)] for data, data_type in label_sparce]
 
-        self._data = my_data
-        self._er_list = er_list
-        self._label = labels
+        self._data: MyTrainTestData = my_data
+        self._er_list: np.ndarray = er_list
+        self._label: Optional[np.ndarray] = label
+        self._label_sparce: Optional[List[Tuple[np.ndarray, np.ndarray]]] = label_sparce
+        self._eco_memory: bool = eco_memory
         # dataset
         """
         self._train_dataset: Dataset = None
@@ -340,27 +414,35 @@ class MyDataHelper:
         self._train_dataloader: Optional[DataLoader] = None
         self._valid_dataloader: Optional[DataLoader] = None
         self._test_dataloader: Optional[DataLoader] = None
-        # dataloader getter (メモリ節約)
-        self._valid_dataloader_getter: Optional[Callable[[], DataLoader]] = None
-        self._test_dataloader_getter: Optional[Callable[[], DataLoader]] = None
 
-    def _get_dataset(self, eco_memory: bool, target_num) -> Union[MyDataset, MyDatasetEcoMemory]:
-        if eco_memory:
-            MyDatasetEcoMemory(self._er_list, self.label, target_num=target_num)
+    def get_train_dataset(self, eco_memory: bool = False, more_eco_memory: bool = False) -> \
+            Union[MyDataset, MyDatasetEcoMemory, MyDatasetMoreEcoMemory]:
+        if eco_memory and more_eco_memory:
+            raise "you can't select eco and more_eco"
+            pass
+        elif more_eco_memory:
+            return MyDatasetMoreEcoMemory(
+                self.er_list, self.label_sparce, len_e=self.data.e_length, target_num=1, )
+        elif eco_memory:
+            return MyDatasetEcoMemory(self.er_list, self.label, target_num=1, )
+            pass
         else:
-            return MyDataset(self._er_list, self.label, target_num=target_num)
+            return MyDataset(self.er_list, self.label, target_num=1)
 
-    def get_train_dataset(self, eco_memory: bool) -> Union[MyDataset, MyDatasetEcoMemory]:
-        if eco_memory:
-            return MyDatasetEcoMemory(self._er_list, self.label, target_num=1)
+    def get_valid_dataset(self, more_eco_memory: bool = False) -> \
+            Union[MyDatasetWithFilter, MyDatasetMoreEcoWithFilter]:
+        if more_eco_memory:
+            return MyDatasetMoreEcoWithFilter(
+                self.er_list, self._label_sparce, len_e=self.data.e_length, target_num=2, )
         else:
-            return MyDataset(self._er_list, self.label, target_num=1)
+            return MyDatasetWithFilter(self.er_list, self.label, target_num=2, del_if_no_tail=True)
 
-    def get_valid_dataset(self) -> Union[MyDatasetWithFilter]:
-        return MyDatasetWithFilter(self._er_list, self.label, target_num=2, del_if_no_tail=True)
-
-    def get_test_dataset(self) -> Union[MyDatasetWithFilter]:
-        return MyDatasetWithFilter(self._er_list, self.label, target_num=3, del_if_no_tail=True)
+    def get_test_dataset(self, more_eco_memory: bool = False) -> Union[MyDatasetWithFilter, MyDatasetMoreEcoWithFilter]:
+        if more_eco_memory:
+            return MyDatasetMoreEcoWithFilter(
+                self.er_list, self._label_sparce, len_e=self.data.e_length, target_num=3, )
+        else:
+            return MyDatasetWithFilter(self.er_list, self.label, target_num=3, del_if_no_tail=True)
 
     def get_train_triple_dataset(self) -> MyTripleDataset:
         return MyTripleDataset(self.data.train_triple, self.data.er2index)
@@ -374,22 +456,33 @@ class MyDataHelper:
     def del_loaders(self):
         del self._train_dataloader, self._valid_dataloader, self._test_dataloader
 
+    def del_test_dataloader(self):
+        del self._test_dataloader
+
     def set_loaders(self, train_dataloader: DataLoader, valid_dataloader: DataLoader, test_dataloader: DataLoader):
         self._train_dataloader = train_dataloader
         self._valid_dataloader = valid_dataloader
         self._test_dataloader = test_dataloader
-
-    def set_loader_getters(self, valid_dataloader_getter, test_dataloader_getter):
-        self._valid_dataloader_getter = valid_dataloader_getter
-        self._test_dataloader_getter = test_dataloader_getter
 
     @property
     def data(self) -> MyTrainTestData:
         return self._data
 
     @property
+    def er_list(self) -> np.ndarray:
+        return self._er_list
+
+    @property
     def label(self) -> np.ndarray:
+        if self._eco_memory:
+            raise "eco memory mode but select label"
         return self._label
+
+    @property
+    def label_sparce(self) -> List[Tuple[np.ndarray, np.ndarray]]:
+        if not self._eco_memory:
+            raise "not eco memory mode but select label sparce"
+        return self._label_sparce
 
     @property
     def train_dataloader(self) -> DataLoader:
@@ -398,42 +491,34 @@ class MyDataHelper:
     @property
     def valid_dataloader(self) -> DataLoader:
         _valid_dataloader = self._valid_dataloader
-        _valid_dataloader_getter = self._valid_dataloader_getter
-        if (_valid_dataloader is not None) and (_valid_dataloader_getter is None):
+        if _valid_dataloader is not None:
             return _valid_dataloader
-        elif (_valid_dataloader is None) and (_valid_dataloader_getter is not None):
-            return _valid_dataloader_getter()
         else:
-            raise "_valid_dataloader or _valid_dataloader_getter must not be none"
+            raise "valid_dataloader is not Defined"
 
     @property
     def test_dataloader(self) -> DataLoader:
         _test_dataloader = self._test_dataloader
-        _test_dataloader_getter = self._test_dataloader_getter
-        if (_test_dataloader is not None) and (_test_dataloader_getter is None):
+        if _test_dataloader is not None:
             return _test_dataloader
-        elif (_test_dataloader is None) and (_test_dataloader_getter is not None):
-            return _test_dataloader_getter()
         else:
-            raise "_test_dataloader or _test_dataloader_getter must not be none"
+            raise "_test_dataloader is not defined"
 
 
-def load_data(kg_data):
+def load_data(kg_data, eco_memory):
     info_path = os.path.join(PROCESSED_DATA_PATH, 'KGdata', kg_data, f"info.hdf5")
     train_path = os.path.join(PROCESSED_DATA_PATH, 'KGdata', kg_data, f"train.hdf5")
     valid_path = os.path.join(PROCESSED_DATA_PATH, 'KGdata', kg_data, f"valid.hdf5")
     test_path = os.path.join(PROCESSED_DATA_PATH, 'KGdata', kg_data, f"test.hdf5")
-    data_helper = MyDataHelper(info_path, train_path, valid_path, test_path)
+    data_helper = MyDataHelper(info_path, train_path, valid_path, test_path, eco_memory=eco_memory)
     return data_helper
 
 
-def make_dataloader(data_helper: MyDataHelper, batch_size):
-    train = DataLoader(data_helper.get_train_dataset(eco_memory=False), batch_size=batch_size, shuffle=True)
-    # this is debug
-    # valid_dataset = MyDatasetWithFilter(data_helper._er_list, data_helper.label, target_num=1, del_if_no_tail=True)
-    # valid = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
-    valid = DataLoader(data_helper.get_valid_dataset(), batch_size=batch_size, shuffle=False)
-    test = DataLoader(data_helper.get_test_dataset(), batch_size=batch_size, shuffle=False)
+def make_dataloader(data_helper: MyDataHelper, batch_size, eco_memory):
+    train = DataLoader(data_helper.get_train_dataset(eco_memory=False, more_eco_memory=eco_memory),
+                       batch_size=batch_size, shuffle=True)
+    valid = DataLoader(data_helper.get_valid_dataset(more_eco_memory=eco_memory), batch_size=batch_size, shuffle=False)
+    test = DataLoader(data_helper.get_test_dataset(more_eco_memory=eco_memory), batch_size=batch_size, shuffle=False)
 
     data_helper.set_loaders(train, valid, test)  # debug
 
@@ -444,18 +529,21 @@ def get_model(args, data_helper):
     return model
 
 
+@force_gc_after_function
 def training(
-        args, *, logger,
+        args: Namespace, *, logger,
         model, data_helper,
         do_valid,
         no_show_bar=False,
+        uid=None
 ):
     device = args.device
     max_epoch = args.epoch
-    checkpoint_path = f"saved_models/.tmp/check-point.pid={args.pid}.model"
+    pid = args.pid
+    checkpoint_path = MODEL_TMP_PATH.format(line_up_key_value(pid=pid, uid=uid))
+    valid_interval = args.valid_interval if do_valid else -1
     # data
     train = data_helper.train_dataloader
-    # len_dataset = len(train.dataset)
     #
     opt = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.l2)
 
@@ -484,7 +572,7 @@ def training(
             opt.zero_grad()
             er, e2s = er.to(device), e2s.to(device)
             e, r = er.split(1, 1)
-            # e2s = ((1.0 - args.label_smoothing) * e2s) + (1.0 / e2s.size(1))
+            e2s = ((1.0 - args.label_smoothing) * e2s) + (1.0 / e2s.size(1))
             sum_train += (e2s[e2s != 0]).sum()
 
             pred: torch.Tensor = model.forward(e, r)
@@ -499,16 +587,16 @@ def training(
 
         logger.debug(f"sum_train: {sum_train}")
         loss /= len(train)
-        append_to_result('train_loss', loss.to('cpu').item())
+        append_to_result('train_loss', loss.to(CPU).item())
         logger.info("-----train result (epoch={}): loss = {}".format(epoch + 1, loss))
         logger.debug(f"{'-' * 5}epoch {epoch + 1} train end. {'-' * 5}")
         del loss
         _ccr()
         # valid
-        if do_valid:
+        if do_valid and (epoch + 1) % valid_interval == 0:
             logger.debug(f"{'-' * 10}epoch {epoch + 1} valid start. {'-' * 5}")
-            _result = testing(args, logger=logger, model=model, data_helper=data_helper, is_valid=True,
-                              no_show_bar=no_show_bar)
+            _, _result = testing(args, logger=logger, model=model, data_helper=data_helper, is_valid=True,
+                                 no_show_bar=no_show_bar)
             mrr, hit_ = _get_from_dict(_result, ('mrr', 'hit_'))
             append_to_result('mrr', mrr)
             append_to_result('hit_', hit_)
@@ -521,9 +609,10 @@ def training(
         result['completed_epoch'] = epoch + 1
 
     _load_model(model, checkpoint_path, device=device, delete_file=True)
-    return model
+    return model, result
 
 
+@force_gc_after_function
 @torch.no_grad()
 def testing(
         args, *, logger,
@@ -593,38 +682,43 @@ def testing(
 
     mrr = (mrr / len_test)
     hit_ = (hit_ / len_test)
-    rev = {
+    result = {
         'mrr': mrr.item(), 'hit_': hit_.tolist()
     }
     del mrr, hit_
     _ccr()
-    logger.debug("=====Test result: mrr = {}".format(rev['mrr']))
-    logger.debug("=====Test result: hit = {}".format(rev['hit_']))
-    return rev
+    logger.debug("=====Test result: mrr = {}".format(result['mrr']))
+    logger.debug("=====Test result: hit = {}".format(result['hit_']))
+    return model, result
 
 
 def _info_str(s):
     return s.ljust(25).center(40, '=')
 
 
-def conv1train(args, *, logger: Logger):
+def do_1train(args, *, logger: Logger):
     kg_data = args.KGdata
+    eco_memory = args.eco_memory
     do_train, do_valid, do_test = args.do_train, args.do_valid, args.do_test
     model_path = args.model_path
     batch_size = args.batch_size
     device = args.device
     no_show_bar = args.no_show_bar
 
+    if (not do_train) and (not do_valid) and (not do_test):
+        return -1
+
     logger.info(f"Function start".center(40, '='))
 
     # load data
     logger.info(_info_str(f"load data start."))
-    data_helper = load_data(kg_data)
+    data_helper = load_data(kg_data, eco_memory)
+    logger.info(f"=====this is {blank_or_NOT(eco_memory)} eco_memory mode=====")
     logger.info(_info_str(f"load data complete."))
 
     # dataloader
     logger.info(_info_str(f"make dataloader start."))
-    make_dataloader(data_helper, batch_size)
+    make_dataloader(data_helper, batch_size, eco_memory)
     logger.info(_info_str(f"make dataloader complete."))
 
     # model
@@ -634,7 +728,7 @@ def conv1train(args, *, logger: Logger):
 
     if do_train:
         logger.info(_info_str(f"Train start."))
-        training(
+        model, result = training(
             args, logger=logger,
             data_helper=data_helper,
             model=model,
@@ -642,28 +736,113 @@ def conv1train(args, *, logger: Logger):
             no_show_bar=no_show_bar
         )
         _save_model(model, args.model_path, device=device)
+        args.train_result = result
         logger.info(_info_str(f"Train complete."))
-    _load_model(model, model_path, device=device)
+        del result
+    model = _load_model(model, model_path, device=device)
     if do_valid:
         logger.info(_info_str(f"Test valid start."))
-        testing(
+        model, result = testing(
             args, logger=logger,
             data_helper=data_helper, model=model,
             is_valid=True,
             no_show_bar=no_show_bar
         )
+        args.test_valid_result = result
+        logger.info(f"=====Test valid result. mrr: {result['mrr']}, hit_: {result['hit_']}")
         logger.info(_info_str(f"Test valid complete."))
     if do_test:
         logger.info(_info_str(f"Test start."))
-        testing(
+        model, result = testing(
             args, logger=logger,
             data_helper=data_helper, model=model,
             is_test=True,
             no_show_bar=no_show_bar,
         )
+        args.test_result = result
+        logger.info(f"=====Test result. mrr: {result['mrr']}, hit_: {result['hit_']}")
         logger.info(_info_str(f"Test complete."))
 
     logger.info(f"Function finish".center(40, '='))
+
+
+def do_optuna(args, *, logger: Logger):
+    kg_data = args.KGdata
+    eco_memory = args.eco_memory
+    # do_train, do_valid, do_test = args.do_train, args.do_valid, args.do_test
+    # model_path = args.model_path
+    batch_size = args.batch_size
+    no_show_bar = args.no_show_bar
+    study_name = args.study_name
+    optuna_file = args.optuna_file
+
+    logger.info(f"Optuna start".center(40, '='))
+
+    # load data
+    logger.info(_info_str(f"load data start."))
+    data_helper = load_data(kg_data, eco_memory)
+    logger.info("=====this is {} eco_memory mode=====".format(
+        '' if eco_memory else 'NOT'
+    ))
+    logger.info(_info_str(f"load data complete."))
+
+    # dataloader
+    logger.info(_info_str(f"make dataloader start."))
+    make_dataloader(data_helper, batch_size, eco_memory)
+    data_helper.del_test_dataloader()
+    logger.info(_info_str(f"make dataloader complete."))
+
+    def objective(trial: optuna.Trial):
+        logger.info(_info_str(f"trial {trial.number} start."))
+        lr = trial.suggest_loguniform('lr', 1e-6, 1e-2)
+        args.lr = lr  # update
+        model = get_model(args, data_helper)
+        # train
+        model, result = training(
+            args, logger=logger,
+            data_helper=data_helper,
+            model=model,
+            do_valid=True,
+            no_show_bar=no_show_bar,
+            # optuna additional setting
+            uid=trial.number
+        )
+        del result
+        # valid
+        model, result = testing(
+            args, logger=logger,
+            data_helper=data_helper, model=model,
+            is_valid=True,
+            no_show_bar=no_show_bar
+        )
+        logger.info(f"=====Valid result. mrr: {result['mrr']}, hit_: {result['hit_']}")
+        return result['mrr']
+
+    study = optuna.create_study(
+        direction='maximize', study_name=study_name, storage=f"sqlite:///./{optuna_file}", load_if_exists=True
+    )
+    study.optimize(
+        objective, n_trials=2, gc_after_trial=True
+    )
+
+    logger.info(_info_str("optuna study finish"))
+    args.lr = study.best_params['lr']
+    logger.info(f"==========best param = lr: {study.best_params['lr']}")
+    logger.info(_info_str("update arge param"))
+
+    logger.info(f"Optuna finish".center(40, '='))
+
+
+def select_function(args, *, logger: Logger):
+    fname = args.function
+    if fname not in ('do_1train', 'do_optuna'):
+        raise "you should select function"
+    elif fname == 'do_1train':
+        do_1train(args, logger=logger)
+    elif fname == 'do_optuna':
+        do_optuna(args, logger=logger)
+        force_gc()
+        do_1train(args, logger=logger)
 
 
 def main():
@@ -675,7 +854,7 @@ def main():
         args.completed = {}
         logger.debug(vars(args))
         logger.debug(f"process id = {args.pid}")
-        conv1train(args, logger=logger)
+        select_function(args, logger=logger)
 
     finally:
         save_param(args)
