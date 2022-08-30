@@ -24,18 +24,21 @@ import torch
 from torch.utils.data import Dataset
 from torch import nn
 from torch.utils.data.dataloader import DataLoader
+# torch ignite
+from ignite.engine import Events, create_supervised_trainer, create_supervised_evaluator
+from ignite.metrics import Accuracy, Loss
+from ignite.contrib.handlers.tensorboard_logger import *
 # Made by me
 from utils.utils import force_gc, force_gc_after_function
 from utils.str_process import line_up_key_value, blank_or_NOT
 from utils.setup import setup, save_param
 from utils.torch import force_cpu
-from model import ConvE, DistMult, Complex, TransformerE
+from model import ConvE, DistMult, Complex, TransformerE, TransformerVer2E
 
 PROCESSED_DATA_PATH = './data/processed/'
 EXTERNAL_DATA_PATH = './data/external/'
 
 MODEL_TMP_PATH = 'saved_models/.tmp/check-point.{}.model'
-
 
 CPU: str = 'cpu'
 TRAIN: str = 'train'
@@ -43,13 +46,13 @@ TEST: str = 'test'
 MRR: str = 'mrr'
 HIT_: str = 'hit_'
 
-
 KGDATA_ALL = ['FB15k-237', 'WN18RR', 'YAGO3-10']
 name2model = {
     'conve': ConvE,
     'distmult': DistMult,
     'complex': Complex,
-    'transformere': TransformerE
+    'transformere1': TransformerE,
+    'transformere2': TransformerVer2E
 }
 
 
@@ -75,6 +78,7 @@ def setup_parser():
     # optuna setting
     parser.add_argument('--optuna-file', help='optuna file', type=str)
     parser.add_argument('--study-name', help='optuna study-name', type=str)
+    parser.add_argument('--n-trials', help='optuna n-trials', type=int, default=20)
 
     parser.add_argument('--KGdata', help=' or '.join(KGDATA_ALL), type=str,
                         choices=KGDATA_ALL)
@@ -319,13 +323,17 @@ class MyDatasetMoreEcoMemory(Dataset):
         self.target_num = target_num
         self.item1_tmp = torch.tensor([0] * len_e, dtype=torch.int8)
 
-    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    def getitem(self, index) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         er = self.data[index]
         data, data_type = self.label_sparce_all[index]
-        e2s = self.item1_tmp.clone()
-        e2s[data] = data_type
-        e2s = (e2s == self.target_num).to(torch.float32)
-        return er, e2s
+        e2s_all = self.item1_tmp.clone()
+        e2s_all[data] = data_type
+        e2s_target = (e2s_all == self.target_num).to(torch.float32)
+        return er, e2s_target, e2s_all
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        er, e2s_target, _ = self.getitem(index)
+        return er, e2s_target
 
     def __len__(self) -> int:
         return len(self.data)
@@ -335,11 +343,8 @@ class MyDatasetMoreEcoMemory(Dataset):
 class MyDatasetMoreEcoWithFilter(MyDatasetMoreEcoMemory):
     def __getitem__(self, index: int
                     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        er = self.data[index]
-        data, data_type = self.label_sparce_all[index]
-        e2s_all = self.item1_tmp.clone()
-        e2s_all[data] = data_type
-        e2s_target = (e2s_all == self.target_num).to(torch.float32)
+        er, e2s_target, e2s_all = self.getitem(index)
+        e2s_all[e2s_all == 3] = 0  # 3 is Test
         return er, e2s_target, e2s_all
 
 
@@ -575,7 +580,7 @@ def training(
             e2s = ((1.0 - args.label_smoothing) * e2s) + (1.0 / e2s.size(1))
             sum_train += (e2s[e2s != 0]).sum()
 
-            pred: torch.Tensor = model.forward(e, r)
+            pred: torch.Tensor = model.forward((e, r))
             _loss = model.loss(pred, e2s)
             _loss.backward()
             opt.step()
@@ -645,7 +650,7 @@ def testing(
         for idx, (er, e2s, e2s_all) in _get_loader(test, no_show_bar=no_show_bar):
             er = er.to(device)
             e, r = er.split(1, 1)
-            pred: torch.Tensor = model.forward(e, r)
+            pred: torch.Tensor = model.forward((e, r))
             del e, r, er
             # make filter
             e2s = e2s.to(device)
@@ -773,17 +778,17 @@ def do_optuna(args, *, logger: Logger):
     # model_path = args.model_path
     batch_size = args.batch_size
     no_show_bar = args.no_show_bar
+
     study_name = args.study_name
     optuna_file = args.optuna_file
+    n_trials = args.n_trials
 
     logger.info(f"Optuna start".center(40, '='))
 
     # load data
     logger.info(_info_str(f"load data start."))
     data_helper = load_data(kg_data, eco_memory)
-    logger.info("=====this is {} eco_memory mode=====".format(
-        '' if eco_memory else 'NOT'
-    ))
+    logger.info(f"=====this is {blank_or_NOT(eco_memory)} eco_memory mode=====")
     logger.info(_info_str(f"load data complete."))
 
     # dataloader
@@ -802,7 +807,7 @@ def do_optuna(args, *, logger: Logger):
             args, logger=logger,
             data_helper=data_helper,
             model=model,
-            do_valid=True,
+            do_valid=False,
             no_show_bar=no_show_bar,
             # optuna additional setting
             uid=trial.number
@@ -822,7 +827,7 @@ def do_optuna(args, *, logger: Logger):
         direction='maximize', study_name=study_name, storage=f"sqlite:///./{optuna_file}", load_if_exists=True
     )
     study.optimize(
-        objective, n_trials=2, gc_after_trial=True
+        objective, n_trials=n_trials, gc_after_trial=True
     )
 
     logger.info(_info_str("optuna study finish"))

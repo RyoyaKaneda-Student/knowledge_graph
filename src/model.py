@@ -24,7 +24,8 @@ class Complex(torch.nn.Module):
         xavier_normal_(self.emb_rel_real.weight.data)
         xavier_normal_(self.emb_rel_img.weight.data)
 
-    def forward(self, e1, rel):
+    def forward(self, x):
+        e1, rel = x
         e1_embedded_real = self.emb_e_real(e1).squeeze()
         rel_embedded_real = self.emb_rel_real(rel).squeeze()
         e1_embedded_img = self.emb_e_img(e1).squeeze()
@@ -58,7 +59,8 @@ class DistMult(torch.nn.Module):
         xavier_normal_(self.emb_e.weight.data)
         xavier_normal_(self.emb_rel.weight.data)
 
-    def forward(self, e1, rel):
+    def forward(self, x):
+        e1, rel = x
         e1_embedded = self.emb_e(e1)
         rel_embedded = self.emb_rel(rel)
         e1_embedded = e1_embedded.squeeze()
@@ -97,7 +99,8 @@ class ConvE(torch.nn.Module):
         xavier_normal_(self.emb_e.weight.data)
         xavier_normal_(self.emb_rel.weight.data)
 
-    def forward(self, e1, rel):
+    def forward(self, x):
+        e1, rel = x
         e1_embedded = self.emb_e(e1).view(-1, 1, self.emb_dim1, self.emb_dim2)
         rel_embedded = self.emb_rel(rel).view(-1, 1, self.emb_dim1, self.emb_dim2)
 
@@ -131,8 +134,8 @@ class TransformerE(torch.nn.Module):
         transformer_drop = args.transformer_drop
         num_layers = 4
 
-        self.emb_e = torch.nn.Embedding(num_entities, embedding_dim, padding_idx=0)
-        self.emb_rel = torch.nn.Embedding(num_relations, embedding_dim, padding_idx=0)
+        self.emb_e = torch.nn.Embedding(num_entities, embedding_dim)
+        self.emb_rel = torch.nn.Embedding(num_relations, embedding_dim)
         self.inp_drop = torch.nn.Dropout(input_drop)
         self.hidden_drop = torch.nn.Dropout(hidden_drop)
         self.loss = torch.nn.BCELoss()
@@ -149,7 +152,8 @@ class TransformerE(torch.nn.Module):
         xavier_normal_(self.emb_e.weight.data)
         xavier_normal_(self.emb_rel.weight.data)
 
-    def forward(self, e1, rel):
+    def forward(self, x):
+        e1, rel = x
         e1_embedded = self.emb_e(e1)
         rel_embedded = self.emb_rel(rel)
         x = torch.cat([e1_embedded, rel_embedded], dim=1)
@@ -170,7 +174,62 @@ class TransformerE(torch.nn.Module):
         return pred
 
 
+class TransformerVer2E(torch.nn.Module):
+    def __init__(self, args, num_entities, num_relations):
+        super(TransformerVer2E, self).__init__()
+        embedding_dim = args.embedding_dim
+        input_drop = args.input_drop
+        hidden_drop = args.hidden_drop
+        nhead = args.nhead
+        transformer_drop = args.transformer_drop
+        num_layers = 4
+
+        self.register_parameter('special_e', Parameter(torch.zeros(1, embedding_dim)))  # 0 cls
+        self.emb_e = torch.nn.Embedding(num_entities, embedding_dim)
+        self.emb_rel = torch.nn.Embedding(num_relations, embedding_dim)
+        self.inp_drop = torch.nn.Dropout(input_drop)
+        self.hidden_drop = torch.nn.Dropout(hidden_drop)
+        self.loss = torch.nn.BCELoss()
+
+        self.encoder_layer = TransformerEncoderLayer(
+            d_model=embedding_dim, nhead=nhead, dropout=transformer_drop, batch_first=True
+        )
+        self.transformer_encoder = TransformerEncoder(self.encoder_layer, num_layers)
+        self.fc = torch.nn.Linear(embedding_dim, embedding_dim)
+        self.bn2 = torch.nn.BatchNorm1d(embedding_dim)
+        self.register_parameter('b', Parameter(torch.zeros(num_entities)))
+
+    def init(self):
+        xavier_normal_(self.special_e)
+        xavier_normal_(self.emb_e.weight.data)
+        xavier_normal_(self.emb_rel.weight.data)
+
+    def forward(self, x):
+        e1, rel = x
+
+        e1_embedded = self.emb_e(e1)
+        rel_embedded = self.emb_rel(rel)
+        cls_embedded = self.special_e[0].expand_as(e1_embedded)
+
+        x = torch.cat([cls_embedded, e1_embedded, rel_embedded], dim=1)
+        x = self.inp_drop(x)
+
+        x = self.transformer_encoder(x)
+        x = x[:, 0]
+        x = F.relu(x)
+        x = self.fc(x)
+        x = self.hidden_drop(x)
+        x = self.bn2(x)
+        x = F.relu(x)
+        x = torch.mm(x, self.emb_e.weight.transpose(1, 0))
+        x += self.b.expand_as(x)
+        pred = torch.sigmoid(x)
+
+        return pred
+
+
 # Add your own model here
+
 
 class MyModel(torch.nn.Module):
     def __init__(self, args, num_entities, num_relations, nhead=8):
@@ -186,7 +245,8 @@ class MyModel(torch.nn.Module):
         xavier_normal_(self.emb_e.weight.data)
         xavier_normal_(self.emb_rel.weight.data)
 
-    def forward(self, e1, rel):
+    def forward(self, x):
+        e1, rel = x
         e1_embedded = self.emb_e(e1)
         rel_embedded = self.emb_rel(rel)
 
