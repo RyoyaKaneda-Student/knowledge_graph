@@ -16,7 +16,7 @@ import optuna
 from optuna import Trial
 
 from evaluation import ranking_and_hits
-from model import ConvE, DistMult, Complex, TransformerE
+from model import ConvE, DistMult, Complex, TransformerE, TransformerVer2E
 
 from spodernet.preprocessing.pipeline import Pipeline, DatasetStreamer
 from spodernet.preprocessing.processors import JsonLoaderProcessors, Tokenizer, AddToVocab, SaveLengthsToState, \
@@ -122,6 +122,8 @@ def select_model(args, vocab, *, logger, ) -> nn.Module:
         model = Complex(args, vocab['e1'].num_token, vocab['rel'].num_token)
     elif model_name == 'transformere':
         model = TransformerE(args, vocab['e1'].num_token, vocab['rel'].num_token)
+    elif model_name == 'transformere2':
+        model = TransformerVer2E(args, vocab['e1'].num_token, vocab['rel'].num_token)
     else:
         raise Exception(f"Unknown model! :{model_name}")
         pass
@@ -208,7 +210,7 @@ def train(
 
             sum_train += (e2_multi[e2_multi != 0]).sum()
 
-            pred = model.forward(e1, rel)
+            pred = model.forward((e1, rel))
             loss = model.loss(pred, e2_multi)
             tmp_loss.append(loss.item())
             loss.backward()
@@ -374,7 +376,7 @@ def main():
     parser.add_argument('--l2', type=float, default=0.0,
                         help='Weight decay value to use in the optimizer. Default: 0.0')
     parser.add_argument('--model', type=str, default='conve',
-                        help='Choose from: {conve, distmult, complex, transformere}')
+                        help='Choose from: {conve, distmult, complex, transformere, transformere2}')
     parser.add_argument('--device', type=str, default='cpu',
                         help='Choose from: {cpu, cuda, mpu}', choices=['cpu', 'cuda', 'mpu'])
     parser.add_argument('--embedding-dim', type=int, default=200,

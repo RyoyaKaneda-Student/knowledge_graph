@@ -1,3 +1,5 @@
+import abc
+
 import torch
 from torch.nn import functional as F, Parameter
 from torch.autograd import Variable
@@ -5,6 +7,14 @@ from torch.autograd import Variable
 from torch.nn.init import xavier_normal_, xavier_uniform_
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torch.nn import TransformerEncoderLayer, TransformerEncoder
+
+# from models.pytorch_geometric import make_geodata, separate_triples
+
+
+class KGEmbedding(metaclass=abc.ABCMeta):
+    @abc.abstractmethod
+    def init(self) -> None:
+        raise NotImplementedError()
 
 
 class Complex(torch.nn.Module):
@@ -184,31 +194,37 @@ class TransformerVer2E(torch.nn.Module):
         transformer_drop = args.transformer_drop
         num_layers = 4
 
-        self.register_parameter('special_e', Parameter(torch.zeros(1, embedding_dim)))  # 0 cls
+        self.special_e = Parameter(torch.zeros(1, embedding_dim))  # 0 cls
         self.emb_e = torch.nn.Embedding(num_entities, embedding_dim)
         self.emb_rel = torch.nn.Embedding(num_relations, embedding_dim)
         self.inp_drop = torch.nn.Dropout(input_drop)
         self.hidden_drop = torch.nn.Dropout(hidden_drop)
         self.loss = torch.nn.BCELoss()
 
-        self.encoder_layer = TransformerEncoderLayer(
+        encoder_layer = TransformerEncoderLayer(
             d_model=embedding_dim, nhead=nhead, dropout=transformer_drop, batch_first=True
         )
-        self.transformer_encoder = TransformerEncoder(self.encoder_layer, num_layers)
+        self.transformer_encoder = TransformerEncoder(encoder_layer, num_layers)
         self.fc = torch.nn.Linear(embedding_dim, embedding_dim)
-        self.bn2 = torch.nn.BatchNorm1d(embedding_dim)
-        self.register_parameter('b', Parameter(torch.zeros(num_entities)))
+        # self.bn2 = torch.nn.BatchNorm1d(embedding_dim)
+        self.b = Parameter(torch.zeros(num_entities))
 
     def init(self):
         xavier_normal_(self.special_e)
         xavier_normal_(self.emb_e.weight.data)
         xavier_normal_(self.emb_rel.weight.data)
 
+    def get_emb_e(self, e1):
+        return self.emb_e(e1)
+
+    def get_emb_rel(self, rel):
+        return self.emb_rel(rel)
+
     def forward(self, x):
         e1, rel = x
 
-        e1_embedded = self.emb_e(e1)
-        rel_embedded = self.emb_rel(rel)
+        e1_embedded = self.get_emb_e(e1)
+        rel_embedded = self.get_emb_rel(rel)
         cls_embedded = self.special_e[0].expand_as(e1_embedded)
 
         x = torch.cat([cls_embedded, e1_embedded, rel_embedded], dim=1)
@@ -219,7 +235,7 @@ class TransformerVer2E(torch.nn.Module):
         x = F.relu(x)
         x = self.fc(x)
         x = self.hidden_drop(x)
-        x = self.bn2(x)
+        # x = self.bn2(x)
         x = F.relu(x)
         x = torch.mm(x, self.emb_e.weight.transpose(1, 0))
         x += self.b.expand_as(x)
@@ -227,6 +243,39 @@ class TransformerVer2E(torch.nn.Module):
 
         return pred
 
+
+class TransformerVer3E(TransformerVer2E):
+    def __init__(self, args, num_entities, num_relations):
+        super(TransformerVer3E).__init__(args, num_entities, num_relations)
+        geo_data = make_geodata(data_helper=args.data_helper, is_del_reverse=False, is_add_self_loop=True)
+        node2neighbor_node, node2neighbor_attr = separate_triples(geo_data)
+
+    def init(self):
+        super().init()
+
+
+    def forward(self, x):
+        e1, rel = x
+
+        e1_embedded = self.get_emb_e(e1)
+        rel_embedded = self.get_emb_rel(rel)
+        cls_embedded = self.special_e[0].expand_as(e1_embedded)
+
+        x = torch.cat([cls_embedded, e1_embedded, rel_embedded], dim=1)
+        x = self.inp_drop(x)
+
+        x = self.transformer_encoder(x)
+        x = x[:, 0]
+        x = F.relu(x)
+        x = self.fc(x)
+        x = self.hidden_drop(x)
+        # x = self.bn2(x)
+        x = F.relu(x)
+        x = torch.mm(x, self.emb_e.weight.transpose(1, 0))
+        x += self.b.expand_as(x)
+        pred = torch.sigmoid(x)
+
+        return pred
 
 # Add your own model here
 

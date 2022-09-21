@@ -28,8 +28,8 @@ from torch.utils.data.dataloader import DataLoader
 from utils.setup import setup, save_param
 from model import ConvE, DistMult, Complex, TransformerE
 
-from models.main import *
-from models.main import _info_str
+from models.run import *
+from models.run import _info_str
 
 PROCESSED_DATA_PATH = './data/processed/'
 EXTERNAL_DATA_PATH = './data/external/'

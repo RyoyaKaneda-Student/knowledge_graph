@@ -25,3 +25,7 @@ def line_up_key_value(defined_mark_='=', separate_mark_='.', **kwargs) -> str:
             s = '{}{}{}'.format(key, defined_mark_, value)
             ss.append(s)
     return separate_mark_.join(ss)
+
+
+def info_str(s):
+    return s.ljust(25).center(40, '=')

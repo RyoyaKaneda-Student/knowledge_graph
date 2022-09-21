@@ -1,3 +1,5 @@
+import os
+
 import torch
 import torch.nn as nn
 from logging import Logger
@@ -21,8 +23,40 @@ def get_device(device_name, *, logger: Logger = None):
         return torch.device("cpu")
 
 
+def cuda_empty_cache():
+    torch.cuda.empty_cache()
+
+
+def load_model(model: nn.Module, model_path: str, device, *, delete_file=False):
+    with force_cpu(model, device):
+        model.load_state_dict(torch.load(model_path))
+        if delete_file:
+            os.remove(model_path)
+    return model
+
+
+def save_model(model: nn.Module, model_path: str, device):
+    with force_cpu(model, device):
+        torch.save(model.state_dict(), model_path)
+
+
+def decorate_loader(_loader, no_show_bar):
+    if no_show_bar:
+        return enumerate(_loader)
+    else:
+        from tqdm import tqdm
+        return tqdm(enumerate(_loader), total=len(_loader), leave=False)
+
+
+def onehot(items: Union[List[int], torch.Tensor], num_classes) -> torch.Tensor:
+    if not torch.is_tensor(items):
+        items = torch.tensor(items)
+    return torch.nn.functional.one_hot(items, num_classes=num_classes)
+
+
 class force_cpu(object):
     """ 自作のクラス """
+
     def __init__(self, model: nn.Module, device: torch.device):
         self.model = model
         self.device = device
