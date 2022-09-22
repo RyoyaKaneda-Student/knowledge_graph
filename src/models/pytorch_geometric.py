@@ -1,46 +1,46 @@
 # coding: UTF-8
+
+# region !import area!
+# ========== python OS level ==========
 import os
 import sys
 from pathlib import Path
 
-import optuna
-
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 sys.path.append(os.path.join(PROJECT_DIR, 'src'))
-
-# python
+# ========== python ==========
 from logging import Logger
-from typing import List, Dict, Tuple, Optional, Union  # Callable
-# from tqdm import tqdm
+# noinspection PyUnresolvedReferences
+from typing import List, Dict, Tuple, Optional, Union, Callable
+# noinspection PyUnresolvedReferences
+from tqdm import tqdm
 from argparse import Namespace
-# Machine learning
+# ========== Machine learning ==========
 import numpy as np
 import pandas as pd
-# torch
+import optuna
+# ========== torch ==========
 import torch
-from torch.utils.data import Dataset
 from torch import nn
-from torch.utils.data.dataloader import DataLoader
-
+from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_sequence, pack_padded_sequence
+# ========== torch geometric ==========
 from torch_geometric.data import Data as TorchGeoData
-from torch_geometric.nn import GATv2Conv
-from torch_geometric.loader import DataLoader, NeighborLoader
+from torch_geometric.nn.conv import GATv2Conv
+# from torch_geometric.loader import DataLoader, NeighborLoader
 from torch_geometric.utils import add_self_loops
-
-# Made by me
+# ========== My Utils ==========
+# noinspection PyUnresolvedReferences
 from utils.utils import force_gc, force_gc_after_function, get_from_dict, version_check
-from utils.str_process import line_up_key_value, blank_or_NOT, info_str as _info_str
+from utils.str_process import info_str as _info_str
 from utils.setup import setup, save_param
-from utils.torch import cuda_empty_cache as _ccr, load_model, save_model, decorate_loader, onehot
+# from utils.torch import cuda_empty_cache as _ccr, load_model, save_model, decorate_loader, onehot
 from utils.torch_geometric import check_graph
-
-from models.datasets.datasets import (
-    MyDataset, MyDatasetEcoMemory, MyDatasetMoreEcoMemory,
-    MyTripleDataset, MyDatasetMoreEcoWithFilter, MyDatasetWithFilter,
-)
+# ========== Made by me ==========
 from models.datasets.data_helper import MyDataHelper, load_preprocess_data
-
 from models.run import KGDATA_ALL
+
+
+# endregion
 
 
 def setup_parser() -> Namespace:
@@ -176,16 +176,22 @@ def make_geodata(data_helper: MyDataHelper,
     return geo_data
 
 
-def separate_triples(geo_data: TorchGeoData, *, logger):
+def separate_triples(geo_data: TorchGeoData, padding_value, *, logger):
     logger.info(f"is_directed: {geo_data.is_directed()}")
     edge_index = geo_data.edge_index
     edge_attr = geo_data.edge_attr
     src_, dst_ = edge_index
 
-    node2neighbor_node = {x.item(): dst_[src_ == x] for x in geo_data.x}
-    node2neighbor_attr = {x.item(): edge_attr[src_ == x] for x in geo_data.x}
-    logger.debug(node2neighbor_node[1])
-    logger.debug(node2neighbor_attr[1])
+    def _func(value) -> torch.Tensor:
+        node2x = {x.item(): value[src_ == x] for x in geo_data.x}
+        # logger.debug(node2x)
+        node2x = [node2x[i][:, None] for i in range(len(geo_data.x))]
+        node2x = pad_sequence(node2x, batch_first=True, padding_value=padding_value)
+        return node2x.view(len(geo_data.x), -1)
+
+    node2neighbor_node, node2neighbor_attr = map(_func, (dst_, edge_attr))
+    assert node2neighbor_node.shape == node2neighbor_attr.shape
+    logger.debug(f"node2neighbor_node shape: {node2neighbor_node.shape}")
     return node2neighbor_node, node2neighbor_attr
 
 
@@ -214,19 +220,29 @@ def do_1train(args, *, logger: Logger):
 
     logger.info(f"Function start".center(40, '='))
 
+    # padding entity is 0
+    # self loop tensor is 1
+    # so special token num is 2
+
+    padding_token = 0
+    self_loop_token = 1
+    special_token_num = 2
+
     # load data
     logger.info(_info_str(f"load data start."))
     data_helper = load_preprocess_data(kg_data, eco_memory=True, logger=logger,
-                                       entity_special_num=1, relation_special_num=1, )
+                                       entity_special_num=special_token_num, relation_special_num=special_token_num)
     logger.info(_info_str(f"load data complete."))
     data_helper.show(logger)
 
     # make data
     logger.info(_info_str(f"make PyG data start."))
-    geo_data = make_geodata(data_helper, is_del_reverse=False, is_add_self_loop=True, logger=logger)
+    geo_data = make_geodata(data_helper, is_del_reverse=False,
+                            is_add_self_loop=True, self_loop_weight=self_loop_token, logger=logger)
+    # check_graph(geo_data, logger=logger)
 
     # check_graph(geo_data, logger=logger)
-    separate_triples(geo_data, logger=logger)
+    node2neighbor_node, node2neighbor_attr = separate_triples(geo_data, padding_value=padding_token, logger=logger)
     logger.info(_info_str(f"make PyG data complete."))
 
 

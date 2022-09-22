@@ -1,5 +1,7 @@
 from logging import Logger
 
+SQLITE_PREFIX = "sqlite:///./"
+
 
 def output_txt(output_path, text, *, logger: Logger = None):
     with open(output_path, 'w') as f:

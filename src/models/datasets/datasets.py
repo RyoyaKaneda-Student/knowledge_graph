@@ -2,23 +2,24 @@
 import os
 import sys
 from pathlib import Path
-
+# ========== My Utils ==========
 from utils.utils import version_check
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 sys.path.append(os.path.join(PROJECT_DIR, 'src'))
 
-# python
+# ========== python ==========
 from logging import Logger
-from typing import List, Dict, Tuple, Optional, Union  # Callable
+# noinspection PyUnresolvedReferences
+from typing import List, Dict, Tuple, Optional, Union, Callable
+# noinspection PyUnresolvedReferences
+from tqdm import tqdm
 import dataclasses
-# from tqdm import tqdm
-from argparse import Namespace
-# Machine learning
+# ========== Machine learning ==========
 import h5py
 import numpy as np
 import pandas as pd
-# torch
+# ========== torch ==========
 import torch
 from torch.utils.data import Dataset
 
@@ -88,21 +89,32 @@ class MyDatasetMoreEcoMemory(Dataset):
     label_sparce_all: List[Tuple[np.ndarray, torch.Tensor]]
     target_num: int
     item1_tmp: torch.Tensor
+    entity_special_num: int
+    relation_special_num: int
 
     def __init__(self, data: np.ndarray, label_sparce_all: List[Tuple[np.ndarray, np.ndarray]], target_num: int,
                  len_e: int, del_if_no_tail=False, entity_special_num=0, relation_special_num=0):
-        label_sparce_all = [(_data + entity_special_num, torch.from_numpy(_data_type)) for (_data, _data_type) in
+        label_sparce_all = [(_data + entity_special_num, _data_type) for (_data, _data_type) in
                             label_sparce_all]
         if del_if_no_tail:
             index_, label_sparce_all = zip(*[
-                (i, item) for i, item in enumerate(label_sparce_all) if np.any(item[1] == target_num)
+                (i, (_data, _data_type)) for i, (_data, _data_type) in enumerate(label_sparce_all)
+                if np.any(_data_type == target_num)
             ])
             data = data[index_, :]
 
         self.data = torch.from_numpy(data) + torch.tensor([entity_special_num, relation_special_num])
-        self.label_sparce_all = label_sparce_all
+        assert torch.count_nonzero(self.data[:, 0] < entity_special_num) == 0
+        assert torch.count_nonzero(self.data[:, 1] < relation_special_num) == 0
+        for (_data, _data_type) in label_sparce_all:
+            assert _data.shape == _data_type.shape
+        self.label_sparce_all = [
+            (_data, torch.tensor(_data_type)) for _data, _data_type in label_sparce_all
+        ]
         self.target_num = target_num
         self.item1_tmp = torch.tensor([0] * (len_e + entity_special_num), dtype=torch.int8)
+        self.entity_special_num = entity_special_num
+        self.relation_special_num = relation_special_num
 
     def getitem(self, index) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         er = self.data[index]
@@ -136,6 +148,8 @@ class MyTripleDataset(Dataset):
     tail: torch.Tensor
     is_reverse: torch.Tensor
     er_list_index: torch.Tensor
+    entity_special_num: int
+    relation_special_num: int
 
     def __init__(self, triples: np.ndarray, r_is_reverse_list: np.ndarray, er2index: Dict[Tuple[int, int], int],
                  entity_special_num=0, relation_special_num=0):
@@ -147,6 +161,8 @@ class MyTripleDataset(Dataset):
         )
         torch.add(self.er, torch.tensor([entity_special_num, relation_special_num]), out=self.er)
         torch.add(self.tail, torch.tensor([entity_special_num]), out=self.tail)
+        self.entity_special_num = entity_special_num
+        self.relation_special_num = relation_special_num
 
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         er = self.er[index]

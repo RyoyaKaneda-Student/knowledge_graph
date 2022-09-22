@@ -190,7 +190,7 @@ class MyDataHelper:
         if eco_memory and more_eco_memory:
             raise "you can't select eco and more_eco"
         elif more_eco_memory:
-            label_sparce, len_e = self.label_sparceself.data.e_length
+            label_sparce, len_e = self.label_sparce, self.data.e_length
             return MyDatasetMoreEcoMemory(
                 er_list, label_sparce, len_e=len_e, target_num=target_num,
                 entity_special_num=entity_special_num, relation_special_num=relation_special_num)
@@ -251,6 +251,12 @@ class MyDataHelper:
 
     def get_er_special_num(self) -> Tuple[int, int]:
         return self._entity_special_num, self._relation_special_num
+
+    def get_final_e_length(self):
+        return self.data.e_length + self._entity_special_num
+
+    def get_final_r_length(self):
+        return self.data.r_length + self._relation_special_num
 
     @property
     def e_dict(self):

@@ -3,24 +3,23 @@ import os
 import sys
 from pathlib import Path
 
-import optuna
-
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 sys.path.append(os.path.join(PROJECT_DIR, 'src'))
 
-# python
+# ========== python ==========
 from logging import Logger
-from typing import List, Dict, Tuple, Optional, Union  # Callable
-import dataclasses
-# from tqdm import tqdm
+# noinspection PyUnresolvedReferences
+from typing import List, Dict, Tuple, Optional, Union, Callable
+# noinspection PyUnresolvedReferences
+from tqdm import tqdm
 from argparse import Namespace
 # Machine learning
 import h5py
 import numpy as np
 import pandas as pd
+import optuna
 # torch
 import torch
-from torch.utils.data import Dataset
 from torch import nn
 from torch.utils.data.dataloader import DataLoader
 
@@ -35,7 +34,10 @@ from ignite.contrib.handlers.tensorboard_logger import *
 from utils.utils import force_gc, force_gc_after_function, get_from_dict, version_check
 from utils.str_process import line_up_key_value, blank_or_NOT, info_str as _info_str
 from utils.setup import setup, save_param
-from utils.torch import cuda_empty_cache as _ccr, load_model, save_model, decorate_loader
+from utils.torch import (
+    cuda_empty_cache as _ccr, load_model, save_model, decorate_loader, param_count_check,
+    force_cuda_empty_cache_after_function)
+from utils.textInOut import SQLITE_PREFIX
 
 from model import ConvE, DistMult, Complex, TransformerE, TransformerVer2E
 from models.datasets.data_helper import MyDataHelper, load_preprocess_data
@@ -80,8 +82,11 @@ def setup_parser() -> Namespace:
     parser.add_argument('--KGdata', help=' or '.join(KGDATA_ALL), type=str,
                         choices=KGDATA_ALL)
     parser.add_argument('--eco-memory', help='メモリに優しく', action='store_true')
-    parser.add_argument('--model', type=str,
-                        help='Choose from: {conve, distmult, complex, transformere}')
+    parser.add_argument('--entity-special-num', help='エンティティ', type=int, default=None)
+    parser.add_argument('--relation-special-num', help='リレーション', type=int, default=None)
+    parser.add_argument('--padding-token', help='padding', type=int)
+    parser.add_argument('--cls-token', help='cls', type=int)
+    parser.add_argument('--model', type=str, help='Choose from: {conve, distmult, complex, transformere}')
     parser.add_argument('--embedding-dim', type=int, default=200,
                         help='The embedding dimension (1D). Default: 200')
     parser.add_argument('--batch-size', help='batch size', type=int)
@@ -91,6 +96,9 @@ def setup_parser() -> Namespace:
     parser.add_argument('--do-train', help='do-train', action='store_true')
     parser.add_argument('--do-valid', help='do-valid', action='store_true')
     parser.add_argument('--do-test', help='do-test', action='store_true')
+    parser.add_argument('--do-train-valid', help='do-train and valid', action='store_true')
+    parser.add_argument('--do-train-test', help='do-train and test', action='store_true')
+    parser.add_argument('--do-train-valid-test', help='do-train and valid and test', action='store_true')
     parser.add_argument('--valid-interval', type=int, default=1, help='valid-interval', )
 
     parser.add_argument('--embedding-shape1', type=int, default=20,
@@ -118,6 +126,11 @@ def setup_parser() -> Namespace:
 
     # コマンドライン引数をパースして対応するハンドラ関数を実行
     _args = parser.parse_args()
+    if _args.do_train_valid_test:
+        del _args.do_train_valid_test
+        _args.do_train = True
+        _args.do_valid = True
+        _args.do_test = True
 
     return _args
 
@@ -142,7 +155,7 @@ def make_dataloader(data_helper: MyDataHelper, batch_size, eco_memory):
 
 
 def get_model(args, data_helper):
-    model = _select_model(args, args.model, data_helper.data.e_length, data_helper.data.r_length)
+    model = _select_model(args, args.model, data_helper.get_final_e_length(), data_helper.get_final_r_length())
     model.init()
     return model
 
@@ -151,6 +164,7 @@ def get_model(args, data_helper):
 def training(
         args: Namespace, *, logger,
         model, data_helper,
+        lr,
         do_valid,
         no_show_bar=False,
         uid=None
@@ -160,10 +174,11 @@ def training(
     pid = args.pid
     checkpoint_path = MODEL_TMP_PATH.format(line_up_key_value(pid=pid, uid=uid))
     valid_interval = args.valid_interval if do_valid else -1
+    lr = lr
     # data
     train = data_helper.train_dataloader
     #
-    opt = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.l2)
+    opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=args.l2)
 
     model.to(device)
     result = {
@@ -190,7 +205,7 @@ def training(
             opt.zero_grad()
             er, e2s = er.to(device), e2s.to(device)
             e, r = er.split(1, 1)
-            e2s = ((1.0 - args.label_smoothing) * e2s) + (1.0 / e2s.size(1))
+            # e2s = ((1.0 - args.label_smoothing) * e2s) + (1.0 / e2s.size(1))
             sum_train += (e2s[e2s != 0]).sum()
 
             pred: torch.Tensor = model.forward((e, r))
@@ -227,6 +242,7 @@ def training(
         result['completed_epoch'] = epoch + 1
 
     load_model(model, checkpoint_path, device=device, delete_file=True)
+    assert model is not None
     return model, result
 
 
@@ -310,23 +326,20 @@ def testing(
     return model, result
 
 
-def do_1train(args, *, logger: Logger):
+def train_setup(args, *, logger: Logger):
+    # padding token is 0
+    # cls token is 1
+    # so special num is 1
     kg_data = args.KGdata
     eco_memory = args.eco_memory
-    do_train, do_valid, do_test = args.do_train, args.do_valid, args.do_test
-    model_path = args.model_path
+    entity_special_num = args.entity_special_num
+    relation_special_num = args.relation_special_num
+    # padding_token = 0
     batch_size = args.batch_size
-    device = args.device
-    no_show_bar = args.no_show_bar
-
-    if (not do_train) and (not do_valid) and (not do_test):
-        return -1
-
-    logger.info(f"Function start".center(40, '='))
 
     # load data
     logger.info(_info_str(f"load data start."))
-    data_helper = load_preprocess_data(kg_data, eco_memory)
+    data_helper = load_preprocess_data(kg_data, eco_memory, entity_special_num, relation_special_num, logger=logger)
     logger.info(f"=====this is {blank_or_NOT(eco_memory)} eco_memory mode=====")
     logger.info(_info_str(f"load data complete."))
 
@@ -339,21 +352,35 @@ def do_1train(args, *, logger: Logger):
     logger.info(_info_str(f"make model start."))
     model = get_model(args, data_helper)
     logger.info(_info_str(f"make model complete."))
-    # パラメータカウント
-    params = 0
-    for p in model.parameters():
-        if p.requires_grad:
-            params += p.numel()
+    logger.info(f"grad param count: {param_count_check(model)}")
+    return data_helper, model
 
-    logger.info(f"param count: {params}")  # 121898
 
-    if do_train:
+def do_1train(args, *, logger: Logger):
+    is_do_train, is_do_valid, is_do_test = args.do_train, args.do_valid, args.do_test
+    model_path = args.model_path
+
+    device = args.device
+    no_show_bar = args.no_show_bar
+
+    logger.info(f"Function start".center(40, '='))
+
+    if (not is_do_train) and (not is_do_valid) and (not is_do_test):
+        logger.info(f"Function end".center(40, '='))
+        return -1
+
+    data_helper, model = train_setup(args, logger=logger)
+    # training
+    lr = args.lr
+
+    if is_do_train:
         logger.info(_info_str(f"Train start."))
         model, result = training(
             args, logger=logger,
             data_helper=data_helper,
             model=model,
-            do_valid=do_valid,
+            lr=lr,
+            do_valid=is_do_valid,
             no_show_bar=no_show_bar
         )
         save_model(model, args.model_path, device=device)
@@ -361,7 +388,7 @@ def do_1train(args, *, logger: Logger):
         logger.info(_info_str(f"Train complete."))
         del result
     model = load_model(model, model_path, device=device)
-    if do_valid:
+    if is_do_valid:
         logger.info(_info_str(f"Test valid start."))
         model, result = testing(
             args, logger=logger,
@@ -372,7 +399,7 @@ def do_1train(args, *, logger: Logger):
         args.test_valid_result = result
         logger.info(f"=====Test valid result. mrr: {result['mrr']}, hit_: {result['hit_']}")
         logger.info(_info_str(f"Test valid complete."))
-    if do_test:
+    if is_do_test:
         logger.info(_info_str(f"Test start."))
         model, result = testing(
             args, logger=logger,
@@ -387,11 +414,8 @@ def do_1train(args, *, logger: Logger):
     logger.info(f"Function finish".center(40, '='))
 
 
+@force_gc_after_function
 def do_optuna(args, *, logger: Logger):
-    kg_data = args.KGdata
-    eco_memory = args.eco_memory
-    # do_train, do_valid, do_test = args.do_train, args.do_valid, args.do_test
-    # model_path = args.model_path
     batch_size = args.batch_size
     no_show_bar = args.no_show_bar
 
@@ -401,36 +425,29 @@ def do_optuna(args, *, logger: Logger):
 
     logger.info(f"Optuna start".center(40, '='))
 
-    # load data
-    logger.info(_info_str(f"load data start."))
-    data_helper = load_preprocess_data(kg_data, eco_memory)
-    logger.info(f"=====this is {blank_or_NOT(eco_memory)} eco_memory mode=====")
-    logger.info(_info_str(f"load data complete."))
+    _, data_helper = train_setup(args, logger=logger)
 
-    # dataloader
-    logger.info(_info_str(f"make dataloader start."))
-    make_dataloader(data_helper, batch_size, eco_memory)
-    data_helper.del_test_dataloader()
-    logger.info(_info_str(f"make dataloader complete."))
-
+    @force_cuda_empty_cache_after_function
     def objective(trial: optuna.Trial):
-        logger.info(_info_str(f"trial {trial.number} start."))
+        nonlocal data_helper
         lr = trial.suggest_loguniform('lr', 1e-6, 1e-2)
-        args.lr = lr  # update
+
+        logger.info(_info_str(f"trial {trial.number} start."))
         model = get_model(args, data_helper)
+        model.init()
         # train
-        model, result = training(
+        model, _ = training(
             args, logger=logger,
             data_helper=data_helper,
             model=model,
+            lr=lr,
             do_valid=False,
             no_show_bar=no_show_bar,
             # optuna additional setting
             uid=trial.number
         )
-        del result
         # valid
-        model, result = testing(
+        _, result = testing(
             args, logger=logger,
             data_helper=data_helper, model=model,
             is_valid=True,
@@ -440,11 +457,9 @@ def do_optuna(args, *, logger: Logger):
         return result['mrr']
 
     study = optuna.create_study(
-        direction='maximize', study_name=study_name, storage=f"sqlite:///./{optuna_file}", load_if_exists=True
+        direction='maximize', study_name=study_name, storage=SQLITE_PREFIX+optuna_file, load_if_exists=True
     )
-    study.optimize(
-        objective, n_trials=n_trials, gc_after_trial=True
-    )
+    study.optimize(objective, n_trials=n_trials, gc_after_trial=True)
 
     logger.info(_info_str("optuna study finish"))
     args.lr = study.best_params['lr']
@@ -452,73 +467,6 @@ def do_optuna(args, *, logger: Logger):
     logger.info(_info_str("update arge param"))
 
     logger.info(f"Optuna finish".center(40, '='))
-
-
-def do_test(args, *, logger: Logger):
-    kg_data = args.KGdata
-    eco_memory = args.eco_memory
-    # do_train, do_valid, do_test = args.do_train, args.do_valid, args.do_test
-    model_path = args.model_path
-    batch_size = args.batch_size
-    device = args.device
-    no_show_bar = args.no_show_bar
-
-    logger.info(f"Function start".center(40, '='))
-
-    # load data
-    logger.info(_info_str(f"load data start."))
-    data_helper = load_preprocess_data(kg_data, eco_memory, logger=logger)
-    logger.info(f"=====this is {blank_or_NOT(eco_memory)} eco_memory mode=====")
-    logger.info(_info_str(f"load data complete."))
-    """
-    # dataloader
-    logger.info(_info_str(f"make dataloader start."))
-    make_dataloader(data_helper, batch_size, eco_memory)
-    logger.info(_info_str(f"make dataloader complete."))
-
-    # model
-    logger.info(_info_str(f"make model start."))
-    model = get_model(args, data_helper)
-    logger.info(_info_str(f"make model complete."))
-
-    if do_train:
-        logger.info(_info_str(f"Train start."))
-        model, result = training(
-            args, logger=logger,
-            data_helper=data_helper,
-            model=model,
-            do_valid=do_valid,
-            no_show_bar=no_show_bar
-        )
-        save_model(model, args.model_path, device=device)
-        args.train_result = result
-        logger.info(_info_str(f"Train complete."))
-        del result
-    model = load_model(model, model_path, device=device)
-    if do_valid:
-        logger.info(_info_str(f"Test valid start."))
-        model, result = testing(
-            args, logger=logger,
-            data_helper=data_helper, model=model,
-            is_valid=True,
-            no_show_bar=no_show_bar
-        )
-        args.test_valid_result = result
-        logger.info(f"=====Test valid result. mrr: {result['mrr']}, hit_: {result['hit_']}")
-        logger.info(_info_str(f"Test valid complete."))
-    if do_test:
-        logger.info(_info_str(f"Test start."))
-        model, result = testing(
-            args, logger=logger,
-            data_helper=data_helper, model=model,
-            is_test=True,
-            no_show_bar=no_show_bar,
-        )
-        args.test_result = result
-        logger.info(f"=====Test result. mrr: {result['mrr']}, hit_: {result['hit_']}")
-        logger.info(_info_str(f"Test complete."))
-    """
-    logger.info(f"Function finish".center(40, '='))
 
 
 def select_function(args, *, logger: Logger):
@@ -532,12 +480,15 @@ def select_function(args, *, logger: Logger):
         force_gc()
         do_1train(args, logger=logger)
     elif fname == 'do_test':
-        do_test(args, logger=logger)
+        args.do_train = False
+        args.do_valid = True
+        args.do_test = True
+        do_1train(args, logger)
 
 
 def main():
     args, logger, device = setup(setup_parser, PROJECT_DIR)
-    version_check(torch, np, pd, logger=logger)
+    version_check(torch, np, pd, h5py, optuna, logger=logger)
     try:
         args.project_dir = PROJECT_DIR
         args.logger = logger
