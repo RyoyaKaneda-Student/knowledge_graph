@@ -220,14 +220,14 @@ class TransformerVer2E(torch.nn.Module):
 
         self.emb_e = torch.nn.Embedding(num_entities, embedding_dim)
         self.emb_rel = torch.nn.Embedding(num_relations, embedding_dim)
-        self.inp_drop = torch.nn.Dropout(input_drop)
+        # self.inp_drop = torch.nn.Dropout(input_drop)
         self.hidden_drop = torch.nn.Dropout(hidden_drop)
         self.loss = torch.nn.BCELoss()
 
         encoder_layer = TransformerEncoderLayer(
             d_model=embedding_dim, nhead=nhead, dropout=transformer_drop, batch_first=True
         )
-        self.pos_encoder = PositionalEncoding(embedding_dim, dropout=0.1)
+        self.pos_encoder = PositionalEncoding(embedding_dim, dropout=input_drop, max_len=3)
         self.transformer_encoder = TransformerEncoder(encoder_layer, num_layers)
         self.fc = torch.nn.Linear(embedding_dim, embedding_dim)
         # self.bn2 = torch.nn.BatchNorm1d(embedding_dim)
@@ -254,7 +254,6 @@ class TransformerVer2E(torch.nn.Module):
         cls_embedded = self.get_cls_emb_e().expand_as(e1_embedded)
 
         x = torch.cat([cls_embedded, e1_embedded, rel_embedded], dim=1)
-        x = self.inp_drop(x)
         x = self.pos_encoder(x)
         x = self.transformer_encoder(x)
         x = x[:, 0]  # cls

@@ -36,8 +36,9 @@ from utils.str_process import line_up_key_value, blank_or_NOT, info_str as _info
 from utils.setup import setup, save_param
 from utils.torch import (
     cuda_empty_cache as _ccr, load_model, save_model, decorate_loader, param_count_check,
-    force_cuda_empty_cache_after_function)
+    force_cuda_empty_cache_after_function, LossHelper)
 from utils.textInOut import SQLITE_PREFIX
+from utils.progress_manager import ProgressHelper
 
 from model import ConvE, DistMult, Complex, TransformerE, TransformerVer2E
 from models.datasets.data_helper import MyDataHelper, load_preprocess_data
@@ -163,6 +164,7 @@ def get_model(args, data_helper):
 @force_gc_after_function
 def training(
         args: Namespace, *, logger,
+        progress_helper: ProgressHelper,
         model, data_helper,
         lr,
         do_valid,
@@ -188,13 +190,17 @@ def training(
         'completed_epoch': -1
     }
 
+    early_total_count = 20
+    loss_helper = LossHelper(progress_helper=progress_helper, early_total_count=early_total_count)
+
+
     def append_to_result(_name, _value, *, _epoch=None):
         if not _epoch:
             result[_name].append(_value)
         else:
             result[_name][_epoch] = _value
 
-    for epoch in range(max_epoch):
+    for epoch in progress_helper.progress(range(max_epoch), 'epoch', total=max_epoch):
         # train
         logger.info(f"{'-' * 10}epoch {epoch + 1} start. {'-' * 10}")
         model.train()
@@ -220,7 +226,11 @@ def training(
 
         logger.debug(f"sum_train: {sum_train}")
         loss /= len(train)
-        append_to_result('train_loss', loss.to(CPU).item())
+        loss = loss.to(CPU).item()
+
+        loss_helper.update(loss)
+
+        append_to_result('train_loss', loss)
         logger.info("-----train result (epoch={}): loss = {}".format(epoch + 1, loss))
         logger.debug(f"{'-' * 5}epoch {epoch + 1} train end. {'-' * 5}")
         del loss
@@ -240,9 +250,12 @@ def training(
         logger.info(f"{'-' * 10}epoch {epoch + 1} end.{'-' * 10}")
         save_model(model, checkpoint_path, device=device)
         result['completed_epoch'] = epoch + 1
+        # early stopping
+        if loss_helper.update_min_d >= early_total_count:
+            logger.info(f"early stopping")
+            break
 
     load_model(model, checkpoint_path, device=device, delete_file=True)
-    assert model is not None
     return model, result
 
 
@@ -356,7 +369,7 @@ def train_setup(args, *, logger: Logger):
     return data_helper, model
 
 
-def do_1train(args, *, logger: Logger):
+def do_1train(args, *, logger: Logger, progress_helper: ProgressHelper,):
     is_do_train, is_do_valid, is_do_test = args.do_train, args.do_valid, args.do_test
     model_path = args.model_path
 
@@ -376,7 +389,7 @@ def do_1train(args, *, logger: Logger):
     if is_do_train:
         logger.info(_info_str(f"Train start."))
         model, result = training(
-            args, logger=logger,
+            args, logger=logger, progress_helper=progress_helper,
             data_helper=data_helper,
             model=model,
             lr=lr,
@@ -415,7 +428,7 @@ def do_1train(args, *, logger: Logger):
 
 
 @force_gc_after_function
-def do_optuna(args, *, logger: Logger):
+def do_optuna(args, *, logger: Logger, progress_helper: ProgressHelper,):
     batch_size = args.batch_size
     no_show_bar = args.no_show_bar
 
@@ -425,11 +438,13 @@ def do_optuna(args, *, logger: Logger):
 
     logger.info(f"Optuna start".center(40, '='))
 
-    _, data_helper = train_setup(args, logger=logger)
+    data_helper, _ = train_setup(args, logger=logger)
+    progress_helper.add_key('study', total=n_trials)
 
+    @progress_helper.update_progress_after_function('study')
     @force_cuda_empty_cache_after_function
     def objective(trial: optuna.Trial):
-        nonlocal data_helper
+        nonlocal data_helper, progress_helper
         lr = trial.suggest_loguniform('lr', 1e-6, 1e-2)
 
         logger.info(_info_str(f"trial {trial.number} start."))
@@ -437,7 +452,7 @@ def do_optuna(args, *, logger: Logger):
         model.init()
         # train
         model, _ = training(
-            args, logger=logger,
+            args, logger=logger, progress_helper=progress_helper,
             data_helper=data_helper,
             model=model,
             lr=lr,
@@ -457,7 +472,7 @@ def do_optuna(args, *, logger: Logger):
         return result['mrr']
 
     study = optuna.create_study(
-        direction='maximize', study_name=study_name, storage=SQLITE_PREFIX+optuna_file, load_if_exists=True
+        direction='maximize', study_name=study_name, storage=SQLITE_PREFIX + optuna_file, load_if_exists=True
     )
     study.optimize(objective, n_trials=n_trials, gc_after_trial=True)
 
@@ -469,21 +484,21 @@ def do_optuna(args, *, logger: Logger):
     logger.info(f"Optuna finish".center(40, '='))
 
 
-def select_function(args, *, logger: Logger):
+def select_function(args, *, logger: Logger, progress_helper: ProgressHelper):
     fname = args.function
     if fname not in ('do_1train', 'do_optuna', 'do_test'):
         raise "you should select function"
     elif fname == 'do_1train':
-        do_1train(args, logger=logger)
+        do_1train(args, logger=logger, progress_helper=progress_helper)
     elif fname == 'do_optuna':
-        do_optuna(args, logger=logger)
+        do_optuna(args, logger=logger, progress_helper=progress_helper)
         force_gc()
-        do_1train(args, logger=logger)
+        do_1train(args, logger=logger, progress_helper=progress_helper)
     elif fname == 'do_test':
         args.do_train = False
         args.do_valid = True
         args.do_test = True
-        do_1train(args, logger)
+        do_1train(args, logger=logger)
 
 
 def main():
@@ -496,8 +511,9 @@ def main():
         args.completed = {}
         logger.debug(vars(args))
         logger.debug(f"process id = {args.pid}")
-        select_function(args, logger=logger)
-
+        progress_helper = ProgressHelper("log/progress.{pid}.txt", pid=args.pid)
+        select_function(args, logger=logger, progress_helper=progress_helper)
+        progress_helper.finish(delete=True)
     finally:
         save_param(args)
 

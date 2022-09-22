@@ -3,8 +3,13 @@ import os
 import torch
 import torch.nn as nn
 from logging import Logger
+# noinspection PyUnresolvedReferences
 from typing import List, Dict, Tuple, Optional, Callable, Union
 import math
+
+from utils.progress_manager import ProgressHelper
+
+INF = float('inf')
 
 
 def get_device(device_name, *, logger: Logger = None):
@@ -90,6 +95,7 @@ class force_cpu(object):
 
 
 class PositionalEncoding(nn.Module):
+    # batch first
     def __init__(self, d_model, dropout=0.1, max_len=5000):
         super(PositionalEncoding, self).__init__()
         self.dropout = nn.Dropout(p=dropout)
@@ -99,9 +105,35 @@ class PositionalEncoding(nn.Module):
         div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0).transpose(0, 1)
+        pe = pe.unsqueeze(0)
         self.register_buffer('pe', pe)
 
     def forward(self, x):
         x = x + self.pe[:x.size(0), :]
         return self.dropout(x)
+
+
+class LossHelper:
+    def __init__(self, update_min_d=1e-6, progress_helper: ProgressHelper = None, early_total_count=20):
+        self._loss_list = [INF]
+        self.min_loss = INF
+        self.update_min_d = update_min_d
+        self.not_update_count = 0
+        self.progress_helper = progress_helper
+        progress_helper.add_key('early_count', total=early_total_count)
+
+    # return True if loss is down
+    def update(self, loss) -> bool:
+        self._loss_list.append(loss)
+        rev = (self.min_loss - loss) > self.update_min_d
+        if rev:
+            self.not_update_count = 0
+            self.progress_helper.reset_key('early_count')
+        else:
+            self.not_update_count += 1
+            self.progress_helper.update_key('early_count')
+        self.min_loss = min(self.min_loss, loss)
+
+    @property
+    def all_loss(self):
+        return self._loss_list[1:]
