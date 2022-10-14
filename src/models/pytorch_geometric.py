@@ -30,7 +30,7 @@ from torch_geometric.nn.conv import GATv2Conv
 from torch_geometric.utils import add_self_loops
 # ========== My Utils ==========
 # noinspection PyUnresolvedReferences
-from utils.utils import force_gc, force_gc_after_function, get_from_dict, version_check
+from utils.utils import force_gc, force_gc_after_function, get_from_dict, version_check, logger_is_optional
 from utils.str_process import info_str as _info_str
 from utils.setup import setup, save_param
 # from utils.torch import cuda_empty_cache as _ccr, load_model, save_model, decorate_loader, onehot
@@ -146,8 +146,9 @@ def make_geodata(data_helper: MyDataHelper,
     graph_node_num = e_length + entity_special_num
     graph_edge_num = r_length + relation_special_num
 
-    logger.debug(f"e_length: {e_length},\t graph_node_num: {graph_node_num}")
-    logger.debug(f"r_length: {r_length},\t graph_edge_num: {graph_edge_num}")
+    if logger is not None:
+        logger.debug(f"e_length: {e_length},\t graph_node_num: {graph_node_num}")
+        logger.debug(f"r_length: {r_length},\t graph_edge_num: {graph_edge_num}")
 
     train_triple = data_helper.get_train_triple_dataset()
 
@@ -176,8 +177,8 @@ def make_geodata(data_helper: MyDataHelper,
     return geo_data
 
 
-def separate_triples(geo_data: TorchGeoData, padding_value, *, logger):
-    logger.info(f"is_directed: {geo_data.is_directed()}")
+def separate_triples(geo_data: TorchGeoData, padding_value, *, logger=None):
+    if logger is not None: logger.info(f"is_directed: {geo_data.is_directed()}")
     edge_index = geo_data.edge_index
     edge_attr = geo_data.edge_attr
     src_, dst_ = edge_index
@@ -191,7 +192,7 @@ def separate_triples(geo_data: TorchGeoData, padding_value, *, logger):
 
     node2neighbor_node, node2neighbor_attr = map(_func, (dst_, edge_attr))
     assert node2neighbor_node.shape == node2neighbor_attr.shape
-    logger.debug(f"node2neighbor_node shape: {node2neighbor_node.shape}")
+    if logger is not None: logger.debug(f"node2neighbor_node shape: {node2neighbor_node.shape}")
     return node2neighbor_node, node2neighbor_attr
 
 

@@ -5,6 +5,8 @@ from pathlib import Path
 
 import optuna
 
+from utils.torch import SparceData
+
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 sys.path.append(os.path.join(PROJECT_DIR, 'src'))
 
@@ -32,7 +34,7 @@ from ignite.contrib.handlers.tensorboard_logger import *
 """
 
 from models.datasets.datasets import (
-    MyDatasetMoreEcoMemory, MyDatasetMoreEcoWithFilter, MyTripleDataset
+    MyDatasetMoreEcoMemory, MyDatasetMoreEcoWithFilter, MyTripleDataset, MyTripleTrainDataset
 )
 
 PROCESSED_DATA_PATH = './data/processed/'
@@ -136,11 +138,19 @@ class MyTrainTestData:
         logger.info("==========Show TrainTestData==========")
 
 
+SPARCE_DATA = List[Tuple[np.ndarray, np.ndarray]]
+"""
+The tuple of sparce label list. 
+label_sparce[0][i] is entity_data. label_sparce[1][i] is data type(1=train, 2=valid, 3=test)
+"""
+
+
 class MyDataHelper:
     def __init__(self, info_path, train_path, valid_path, test_path, del_zero2zero=True, *,
                  logger=None, eco_memory, entity_special_num, relation_special_num):
         super().__init__()
         my_data = MyTrainTestData(info_path, train_path, valid_path, test_path, del_zero2zero, logger=logger)
+        e_length, r_length = my_data.e_length, my_data.r_length
 
         er_list: np.ndarray = my_data.er_list
         er_tails_data: np.ndarray = my_data.er_tails_data
@@ -152,24 +162,12 @@ class MyDataHelper:
             row, data, data_type = row.item(), data.item(), data_type.item()
             er_tails[row].append((data, data_type))
 
-        label, label_sparce = None, None
-        if not eco_memory:
-            raise "this mode not supported"
-            """
-            label = np.zeros((len(er_list), e_length), dtype=np.int8)
-            for index, tails in enumerate(er_tails):
-                tails_data, tails_data_type = zip(*tails)
-                np.put(label[index], tails_data, tails_data_type)
-                del tails
-            """
-        else:
-            label_sparce = [zip(*tails) for tails in er_tails]
-            label_sparce = [[np.array(data), np.array(data_type, dtype=np.int8)] for data, data_type in label_sparce]
+        label_sparce = SparceData.from_rawdata(er_tails, max_len=e_length) if eco_memory else None
 
         self._data: MyTrainTestData = my_data
         self._er_list: np.ndarray = er_list
-        self._label: Optional[np.ndarray] = label
-        self._label_sparce: Optional[List[Tuple[np.ndarray, np.ndarray]]] = label_sparce
+        self._label: Optional[np.ndarray] = None
+        self._label_sparce: Optional[SparceData] = label_sparce
         self._eco_memory: bool = eco_memory
         self._entity_special_num: int = entity_special_num
         self._relation_special_num: int = relation_special_num
@@ -208,11 +206,15 @@ class MyDataHelper:
         """
 
     def _get_valid_test_dataset(self, more_eco_memory: bool, target_num) -> MyDatasetMoreEcoWithFilter:
-        er_list = self.er_list
+        er_list, target_num = self.er_list, target_num
         entity_special_num, relation_special_num = self.get_er_special_num()
+        label_sparce, len_e = self.label_sparce, self.data.e_length
+        # debug
+        # label_sparce.
+
         if more_eco_memory:
             return MyDatasetMoreEcoWithFilter(
-                er_list, self._label_sparce, len_e=self.data.e_length, target_num=target_num, del_if_no_tail=True,
+                er_list, label_sparce, len_e=len_e, target_num=target_num, del_if_no_tail=True,
                 entity_special_num=entity_special_num, relation_special_num=relation_special_num)
         else:
             raise "this mode not support."
@@ -223,20 +225,26 @@ class MyDataHelper:
     def get_test_dataset(self, more_eco_memory: bool = False) -> MyDatasetMoreEcoWithFilter:
         return self._get_valid_test_dataset(more_eco_memory, 3)
 
-    def get_tvt_triple_dataset(self, triple):
+    def get_tvt_triple_dataset(self, triple, train_mode) -> Union[MyTripleDataset, MyTripleTrainDataset]:
         r_is_reverse_list, er2index = self.data.r_is_reverse_list, self.data.er2index
         entity_special_num, relation_special_num = self.get_er_special_num()
-        return MyTripleDataset(triple, r_is_reverse_list, er2index,
-                               entity_special_num=entity_special_num, relation_special_num=relation_special_num)
+        if train_mode:
+            return MyTripleTrainDataset(triple, r_is_reverse_list, er2index,
+                                        entity_special_num=entity_special_num,
+                                        relation_special_num=relation_special_num)
+        else:
+            return MyTripleDataset(triple, r_is_reverse_list, er2index,
+                                   entity_special_num=entity_special_num,
+                                   relation_special_num=relation_special_num)
 
-    def get_train_triple_dataset(self) -> MyTripleDataset:
-        return self.get_tvt_triple_dataset(self.data.train_triple)
+    def get_train_triple_dataset(self, train_mode=False) -> Union[MyTripleDataset, MyTripleTrainDataset]:
+        return self.get_tvt_triple_dataset(self.data.train_triple, train_mode)
 
     def get_valid_triple_dataset(self) -> MyTripleDataset:
-        return self.get_tvt_triple_dataset(self.data.valid_triple)
+        return self.get_tvt_triple_dataset(self.data.valid_triple, False)
 
     def get_test_triple_dataset(self) -> MyTripleDataset:
-        return self.get_tvt_triple_dataset(self.data.test_triple)
+        return self.get_tvt_triple_dataset(self.data.test_triple, False)
 
     def del_loaders(self):
         del self._train_dataloader, self._valid_dataloader, self._test_dataloader
@@ -267,7 +275,7 @@ class MyDataHelper:
     @property
     def r_dict(self):
         _dict_new = {i: f'special_r{i}' for i in range(self._relation_special_num)}
-        _dict_new.update({key+len(_dict_new): value for key, value in self.data.r_dict.items()})
+        _dict_new.update({key + len(_dict_new): value for key, value in self.data.r_dict.items()})
         return _dict_new
 
     @property
@@ -285,10 +293,10 @@ class MyDataHelper:
         return self._label
 
     @property
-    def label_sparce(self) -> List[Tuple[np.ndarray, np.ndarray]]:
+    def label_sparce(self) -> SparceData:
         if not self._eco_memory:
             raise "not eco memory mode but select label sparce"
-        return self._label_sparce
+        return SparceData.make_clone(old=self._label_sparce, to_tensor=True)
 
     @property
     def train_dataloader(self) -> DataLoader:

@@ -1,7 +1,7 @@
 # coding: UTF-8
 import dataclasses
 import os
-from typing import Tuple
+from typing import Tuple, Any
 import sys
 from pathlib import Path
 import pickle
@@ -10,6 +10,25 @@ from argparse import Namespace
 
 import torch
 from .torch import get_device
+
+
+class ChangeDisableNamespace(Namespace):
+    def __setattr__(self, name, value):
+        if name == '__dict__':
+            # 初回設定用
+            super(ChangeDisableNamespace, self).__setattr__('__dict__', value)
+        else:
+            raise TypeError(f'Can\'t set value')
+
+    def __init__(self, args, **kwargs: Any):
+        super().__init__(**kwargs)
+        self.__dict__ = args.__dict__
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
 
 
 def command_help(args):
@@ -46,10 +65,10 @@ def setup_logger(name, logfile, console_level=None) -> Logger:
     return logger
 
 
-def setup(setup_parser, project_dir) -> Tuple[Namespace, Logger, torch.device]:
+def setup(setup_parser, project_dir, *, parser_args=None) -> Tuple[Namespace, Logger, torch.device]:
     from dotenv import load_dotenv
     load_dotenv()
-    args: Namespace = setup_parser()
+    args: Namespace = setup_parser(parser_args)
     logger: Logger = setup_logger(__name__, f"{project_dir}/{args.logfile}", console_level=args.console_level)
     device: torch.device = get_device(device_name=args.device_name, logger=logger)
     # process id
@@ -89,3 +108,5 @@ def main(setup_parser, project_dir):
 
     finally:
         save_param(args)
+
+

@@ -26,7 +26,7 @@ class ProgressHelper:
         file_name = remake_filename(file_name, pid)
         self.file_name = file_name
         self.f = open(file_name, mode='w')
-        self.f.write('\n')
+        self.f.write(f"{pid if pid is not None else ''}\n")
         self.dict_: Dict[str, tqdm] = {}
 
         self._finish = False

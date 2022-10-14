@@ -1,4 +1,7 @@
 import os
+import warnings
+import random
+import numpy as np
 
 import torch
 import torch.nn as nn
@@ -8,8 +11,11 @@ from typing import List, Dict, Tuple, Optional, Callable, Union
 import math
 
 from utils.progress_manager import ProgressHelper
+from utils.utils import none_count
 
 INF = float('inf')
+
+ndarray_Tensor = Union[np.ndarray, torch.Tensor]
 
 
 def get_device(device_name, *, logger: Logger = None):
@@ -27,6 +33,18 @@ def get_device(device_name, *, logger: Logger = None):
             return torch.device("cpu")
     else:
         return torch.device("cpu")
+
+
+def torch_fix_seed(seed=42):
+    # Python random
+    random.seed(seed)
+    # Numpy
+    np.random.seed(seed)
+    # Pytorch
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.use_deterministic_algorithms = True
 
 
 def cuda_empty_cache():
@@ -78,6 +96,42 @@ def param_count_check(model):
     return params
 
 
+def random_choice(x: torch.Tensor, n: Union[torch.Tensor, int], filter_: Optional[torch.Tensor] = None):
+    indices = random_indices_choice(x, n, filter_)
+    return torch.index_select(x, 0, indices)
+
+
+_x_indexes_raw: torch.Tensor = torch.tensor([i for i in range(1000000)], dtype=torch.long)
+
+
+def random_indices_choice(
+        x: torch.Tensor, n: Union[torch.Tensor, int],
+        *,
+        filter_: Optional[torch.Tensor] = None,
+        not_choice_num_list: Optional[torch.Tensor] = None,
+):
+    assert x.dim() == 1
+    filter_: torch.Tensor
+    if none_count(filter_, not_choice_num_list) > 1:
+        raise "only one choice. (filter_, not_choice_num_list)"
+    elif filter_ is not None:
+        assert x.shape == filter_.shape
+    elif not_choice_num_list:
+        filter_ = torch.ones_like(x)
+    x_indexes: torch.Tensor = _x_indexes_raw[:len(x)]
+    x_indexes = x_indexes[filter_]
+    indices = x_indexes[torch.randperm(len(x_indexes))][:n]
+    if len(indices) != n:
+        print(x_indexes)
+        warnings.warn("すくな！")
+        raise "saa"
+    return indices
+
+
+def onehot_target(target_num, target_len, len_, dtype: torch.dtype = None):
+    return torch.tensor([1 if i == target_num else 0 for i in range(target_len)], dtype=dtype).repeat(len_)
+
+
 class force_cpu(object):
     def __init__(self, model: nn.Module, device: torch.device):
         self.model = model
@@ -94,8 +148,115 @@ class force_cpu(object):
         del self.model, self.device
 
 
+class SparceData:
+    """
+    Args:
+        self._sparce_data: [ [array(...), array(...)], [array(...), array(...)]  ]
+
+    """
+
+    def __init__(self,
+                 _sparce_data: List[Tuple[np.ndarray, ndarray_Tensor]],
+                 _tmp: Union[np.ndarray, torch.Tensor],
+                 *, is_torch=False
+                 ):
+        """
+        Args:
+            data: [ [(0,1), (1,1) ], [(0,2), (2,2)] ]
+        """
+        self._sparce_data: List[Tuple[np.ndarray, ndarray_Tensor]] = _sparce_data
+        self._tmp: Union[np.ndarray, torch.Tensor] = _tmp
+        self._is_torch = is_torch
+        if is_torch:
+            for i in range(100):
+                output, counts = torch.unique(self._sparce_data[i][1], return_counts=True)
+                # print(f"self._sparce_data[0], {output=}, {counts=}")
+
+    def add_to_data_index(self, item):
+        self._sparce_data = [
+            (_data_index + item, _data) for (_data_index, _data) in self._sparce_data]
+        len_tmp = len(self._tmp) + item
+        self._tmp = np.zeros(len_tmp, dtype=np.int8) if not self._is_torch else torch.zeros(len_tmp, dtype=torch.int8)
+
+    def get_data(self, index: int, filter_func: Callable = None, fill_value=None) -> Union[np.ndarray, ndarray_Tensor]:
+        _data_index, _data = self._sparce_data[index]
+        if filter_func is not None:
+            filter_ = filter_func(_data_index, _data)
+            _data_index, _data = _data_index[filter_], _data[filter_]
+        rep = self._tmp.clone()
+        rep[_data_index] = fill_value if fill_value is not None else _data
+        return rep
+
+    def get_raw_data(self, index: int):
+        return self._sparce_data[index]
+
+    def del_indices(self, *,
+                    del_indices: Union[List[int], np.ndarray, None] = None,
+                    save_indices: Union[List[int], np.ndarray, None] = None,
+                    key: Callable[[np.ndarray, np.ndarray], bool] = None
+                    ) -> List:
+        """
+        Args:
+            del_indices: del if
+            save_indices:
+            key: delete if key(i) is True.
+        Returns: The list of indices (True if the index is deleted else False.).
+        """
+        sparce_data = self._sparce_data
+        tmp = none_count([del_indices, save_indices, key])
+        tmp_list = np.zeros(len(sparce_data), dtype=bool)
+
+        if tmp >= 2 or tmp == 0:
+            raise "select only one value."
+        elif del_indices is not None:
+            tmp_list[del_indices] = True
+        elif save_indices is not None:
+            tmp_list[:] = True
+            tmp_list[save_indices] = False
+            pass
+        elif key is not None:
+            list_ = []
+            for i, (_data_index, _data) in enumerate(sparce_data):
+                if key(_data_index, _data): list_.append(i)
+            tmp_list[list_] = True
+
+        new_sparce_data = [
+            item for i, item in enumerate(self._sparce_data) if not tmp_list[i]
+        ]
+
+        assert len(new_sparce_data) == len(self._sparce_data) - np.count_nonzero(tmp_list)
+
+        self._sparce_data = new_sparce_data
+        return tmp_list
+
+    def __len__(self):
+        return len(self._sparce_data)
+
+    @classmethod
+    def from_rawdata(cls, data: List[List[Tuple[int, int]]], max_len=None):
+        _sparce_data = [list(zip(*tails)) for tails in data]
+        _sparce_data = [(np.array(_data_index, dtype=np.int64), np.array(_data, dtype=np.int8)) for _data_index, _data
+                        in _sparce_data]
+        max_len = max([max(_data_index) for _data_index, _data in _sparce_data]) if max_len is None else max_len
+        return cls(_sparce_data, np.zeros(max_len))
+
+    @classmethod
+    def make_clone(cls, old, to_tensor: bool):
+        assert type(old) == SparceData
+        _sparce_data, _tmp = old._sparce_data.copy(), old._tmp.copy()
+        if to_tensor:
+            _sparce_data = [
+                (_data_index, torch.from_numpy(_data).to(torch.int8)) for _data_index, _data in _sparce_data
+            ]
+            _tmp = torch.zeros(len(_tmp))
+        return SparceData(_sparce_data, _tmp, is_torch=True)
+
+
 class PositionalEncoding(nn.Module):
-    # batch first
+    """ PositionalEncoding
+    batch first
+    """
+
     def __init__(self, d_model, dropout=0.1, max_len=5000):
         super(PositionalEncoding, self).__init__()
         self.dropout = nn.Dropout(p=dropout)
@@ -113,6 +274,18 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 
 
+class MM(nn.Module):
+    """ PositionalEncoding
+    batch first
+    """
+
+    def __init__(self):
+        super(MM, self).__init__()
+
+    def forward(self, x, y):
+        return torch.mm(x, y)
+
+
 class LossHelper:
     def __init__(self, update_min_d=1e-6, progress_helper: ProgressHelper = None, early_total_count=20):
         self._loss_list = [INF]
@@ -122,8 +295,7 @@ class LossHelper:
         self.progress_helper = progress_helper
         progress_helper.add_key('early_count', total=early_total_count)
 
-    # return True if loss is down
-    def update(self, loss) -> bool:
+    def update(self, loss):
         self._loss_list.append(loss)
         rev = (self.min_loss - loss) > self.update_min_d
         if rev:
