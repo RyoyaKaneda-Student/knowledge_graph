@@ -35,12 +35,13 @@ from utils.utils import force_gc, force_gc_after_function, get_from_dict, versio
 from utils.str_process import line_up_key_value, blank_or_NOT, info_str as _info_str
 from utils.setup import setup, save_param, ChangeDisableNamespace
 from utils.torch import (
-    cuda_empty_cache as _cec, load_model, save_model, decorate_loader, param_count_check, random_indices_choice,
+    cuda_empty_cache as _cec, load_model, save_model, decorate_loader, param_count_check,
     force_cuda_empty_cache_after_function, LossHelper, torch_fix_seed)
 from utils.textInOut import SQLITE_PREFIX
 from utils.progress_manager import ProgressHelper
 
-from model import ConvE, DistMult, Complex, TransformerE, TransformerVer2E, TransformerVer2E_ERE, TransformerVer3E, \
+from model import ConvE, DistMult, Complex, TransformerE, TransformerVer2E, TransformerVer2E_ERE, \
+    TransformerVer3E, TransformerVer3E_1, \
     KGE_ERE, KGE_ERTails
 from models.datasets.data_helper import MyDataHelper, load_preprocess_data
 from models.datasets.datasets import MyTripleTrainDataset
@@ -65,6 +66,7 @@ name2model = {
     'transformere2': TransformerVer2E,
     'transformere2_ere': TransformerVer2E_ERE,
     'transformere3': TransformerVer3E,
+    'transformere3_1': TransformerVer3E_1,
 }
 
 
@@ -93,18 +95,20 @@ def setup_parser(args=None) -> Namespace:
     parser.add_argument('--entity-special-num', help='エンティティ', type=int, default=None)
     parser.add_argument('--relation-special-num', help='リレーション', type=int, default=None)
     # e special
-    parser.add_argument('--padding-token-e', help='padding', type=int)
-    parser.add_argument('--cls-token-e', help='cls', type=int)
+    parser.add_argument('--padding-token-e', help='padding', type=int, default=None)
+    parser.add_argument('--cls-token-e', help='cls', type=int, default=None)
+    parser.add_argument('--mask-token-e', help='mask', type=int, default=None)
     # r special
-    parser.add_argument('--padding-token-r', help='padding', type=int)
-    parser.add_argument('--cls-token-r', help='cls', type=int)
-    parser.add_argument('--self-loop-token-r', help='self-loop', type=int)
+    parser.add_argument('--padding-token-r', help='padding', type=int, default=None)
+    parser.add_argument('--cls-token-r', help='cls', type=int, default=None)
+    parser.add_argument('--self-loop-token-r', help='self-loop', type=int, default=None)
 
     parser.add_argument('--model', type=str, help=f"Choose from: {', '.join(name2model.keys())}")
     parser.add_argument('--embedding-dim', type=int, default=200,
                         help='The embedding dimension (1D). Default: 200')
     parser.add_argument('--batch-size', help='batch size', type=int)
     parser.add_argument('--epoch', help='max epoch', type=int)
+    parser.add_argument('--early-stopping-count', help='early-stopping-count', type=int, default=-1)
 
     parser.add_argument('--model-path', type=str, help='model path')
     parser.add_argument('--do-train', help='do-train', action='store_true')
@@ -137,6 +141,7 @@ def setup_parser(args=None) -> Namespace:
                              'Default: 9728 (embedding size 200).')
     # transformere
     parser.add_argument('--nhead', type=int, default=8, help='nhead. Default: 8.')
+    parser.add_argument('--num-layers', type=int, default=4, help='num layers. Default: 4.')
     parser.add_argument('--transformer-drop', type=float, default=0.1, help='transformer-drop. Default: 0.1.')
 
     # コマンドライン引数をパースして対応するハンドラ関数を実行
@@ -212,11 +217,13 @@ def training(
         lr,
         do_valid,
         no_show_bar=False,
-        uid=None
+        uid=None,
+        resume_result=None
 ):
     device = args.device
     max_epoch = args.epoch
     pid = args.pid
+    early_stopping_count = args.early_stopping_count
     checkpoint_path = MODEL_TMP_PATH.format(line_up_key_value(pid=pid, uid=uid))
     valid_interval = args.valid_interval if do_valid else -1
     lr = lr
@@ -229,15 +236,15 @@ def training(
     opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=args.l2)
 
     model.to(device)
+
     result = {
         'train_loss': [],
         'mrr': [],
         'hit_': [],
         'completed_epoch': -1
-    }
+    } if resume_result is None else resume_result
 
-    early_total_count = 200
-    loss_helper = LossHelper(progress_helper=progress_helper, early_total_count=early_total_count)
+    loss_helper = LossHelper(progress_helper=progress_helper, early_total_count=early_stopping_count)
 
     def append_to_result(_name, _value, *, _epoch=None):
         if not _epoch:
@@ -307,7 +314,7 @@ def training(
         save_model(model, checkpoint_path, device=device)
         result['completed_epoch'] = epoch + 1
         # early stopping
-        if loss_helper.not_update_count >= early_total_count:
+        if 0 < early_stopping_count <= loss_helper.not_update_count:
             logger.info(f"early stopping")
             break
 

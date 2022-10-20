@@ -209,7 +209,7 @@ class MyTripleTrainDataset(Dataset):
         for er, tails in tqdm(train_data, leave=False):
             # er, e2s_target_raw = train_data.get_raw_items(i)
             tails[0:special_num] = -1
-            negative_tails_indices: torch.Tensor = random_indices_choice(tails, negative_count, filter_=(tails == 0))
+            negative_tails_indices: torch.Tensor = np.random.choice(len(tails), negative_count, p=(tails == 0))
             er = er.reshape(1, 2).repeat(negative_count, 1)
             negative_tails_indices = negative_tails_indices.reshape(negative_count, 1)
             negative_ere = torch.cat((er, negative_tails_indices), dim=1)

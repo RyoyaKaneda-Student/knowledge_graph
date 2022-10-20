@@ -136,15 +136,15 @@ class GAT(torch.nn.Module):
 
 
 def make_geodata(data_helper: MyDataHelper,
-                 *, is_del_reverse=True, is_add_self_loop=False, self_loop_weight=0, logger=None) -> TorchGeoData:
-    e_length = data_helper.data.e_length
-    r_length = data_helper.data.r_length
+                 *, is_del_reverse=True, is_add_self_loop=False, num_self_loop=-1, logger=None) -> TorchGeoData:
+    e_length = data_helper.get_final_e_length()
+    r_length = data_helper.get_final_r_length()
+
     reverse_count = np.count_nonzero(data_helper.data.r_is_reverse_list)
     r_length = r_length - reverse_count if is_del_reverse else r_length
 
-    entity_special_num, relation_special_num = data_helper.get_er_special_num()
-    graph_node_num = e_length + entity_special_num
-    graph_edge_num = r_length + relation_special_num
+    # entity_special_num, relation_special_num = data_helper.get_er_special_num()
+    graph_node_num, graph_edge_num = e_length, r_length
 
     if logger is not None:
         logger.debug(f"e_length: {e_length},\t graph_node_num: {graph_node_num}")
@@ -166,31 +166,34 @@ def make_geodata(data_helper: MyDataHelper,
     # node
     edge_index = torch.tensor([src_, dst_], requires_grad=False)
     # edge
-    edge_weight = torch.tensor(type_)
+    edge_attr = torch.tensor(type_)
     if is_add_self_loop:
-        if relation_special_num == 0: raise "can't make self loop relation"
-        edge_index, edge_weight = add_self_loops(edge_index, edge_weight, fill_value=torch.tensor(self_loop_weight))
-    # edge_attr = onehot(edge_weight, num_classes=r_length)
-    edge_attr = edge_weight
+        assert num_self_loop >= 0, "can't make self loop relation"
+        edge_index, edge_weight = add_self_loops(edge_index, edge_attr, fill_value=torch.tensor(num_self_loop))
     # make torch geometric data
-    geo_data = TorchGeoData(x=x, edge_index=edge_index, edge_attr=edge_attr, )
+    geo_data = TorchGeoData(x=x, edge_index=edge_index, edge_attr=edge_attr)
     return geo_data
 
 
-def separate_triples(geo_data: TorchGeoData, padding_value, *, logger=None):
+def separate_triples(geo_data: TorchGeoData, padding_value, self_loop_value, *, logger=None):
     if logger is not None: logger.info(f"is_directed: {geo_data.is_directed()}")
-    edge_index = geo_data.edge_index
+    src_, dst_ = geo_data.edge_index
     edge_attr = geo_data.edge_attr
-    src_, dst_ = edge_index
 
     def _func(value) -> torch.Tensor:
-        node2x = {x.item(): value[src_ == x] for x in geo_data.x}
-        # logger.debug(node2x)
-        node2x = [node2x[i][:, None] for i in range(len(geo_data.x))]
-        node2x = pad_sequence(node2x, batch_first=True, padding_value=padding_value)
-        return node2x.view(len(geo_data.x), -1)
+        node2x_dict = {x.item(): value[src_ == x] for x in geo_data.x}
+        node2x_list = [node2x_dict[i][:, None] for i in range(len(geo_data.x))]
+        node2x_tensor = pad_sequence(node2x_list, batch_first=True, padding_value=padding_value)
+        node2x_tensor = node2x_tensor.view(len(geo_data.x), -1)
+        return node2x_tensor
 
     node2neighbor_node, node2neighbor_attr = map(_func, (dst_, edge_attr))
+    if self_loop_value is not None:
+        self_loop_node = torch.tensor([[i] for i in range(len(node2neighbor_node))])
+        self_loop_attr = torch.full_like(self_loop_node, self_loop_value)
+        node2neighbor_node = torch.cat((node2neighbor_node, self_loop_node), dim=1)
+        node2neighbor_attr = torch.cat((node2neighbor_attr, self_loop_attr), dim=1)
+
     assert node2neighbor_node.shape == node2neighbor_attr.shape
     if logger is not None: logger.debug(f"node2neighbor_node shape: {node2neighbor_node.shape}")
     return node2neighbor_node, node2neighbor_attr

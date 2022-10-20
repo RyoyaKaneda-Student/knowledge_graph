@@ -25,7 +25,7 @@ PROCESSED_DATA_PATH = './data/processed/'
 EXTERNAL_DATA_PATH = './data/external/'
 
 
-def setup_parser():
+def setup_parser(args=None):
     import argparse  # 1. argparseをインポート
     parser = argparse.ArgumentParser(description='データの初期化')
     parser.add_argument('--logfile', help='ログファイルのパス', type=str)
@@ -304,9 +304,9 @@ def wn18rr(*, args, logger):
     if args.task_r2t:
         r2t = Raw2Triples(
             name=name,
-            train_file='original/train.txt',
-            valid_file='original/valid.txt',
-            test_file='original/test.txt',
+            train_file='text/train.txt',
+            valid_file='text/valid.txt',
+            test_file='text/test.txt',
             add_reverse=args.add_reverse
         )
         r2t.process(logger=logger)

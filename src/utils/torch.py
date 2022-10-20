@@ -11,7 +11,7 @@ from typing import List, Dict, Tuple, Optional, Callable, Union
 import math
 
 from utils.progress_manager import ProgressHelper
-from utils.utils import none_count
+from utils.utils import none_count, is_same_len_in_list
 
 INF = float('inf')
 
@@ -88,6 +88,10 @@ def onehot(items: Union[List[int], torch.Tensor], num_classes) -> torch.Tensor:
     return torch.nn.functional.one_hot(items, num_classes=num_classes)
 
 
+def insert_to_front_of_all_batch(tensor_, full_value):
+    return torch.cat(torch.full((len(tensor_), 1), tensor_))
+
+
 def param_count_check(model):
     params = 0
     for p in model.parameters():
@@ -105,19 +109,14 @@ _x_indexes_raw: torch.Tensor = torch.tensor([i for i in range(1000000)], dtype=t
 
 
 def random_indices_choice(
-        x: torch.Tensor, n: Union[torch.Tensor, int],
-        *,
-        filter_: Optional[torch.Tensor] = None,
-        not_choice_num_list: Optional[torch.Tensor] = None,
+        x: torch.Tensor,
+        n: Union[torch.Tensor, int],
+        p: Union[torch.Tensor, np.ndarray, list] = None,
 ):
     assert x.dim() == 1
-    filter_: torch.Tensor
-    if none_count(filter_, not_choice_num_list) > 1:
-        raise "only one choice. (filter_, not_choice_num_list)"
-    elif filter_ is not None:
-        assert x.shape == filter_.shape
-    elif not_choice_num_list:
-        filter_ = torch.ones_like(x)
+    assert none_count(filter_, not_choice_num_list) > 0, "only one choice. (filter_, not_choice_num_list)"
+    assert filter_ is None or x.shape == filter_.shape
+
     x_indexes: torch.Tensor = _x_indexes_raw[:len(x)]
     x_indexes = x_indexes[filter_]
     indices = x_indexes[torch.randperm(len(x_indexes))][:n]
@@ -233,6 +232,23 @@ class SparceData:
         return len(self._sparce_data)
 
     @classmethod
+    def from_row_index_value(cls, rows: np.ndarray, indices: np.ndarray, values: np.ndarray,
+                             max_value: Optional[int] = None):
+
+        assert is_same_len_in_list(rows, indices, values)
+        assert rows.ndim == 1 and indices.ndim == 1 and values.ndim == 1
+        max_value = max_value if max_value is not None else max(values).item()
+
+        list_ = [([], []) for _ in range(max(rows))]
+        for r, i, v in zip(rows.tolist(), indices.tolist(), values.tolist()):
+            list_[r][0].append(i)
+            list_[r][1].append(v)
+
+        tmp_ = np.zeros(max_value)
+
+        return cls([(np.array(l_[0]), np.array(l_[1])) for l_ in list_], tmp_)
+
+    @classmethod
     def from_rawdata(cls, data: List[List[Tuple[int, int]]], max_len=None):
         _sparce_data = [list(zip(*tails)) for tails in data]
         _sparce_data = [(np.array(_data_index, dtype=np.int64), np.array(_data, dtype=np.int8)) for _data_index, _data
@@ -270,8 +286,9 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('pe', pe)
 
     def forward(self, x):
-        x = x + self.pe[:x.size(0), :]
-        return self.dropout(x)
+        x = x + self.pe[:x.size(0), :x.size(1)]
+        x = self.dropout(x)
+        return x
 
 
 class MM(nn.Module):

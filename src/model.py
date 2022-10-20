@@ -27,6 +27,7 @@ class KGE_ERTails(torch.nn.Module, metaclass=abc.ABCMeta):
 
 
     """
+
     def __init__(self, embedding_dim: int, num_entities: int, num_relations: int,
                  padding_token_e: Optional[int], padding_token_r: Optional[int]):
         """
@@ -62,6 +63,7 @@ class KGE_ERE(torch.nn.Module, metaclass=abc.ABCMeta):
 
 
     """
+
     def __init__(self, embedding_dim, num_entities, num_relations, padding_token_e, padding_token_r):
         """
         Args:
@@ -160,28 +162,34 @@ class DistMult(torch.nn.Module):
         return pred
 
 
-class ConvE(torch.nn.Module):
-    def __init__(self, args, num_entities, num_relations):
-        super(ConvE, self).__init__()
-        entity_special_num = args.entity_special_num
-        relation_special_num = args.relation_special_num
+class ConvE(KGE_ERTails):
+    def __init__(self, args, num_entities, num_relations, **kwargs):
+        embedding_dim = args.embedding_dim
+        input_drop = args.input_drop
+        hidden_drop = args.hidden_drop
+        feature_map_drop = args.feat_drop
+        embedding_shape1 = args.embedding_shape1
+        use_bias = args.use_bias
+        hidden_size = args.hidden_size
 
-        self.emb_e = torch.nn.Embedding(num_entities, args.embedding_dim, padding_idx=0)
-        self.emb_rel = torch.nn.Embedding(num_relations, args.embedding_dim, padding_idx=0)
-        self.inp_drop = torch.nn.Dropout(args.input_drop)
-        self.hidden_drop = torch.nn.Dropout(args.hidden_drop)
-        self.feature_map_drop = torch.nn.Dropout2d(args.feat_drop)
+        padding_token = args.padding_token_e
+
+        super(ConvE, self).__init__(embedding_dim, num_entities, num_relations, padding_token, None)
+
+        self.inp_drop = torch.nn.Dropout(input_drop)
+        self.hidden_drop = torch.nn.Dropout(hidden_drop)
+        self.feature_map_drop = torch.nn.Dropout2d(feature_map_drop)
         self.loss = torch.nn.BCELoss()
-        self.emb_dim1 = args.embedding_shape1
-        self.emb_dim2 = args.embedding_dim // self.emb_dim1
+        self.emb_dim1 = embedding_shape1
+        self.emb_dim2 = embedding_dim // embedding_shape1
 
-        self.conv1 = torch.nn.Conv2d(1, 32, (3, 3), 1, 0, bias=args.use_bias)
+        self.conv1 = torch.nn.Conv2d(1, 32, (3, 3), 1, 0, bias=use_bias)
         self.bn0 = torch.nn.BatchNorm2d(1)
         self.bn1 = torch.nn.BatchNorm2d(32)
-        self.bn2 = torch.nn.BatchNorm1d(args.embedding_dim)
+        self.bn2 = torch.nn.BatchNorm1d(embedding_dim)
 
         self.register_parameter('b', Parameter(torch.zeros(num_entities)))
-        self.fc = torch.nn.Linear(args.hidden_size, args.embedding_dim)
+        self.fc = torch.nn.Linear(hidden_size, embedding_dim)
 
     def init(self):
         xavier_normal_(self.emb_e.weight.data)
@@ -270,7 +278,7 @@ class TransformerVer2E(KGE_ERTails):
         hidden_drop = args.hidden_drop
         nhead = args.nhead
         transformer_drop = args.transformer_drop
-        num_layers = 4
+        num_layers = args.num_layers
         padding_token = args.padding_token_e
         cls_token = args.cls_token_e
 
@@ -296,11 +304,13 @@ class TransformerVer2E(KGE_ERTails):
         self.emb_e: torch.nn.Embedding
         self.emb_rel: torch.nn.Embedding
         self.inp_drop = torch.nn.Dropout(input_drop)
-        self.pos_encoder = PositionalEncoding(embedding_dim, dropout=input_drop, max_len=3)
+        self.pos_encoder = PositionalEncoding(embedding_dim, dropout=0., max_len=3)
         self.transformer_encoder = TransformerEncoder(encoder_layer, num_layers)
         self.hidden_drop = torch.nn.Dropout(hidden_drop)
+        self.bn01 = torch.nn.BatchNorm1d(embedding_dim)
         self.relu1 = torch.nn.ReLU()
         self.fc = torch.nn.Linear(embedding_dim, embedding_dim)
+        self.bn02 = torch.nn.BatchNorm1d(embedding_dim)
         self.relu2 = torch.nn.ReLU()
         self.mm = MM()
         self.b = Parameter(torch.zeros(num_entities))
@@ -327,13 +337,14 @@ class TransformerVer2E(KGE_ERTails):
         cls_embedded = self.get_cls_emb_e().expand_as(e1_embedded)
 
         x = torch.cat([cls_embedded, e1_embedded, rel_embedded], dim=1)
+        x = self.inp_drop(x)
         x = self.pos_encoder(x)
-        x = self.transformer_encoder(x)
-        x = x[:, 0]  # cls
-        # x = self.relu1(x)
+        x = self.transformer_encoder(x)[:, 0]  # cls
+        x = self.bn01(x)
+        x = self.relu1(x)
         x = self.fc(x)
         x = self.hidden_drop(x)
-        # x = self.bn2(x)
+        x = self.bn02(x)
         x = self.relu2(x)
         x = self.mm(x, self.emb_e.weight.transpose(1, 0))
         x += self.b.expand_as(x)
@@ -349,7 +360,7 @@ class TransformerVer2E_ERE(KGE_ERE):
         hidden_drop = args.hidden_drop
         nhead = args.nhead
         transformer_drop = args.transformer_drop
-        num_layers = 4
+        num_layers = args.num_layers
         padding_token = args.padding_token_e
         cls_token = args.cls_token_e
 
@@ -413,19 +424,20 @@ class TransformerVer2E_ERE(KGE_ERE):
         return pred
 
 
-class TransformerVer3E(torch.nn.Module):
+class TransformerVer3E(KGE_ERTails):
     def __init__(self, args, num_entities, num_relations, data_helper, **kwargs):
         from models.pytorch_geometric import make_geodata, separate_triples
-        super(TransformerVer3E, self).__init__()
+
         embedding_dim = args.embedding_dim
         input_drop = args.input_drop
         hidden_drop = args.hidden_drop
         nhead = args.nhead
         transformer_drop = args.transformer_drop
-        num_layers = 4
+        num_layers = args.num_layers
 
         padding_token_e = args.padding_token_e
         cls_token_e = args.cls_token_e
+        mask_token_e = args.mask_token_e
         padding_token_r = args.padding_token_r
         cls_token_r = args.cls_token_r
         self_loop_token_r = args.self_loop_token_r
@@ -433,31 +445,35 @@ class TransformerVer3E(torch.nn.Module):
         assert padding_token_e is not None
         assert cls_token_e is not None
         assert padding_token_e != cls_token_e
-        assert args.entity_special_num >= 2
+        assert args.entity_special_num >= 3
 
         assert padding_token_r is not None
         assert cls_token_r is not None
         assert self_loop_token_r is not None
-
         assert padding_token_r != cls_token_r
         assert cls_token_r != self_loop_token_r
         assert self_loop_token_r != padding_token_r
         assert args.relation_special_num >= 3
 
+        super(TransformerVer3E, self).__init__(
+            embedding_dim, num_entities, num_relations, padding_token_e, padding_token_r)
+
         self.padding_token_e = padding_token_e
         self.cls_token_e = cls_token_e
+        self.mask_token_e = mask_token_e
         self.padding_token_r = padding_token_r
         self.cls_token_r = cls_token_r
         self.self_loop_token_r = self_loop_token_r
 
         self.num_entities = num_entities
         self.num_relations = num_relations
+        self.loss = torch.nn.BCELoss()
 
-        geo_data = make_geodata(data_helper=data_helper, is_del_reverse=False, is_add_self_loop=True,
-                                self_loop_weight=self_loop_token_r,
+        geo_data = make_geodata(data_helper=data_helper, is_del_reverse=False, is_add_self_loop=False,
                                 logger=kwargs['logger'] if 'logger' in kwargs else None)
+
         node2neighbor_node, node2neighbor_attr = separate_triples(
-            geo_data, padding_value=padding_token_e,
+            geo_data, padding_value=padding_token_e, self_loop_value=self_loop_token_r,
             logger=kwargs['logger'] if 'logger' in kwargs else None
         )
 
@@ -470,10 +486,11 @@ class TransformerVer3E(torch.nn.Module):
         encoder_layer = TransformerEncoderLayer(
             d_model=embedding_dim, nhead=nhead, dropout=transformer_drop, batch_first=True
         )
+
+        self.inp_drop = torch.nn.Dropout(input_drop)
+        self.pos_encoder = PositionalEncoding(embedding_dim, dropout=0)
         self.transformer_encoder = TransformerEncoder(encoder_layer, num_layers)
 
-        self.emb_e = torch.nn.Embedding(num_entities, embedding_dim, padding_idx=padding_token_e)
-        self.emb_rel = torch.nn.Embedding(num_relations, embedding_dim, padding_idx=padding_token_r)
         self.Softmax_dim2 = Softmax(dim=2)
 
         self.fc = torch.nn.Linear(embedding_dim, embedding_dim)
@@ -482,7 +499,8 @@ class TransformerVer3E(torch.nn.Module):
         self.b = Parameter(torch.zeros(num_entities))
 
     def init(self):
-        pass
+        xavier_normal_(self.emb_e.weight.data)
+        xavier_normal_(self.emb_rel.weight.data)
 
     def get_cls_emb_e(self):
         return self.emb_e.weight[self.cls_token_e]
@@ -497,19 +515,25 @@ class TransformerVer3E(torch.nn.Module):
         return self.emb_rel(rel)
 
     def add_cls(self, _tensor, batch_size, cls_token):
-        return torch.cat([torch.full((batch_size, 1), cls_token), _tensor], dim=1)
+        device = _tensor.device
+        return torch.cat([torch.full((batch_size, 1), cls_token).to(device), _tensor], dim=1)
+
+    def combination_node_attr(self, neighbor_node, neighbor_attr):
+        x = neighbor_node + 1.0 * neighbor_attr
+        return x
 
     def forward(self, x):
-        cls_token_e, cls_token_r = self.cls_token_e, self.cls_token_r
         e1, rel = x
+        device = rel.device
         batch_size = e1.shape[0]
-        neighbor_node = self.node2neighbor_node[e1].view(batch_size, -1)
-        neighbor_attr = self.node2neighbor_attr[e1].view(batch_size, -1)
-        neighbor_pad = self.node2neighbor_pad[e1].view(batch_size, -1)
 
-        neighbor_node[neighbor_node == rel] = 0
-        neighbor_attr[neighbor_attr == rel] = 0
-        neighbor_pad[neighbor_pad == rel] = True
+        cls_token_e, cls_token_r = self.cls_token_e, self.cls_token_r
+
+        neighbor_node = self.node2neighbor_node[e1].view(batch_size, -1).to(device)
+        neighbor_attr = self.node2neighbor_attr[e1].view(batch_size, -1).to(device)
+        neighbor_pad = self.node2neighbor_pad[e1].view(batch_size, -1).to(device)
+
+        neighbor_node[(neighbor_attr == rel)] = self.mask_token_e
 
         neighbor_node = self.add_cls(neighbor_node, batch_size, cls_token_e)
         neighbor_attr = self.add_cls(neighbor_attr, batch_size, cls_token_r)
@@ -521,9 +545,18 @@ class TransformerVer3E(torch.nn.Module):
         neighbor_node = self.Softmax_dim2(neighbor_node)
         neighbor_attr = self.Softmax_dim2(neighbor_attr)
 
-        x = neighbor_node + 1.0 * neighbor_attr
+        # 重いので
+        neighbor_node = neighbor_node[:, :20]
+        neighbor_attr = neighbor_attr[:, :20]
+        neighbor_pad = neighbor_pad[:, :20]
+        #
 
-        x = self.transformer_encoder.forward(x, src_key_padding_mask=neighbor_pad)
+        x = self.combination_node_attr(neighbor_node, neighbor_attr)
+
+        x = self.inp_drop(x)
+        x = self.pos_encoder(x)
+        x = self.transformer_encoder.forward(x, src_key_padding_mask=neighbor_pad
+                                             ) if self.training else self.transformer_encoder.forward(x)
         x = x[:, 0]  # cls
         x = F.relu(x)
         x = self.fc(x)
@@ -536,9 +569,31 @@ class TransformerVer3E(torch.nn.Module):
         return pred
 
 
+class TransformerVer3E_1(TransformerVer3E):
+    def __init__(self, args, num_entities, num_relations, data_helper, **kwargs):
+        super(TransformerVer3E_1, self).__init__(args, num_entities, num_relations, data_helper, **kwargs)
+        del self.pos_encoder, self.transformer_encoder, self.fc
+
+        embedding_dim = args.embedding_dim
+        nhead = args.nhead
+        transformer_drop = args.transformer_drop
+        num_layers = 4
+
+        encoder_layer = TransformerEncoderLayer(
+            d_model=embedding_dim*2, nhead=nhead, dropout=transformer_drop, batch_first=True
+        )
+        self.pos_encoder = PositionalEncoding(embedding_dim*2, dropout=0)
+        self.transformer_encoder = TransformerEncoder(encoder_layer, num_layers)
+
+        self.fc = torch.nn.Linear(embedding_dim*2, embedding_dim)
+
+    # override
+    def combination_node_attr(self, neighbor_node, neighbor_attr):
+        x = torch.concat((neighbor_node, neighbor_attr), dim=2)
+        return x
+
+
 # Add your own model here
-
-
 class MyModel(torch.nn.Module):
     def __init__(self, args, num_entities, num_relations, nhead=8):
         super(DistMult, self).__init__()
