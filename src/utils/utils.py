@@ -3,6 +3,16 @@ import random
 from typing import Tuple, List
 from logging import Logger
 
+from tqdm import tqdm as tqdm_default
+
+tqdm = tqdm_default
+
+
+def tqdm2notebook_tqdm():
+    global tqdm
+    from tqdm.notebook import tqdm as tqdm_notebook
+    tqdm = tqdm_notebook
+
 
 class FakeLogger(Logger):
     def __init__(self):
@@ -82,7 +92,7 @@ def is_same_item_in_list(*args) -> bool:
 
 
 def is_same_len_in_list(*args) -> bool:
-    return is_same_item_in_list(len_in_lists(args))
+    return is_same_item_in_list(*len_in_lists(*args))
 
 
 def version_check(*args, logger=None):

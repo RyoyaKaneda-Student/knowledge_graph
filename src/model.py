@@ -277,6 +277,7 @@ class TransformerVer2E(KGE_ERTails):
         input_drop = args.input_drop
         hidden_drop = args.hidden_drop
         nhead = args.nhead
+        position_encoder_drop = args.position_encoder_drop
         transformer_drop = args.transformer_drop
         num_layers = args.num_layers
         padding_token = args.padding_token_e
@@ -304,7 +305,7 @@ class TransformerVer2E(KGE_ERTails):
         self.emb_e: torch.nn.Embedding
         self.emb_rel: torch.nn.Embedding
         self.inp_drop = torch.nn.Dropout(input_drop)
-        self.pos_encoder = PositionalEncoding(embedding_dim, dropout=0., max_len=3)
+        self.pos_encoder = PositionalEncoding(embedding_dim, dropout=position_encoder_drop, max_len=3)
         self.transformer_encoder = TransformerEncoder(encoder_layer, num_layers)
         self.hidden_drop = torch.nn.Dropout(hidden_drop)
         self.bn01 = torch.nn.BatchNorm1d(embedding_dim)
@@ -339,7 +340,8 @@ class TransformerVer2E(KGE_ERTails):
         x = torch.cat([cls_embedded, e1_embedded, rel_embedded], dim=1)
         x = self.inp_drop(x)
         x = self.pos_encoder(x)
-        x = self.transformer_encoder(x)[:, 0]  # cls
+        x = self.transformer_encoder(x)
+        x = x[:, 0]  # cls
         x = self.bn01(x)
         x = self.relu1(x)
         x = self.fc(x)

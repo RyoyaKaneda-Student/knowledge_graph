@@ -1,41 +1,34 @@
 # coding: UTF-8
+# region !import area!
 import os
 import sys
 from pathlib import Path
-
-import optuna
-
-from utils.torch import SparceData
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 sys.path.append(os.path.join(PROJECT_DIR, 'src'))
 
 # python
 from logging import Logger
-from typing import List, Dict, Tuple, Optional, Union  # Callable
+from typing import Dict, Tuple, Optional, Union  # Callable
 import dataclasses
 # from tqdm import tqdm
-from argparse import Namespace
+# from argparse import Namespace
 # Machine learning
 import h5py
 import numpy as np
 import pandas as pd
+import optuna
 # torch
 import torch
-from torch.utils.data import Dataset
-from torch import nn
 from torch.utils.data.dataloader import DataLoader
 
-"""
-# torch ignite
-from ignite.engine import Events, create_supervised_trainer, create_supervised_evaluator
-from ignite.metrics import Accuracy, Loss
-from ignite.contrib.handlers.tensorboard_logger import *
-"""
-
 from models.datasets.datasets import (
-    MyDatasetMoreEcoMemory, MyDatasetMoreEcoWithFilter, MyTripleDataset, MyTripleTrainDataset
+    MyDataset, MyDatasetWithFilter, MyTripleDataset
 )
+from utils.utils import version_check
+
+# endregion
+
 
 PROCESSED_DATA_PATH = './data/processed/'
 EXTERNAL_DATA_PATH = './data/external/'
@@ -138,114 +131,68 @@ class MyTrainTestData:
         logger.info("==========Show TrainTestData==========")
 
 
-SPARCE_DATA = List[Tuple[np.ndarray, np.ndarray]]
-"""
-The tuple of sparce label list. 
-label_sparce[0][i] is entity_data. label_sparce[1][i] is data type(1=train, 2=valid, 3=test)
-"""
-
-
 class MyDataHelper:
     def __init__(self, info_path, train_path, valid_path, test_path, del_zero2zero=True, *,
                  logger=None, eco_memory, entity_special_num, relation_special_num):
         super().__init__()
         my_data = MyTrainTestData(info_path, train_path, valid_path, test_path, del_zero2zero, logger=logger)
-        e_length, r_length = my_data.e_length, my_data.r_length
-
-        er_list: np.ndarray = my_data.er_list
-        er_tails_data: np.ndarray = my_data.er_tails_data
-        er_tails_row: np.ndarray = my_data.er_tails_row
-        er_tails_data_type: np.ndarray = my_data.er_tails_data_type
-
-        er_tails: List[List[Tuple[int, int]]] = [[] for _ in er_list]
-        for row, data, data_type in zip(er_tails_row, er_tails_data, er_tails_data_type):
-            row, data, data_type = row.item(), data.item(), data_type.item()
-            er_tails[row].append((data, data_type))
-
-        label_sparce = SparceData.from_rawdata(er_tails, max_len=e_length) if eco_memory else None
 
         self._data: MyTrainTestData = my_data
-        self._er_list: np.ndarray = er_list
-        self._label: Optional[np.ndarray] = None
-        self._label_sparce: Optional[SparceData] = label_sparce
         self._eco_memory: bool = eco_memory
         self._entity_special_num: int = entity_special_num
         self._relation_special_num: int = relation_special_num
-        # dataset
-        """
-        self._train_dataset: Dataset = None
-        self._valid_dataset: Dataset = None
-        self._test_dataset: DataLoader = None
-        """
-        # dataloader
-        self._train_dataloader: Optional[DataLoader] = None
-        self._valid_dataloader: Optional[DataLoader] = None
-        self._test_dataloader: Optional[DataLoader] = None
 
-    def get_train_dataset(self, eco_memory: bool = False, more_eco_memory: bool = False) -> MyDatasetMoreEcoMemory:
-        er_list, target_num = self.er_list, 1
-        entity_special_num, relation_special_num = self.get_er_special_num()
-        if eco_memory and more_eco_memory:
-            raise "you can't select eco and more_eco"
-        elif more_eco_memory:
-            label_sparce, len_e = self.label_sparce, self.data.e_length
-            return MyDatasetMoreEcoMemory(
-                er_list, label_sparce, len_e=len_e, target_num=target_num,
-                entity_special_num=entity_special_num, relation_special_num=relation_special_num)
+        self._train_dataloader = None
+        self._valid_dataloader = None
+        self._test_dataloader = None
+
+    # region get dataset functions
+    def _get_dataset(self, target_num, is_need_filter) -> Union[MyDataset, MyDatasetWithFilter]:
+        target_num = target_num
+        er_list = self.processed_er_list
+        label_sparse = self.label_sparse
+        if not is_need_filter:  # if train
+            return MyDataset(er_list, label_sparse, target_num, del_if_no_tail=False)
         else:
-            raise "this mode not support."
+            return MyDatasetWithFilter(er_list, label_sparse, target_num, del_if_no_tail=True)
+
+    def get_train_dataset(self) -> MyDataset:
+        return self._get_dataset(1, is_need_filter=False)
+
+    def get_train_valid_dataset(self) -> MyDataset:
         """
-        elif eco_memory:
-            return MyDatasetEcoMemory(self.er_list, self.label, target_num=target_num,
-                                      entity_special_num=self._entity_special_num,
-                                      relation_special_num=self._relation_special_num)
-        else:
-            return MyDataset(self.er_list, self.label, target_num=target_num,
-                             entity_special_num=self._entity_special_num,
-                             relation_special_num=self._relation_special_num)
+        use for debug.
         """
+        return self._get_dataset(1, is_need_filter=True)
 
-    def _get_valid_test_dataset(self, more_eco_memory: bool, target_num) -> MyDatasetMoreEcoWithFilter:
-        er_list, target_num = self.er_list, target_num
-        entity_special_num, relation_special_num = self.get_er_special_num()
-        label_sparce, len_e = self.label_sparce, self.data.e_length
-        # debug
-        # label_sparce.
+    def get_valid_dataset(self) -> MyDatasetWithFilter:
+        return self._get_dataset(2, is_need_filter=True)
 
-        if more_eco_memory:
-            return MyDatasetMoreEcoWithFilter(
-                er_list, label_sparce, len_e=len_e, target_num=target_num, del_if_no_tail=True,
-                entity_special_num=entity_special_num, relation_special_num=relation_special_num)
-        else:
-            raise "this mode not support."
+    def get_test_dataset(self) -> MyDatasetWithFilter:
+        return self._get_dataset(3, is_need_filter=True)
 
-    def get_valid_dataset(self, more_eco_memory: bool = False) -> MyDatasetMoreEcoWithFilter:
-        return self._get_valid_test_dataset(more_eco_memory, 2)
+    # endregion
 
-    def get_test_dataset(self, more_eco_memory: bool = False) -> MyDatasetMoreEcoWithFilter:
-        return self._get_valid_test_dataset(more_eco_memory, 3)
+    # region get triple functions
+    def _get_triple_dataset(self, triple) -> MyTripleDataset:
+        e_special_num, r_special_num = self.get_er_special_num()
+        triple = triple + np.array([e_special_num, r_special_num, e_special_num])
+        r_is_reverse_list, er2index = self.processed_r_is_reverse_list, self.processed_er2index
 
-    def get_tvt_triple_dataset(self, triple, train_mode) -> Union[MyTripleDataset, MyTripleTrainDataset]:
-        r_is_reverse_list, er2index = self.data.r_is_reverse_list, self.data.er2index
-        entity_special_num, relation_special_num = self.get_er_special_num()
-        if train_mode:
-            return MyTripleTrainDataset(triple, r_is_reverse_list, er2index,
-                                        entity_special_num=entity_special_num,
-                                        relation_special_num=relation_special_num)
-        else:
-            return MyTripleDataset(triple, r_is_reverse_list, er2index,
-                                   entity_special_num=entity_special_num,
-                                   relation_special_num=relation_special_num)
+        return MyTripleDataset(triple, r_is_reverse_list, er2index)
 
-    def get_train_triple_dataset(self, train_mode=False) -> Union[MyTripleDataset, MyTripleTrainDataset]:
-        return self.get_tvt_triple_dataset(self.data.train_triple, train_mode)
+    def get_train_triple_dataset(self) -> MyTripleDataset:
+        return self._get_triple_dataset(self.data.train_triple)
 
     def get_valid_triple_dataset(self) -> MyTripleDataset:
-        return self.get_tvt_triple_dataset(self.data.valid_triple, False)
+        return self._get_triple_dataset(self.data.valid_triple)
 
     def get_test_triple_dataset(self) -> MyTripleDataset:
-        return self.get_tvt_triple_dataset(self.data.test_triple, False)
+        return self._get_triple_dataset(self.data.test_triple)
 
+    # endregion
+
+    # region loader functions
     def del_loaders(self):
         del self._train_dataloader, self._valid_dataloader, self._test_dataloader
 
@@ -257,66 +204,126 @@ class MyDataHelper:
         self._valid_dataloader = valid_dataloader
         self._test_dataloader = test_dataloader
 
+    @property
+    def train_dataloader(self) -> DataLoader:
+        return self._train_dataloader
+
+    @property
+    def trainvalid_dataloader(self) -> DataLoader:
+        return self._train_dataloader
+
+    @property
+    def valid_dataloader(self) -> DataLoader:
+        _valid_dataloader = self._valid_dataloader
+        assert _valid_dataloader is not None, "valid_dataloader is not Defined"
+        return _valid_dataloader
+
+    @property
+    def test_dataloader(self) -> DataLoader:
+        _test_dataloader = self._test_dataloader
+        assert _test_dataloader is not None, "test_dataloader is not Defined"
+        return _test_dataloader
+
+    # endregion
+
     def get_er_special_num(self) -> Tuple[int, int]:
         return self._entity_special_num, self._relation_special_num
-
-    def get_final_e_length(self):
-        return self.data.e_length + self._entity_special_num
-
-    def get_final_r_length(self):
-        return self.data.r_length + self._relation_special_num
-
-    @property
-    def e_dict(self):
-        _dict_new = {i: f'special_e{i}' for i in range(self._entity_special_num)}
-        _dict_new.update({key + len(_dict_new): value for key, value in self.data.e_dict.items()})
-        return _dict_new
-
-    @property
-    def r_dict(self):
-        _dict_new = {i: f'special_r{i}' for i in range(self._relation_special_num)}
-        _dict_new.update({key + len(_dict_new): value for key, value in self.data.r_dict.items()})
-        return _dict_new
 
     @property
     def data(self) -> MyTrainTestData:
         return self._data
 
     @property
-    def er_list(self) -> np.ndarray:
-        return self._er_list
+    def processed_r_is_reverse_list(self):
+        _, r_special_num = self.get_er_special_num()
+        r_is_reverse_list = self.data.r_is_reverse_list
+
+        r_is_reverse_list = np.concatenate([np.zeros(r_special_num, dtype=np.bool), r_is_reverse_list])
+        return r_is_reverse_list
 
     @property
-    def label(self) -> np.ndarray:
-        if self._eco_memory:
-            raise "eco memory mode but select label"
-        return self._label
+    def processed_er2index(self):
+        e_special_num, r_special_num = self.get_er_special_num()
+        er2index = self.data.er2index
+        er2index_new = dict()
+        for key, value in er2index.items():
+            er2index_new[key[0] + e_special_num, key[1] + r_special_num] = value
+        return er2index_new
 
     @property
-    def label_sparce(self) -> SparceData:
-        if not self._eco_memory:
-            raise "not eco memory mode but select label sparce"
-        return SparceData.make_clone(old=self._label_sparce, to_tensor=True)
+    def processed_e_length(self) -> int:
+        return self.data.e_length + self._entity_special_num
 
     @property
-    def train_dataloader(self) -> DataLoader:
-        return self._train_dataloader
+    def processed_r_length(self) -> int:
+        return self.data.r_length + self._relation_special_num
 
     @property
-    def valid_dataloader(self) -> DataLoader:
-        _valid_dataloader = self._valid_dataloader
-        if _valid_dataloader is not None:
-            return _valid_dataloader
-        else:
-            raise "valid_dataloader is not Defined"
+    def r_is_reverse_length(self) -> int:
+        assert self.data.r_length % 2 == 0
+        return self.data.r_length // 2
 
     @property
-    def test_dataloader(self) -> DataLoader:
-        _test_dataloader = self._test_dataloader
-        if _test_dataloader is not None:
-            return _test_dataloader
-        else:
-            raise "_test_dataloader is not defined"
+    def processed_r_length_without_reverse(self) -> int:
+        assert self.data.r_length % 2 == 0
+        return self.data.r_length // 2 + self._relation_special_num
+
+    @property
+    def processed_er_list(self) -> np.ndarray:
+        entity_special_num, relation_special_num = self.get_er_special_num()
+        return self._data.er_list + np.array([entity_special_num, relation_special_num])
+
+    @property
+    def label_sparse_for_debug(self) -> torch.sparse.Tensor:
+        entity_special_num, relation_special_num = self.get_er_special_num()
+        e_length, r_length = self.processed_e_length, self.processed_r_length
+
+        my_data = self.data
+        er_list: np.ndarray = my_data.er_list
+        er_tails_row: np.ndarray = np.arange(0, len(er_list))
+        er_tails_data: np.ndarray = np.copy(my_data.er_list[:, 0])
+        er_tails_data_type: np.ndarray = np.full(len(er_list), 1)  # 1 is train number
+
+        tails_row_column = torch.from_numpy(np.stack([er_tails_row, er_tails_data + entity_special_num]))
+        tails_value = torch.from_numpy(er_tails_data_type)
+
+        rev = torch.sparse_coo_tensor(tails_row_column, tails_value,
+                                      size=(len(er_list), e_length),
+                                      dtype=torch.int8, requires_grad=False)
+
+        return rev
+
+    @property
+    def label_sparse(self) -> torch.sparse.Tensor:
+        entity_special_num, relation_special_num = self.get_er_special_num()
+        e_length, r_length = self.processed_e_length, self.processed_r_length
+
+        my_data = self.data
+        er_list: np.ndarray = my_data.er_list
+        er_tails_row: np.ndarray = np.copy(my_data.er_tails_row)
+        er_tails_data: np.ndarray = np.copy(my_data.er_tails_data)
+        er_tails_data_type: np.ndarray = np.copy(my_data.er_tails_data_type)
+
+        tails_row_column = torch.from_numpy(np.stack([er_tails_row, er_tails_data + entity_special_num]))
+        tails_value = torch.from_numpy(er_tails_data_type)
+
+        rev = torch.sparse_coo_tensor(tails_row_column, tails_value,
+                                      size=(len(er_list), e_length),
+                                      dtype=torch.int8, requires_grad=False)
+
+        return rev
+
+    @property
+    def processed_e_dict(self) -> Dict:
+        _dict_new = {i: f'special_e{i}' for i in range(self._entity_special_num)}
+        _dict_new.update({key + len(_dict_new): value for key, value in self.data.e_dict.items()})
+        return _dict_new
+
+    @property
+    def processed_r_dict(self) -> Dict:
+        _dict_new = {i: f'special_r{i}' for i in range(self._relation_special_num)}
+        _dict_new.update({key + len(_dict_new): value for key, value in self.data.r_dict.items()})
+        return _dict_new
 
     def show(self, logger: Logger):
         logger.info("==========Show DataHelper==========")
@@ -325,7 +332,7 @@ class MyDataHelper:
         logger.info("==========")
         logger.info(f"entity_special_num: {self._entity_special_num}")
         logger.info(f"relation_special_num: {self._relation_special_num}")
-        logger.info(f"r_dict: {self.r_dict}")
+        logger.info(f"r_dict: {self.processed_r_dict}")
         logger.info("==========Show DataHelper==========")
 
 
@@ -338,3 +345,11 @@ def load_preprocess_data(kg_data, eco_memory, entity_special_num=0, relation_spe
         info_path, train_path, valid_path, test_path, eco_memory=eco_memory, logger=logger,
         entity_special_num=entity_special_num, relation_special_num=relation_special_num)  # 0 is special token
     return data_helper
+
+
+def main():
+    version_check(torch, pd, optuna)
+
+
+if __name__ == '__main__':
+    main()

@@ -137,8 +137,8 @@ class GAT(torch.nn.Module):
 
 def make_geodata(data_helper: MyDataHelper,
                  *, is_del_reverse=True, is_add_self_loop=False, num_self_loop=-1, logger=None) -> TorchGeoData:
-    e_length = data_helper.get_final_e_length()
-    r_length = data_helper.get_final_r_length()
+    e_length = data_helper.processed_e_length
+    r_length = data_helper.processed_r_length
 
     reverse_count = np.count_nonzero(data_helper.data.r_is_reverse_list)
     r_length = r_length - reverse_count if is_del_reverse else r_length
@@ -151,14 +151,13 @@ def make_geodata(data_helper: MyDataHelper,
         logger.debug(f"r_length: {r_length},\t graph_edge_num: {graph_edge_num}")
 
     train_triple = data_helper.get_train_triple_dataset()
-
-    r_is_reverse_list = train_triple.r_is_reverse_list
     src_, dst_, type_ = [], [], []
-    for e1, r, e2 in train_triple.triples:
-        if (not is_del_reverse) or (not r_is_reverse_list[r]):
-            src_.append(e1)
-            dst_.append(e2)
-            type_.append(r)
+    for head, relation, tail, is_reverse, _, is_exist in tqdm(train_triple, leave=False, desc="make_geodata"):
+        if (not is_exist) or (is_del_reverse and is_reverse):
+            continue
+        src_.append(head)
+        dst_.append(tail)
+        type_.append(relation)
 
     # make geo data
     # x = model.emb_e.weight.data

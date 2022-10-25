@@ -8,10 +8,10 @@ sys.path.append(os.path.join(PROJECT_DIR, 'src'))
 
 # ========== python ==========
 from logging import Logger
+from collections import namedtuple
 # noinspection PyUnresolvedReferences
-from typing import List, Dict, Tuple, Optional, Union, Callable
+from typing import List, Dict, Tuple, Optional, Union, Callable, Final
 # noinspection PyUnresolvedReferences
-from tqdm import tqdm
 from argparse import Namespace
 # Machine learning
 import h5py
@@ -31,20 +31,21 @@ from ignite.contrib.handlers.tensorboard_logger import *
 """
 
 # Made by me
-from utils.utils import force_gc, force_gc_after_function, get_from_dict, version_check
+from utils.utils import force_gc, force_gc_after_function, get_from_dict, version_check, is_same_len_in_list
 from utils.str_process import line_up_key_value, blank_or_NOT, info_str as _info_str
 from utils.setup import setup, save_param, ChangeDisableNamespace
 from utils.torch import (
     cuda_empty_cache as _cec, load_model, save_model, decorate_loader, param_count_check,
-    force_cuda_empty_cache_after_function, LossHelper, torch_fix_seed)
+    force_cuda_empty_cache_after_function, LossHelper, torch_fix_seed,
+    DeviceName
+)
 from utils.textInOut import SQLITE_PREFIX
 from utils.progress_manager import ProgressHelper
 
 from model import ConvE, DistMult, Complex, TransformerE, TransformerVer2E, TransformerVer2E_ERE, \
-    TransformerVer3E, TransformerVer3E_1, \
-    KGE_ERE, KGE_ERTails
+    TransformerVer3E, TransformerVer3E_1, KGE_ERE, KGE_ERTails
 from models.datasets.data_helper import MyDataHelper, load_preprocess_data
-from models.datasets.datasets import MyTripleTrainDataset
+from models.datasets.datasets import MyTripleDataset
 
 PROCESSED_DATA_PATH = './data/processed/'
 EXTERNAL_DATA_PATH = './data/external/'
@@ -69,18 +70,23 @@ name2model = {
     'transformere3_1': TransformerVer3E_1,
 }
 
+TRAIN_TYPE: Final = namedtuple(
+    'TRAIN_TYPE', ['do_1train', 'do_optuna', 'do_test'])('do_1train', 'do_optuna', 'do_test')
+
 
 def setup_parser(args=None) -> Namespace:
     import argparse  # 1. argparseをインポート
     parser = argparse.ArgumentParser(description='データの初期化')
+    parser.add_argument('--notebook', help='ノートブック', action='store_true')
     parser.add_argument('--logfile', help='ログファイルのパス', type=str)
     parser.add_argument('--param-file', help='パラメータを保存するファイルのパス', type=str)
     parser.add_argument('--console-level', help='コンソール出力のレベル', type=str, default='info')
     parser.add_argument('--no-show-bar', help='バーを表示しない', action='store_true')
-    parser.add_argument('--device-name', help='cpu or cuda or mps', type=str, default='cpu',
-                        choices=['cpu', 'cuda', 'mps'])
+    parser.add_argument('--device-name', help="cpu or cuda or mps",
+                        type=str, default='cpu', choices=['cpu', 'cuda', 'mps'])
     # select function
-    parser.add_argument('--function', help='function', type=str, choices=['do_1train', 'do_optuna', 'do_test'])
+    parser.add_argument('--function', help='function', type=str,
+                        choices=['do_1train', 'do_optuna', 'do_test'])
     # optuna setting
     parser.add_argument('--optuna-file', help='optuna file', type=str)
     parser.add_argument('--study-name', help='optuna study-name', type=str)
@@ -115,6 +121,8 @@ def setup_parser(args=None) -> Namespace:
     parser.add_argument('--do-valid', help='do-valid', action='store_true')
     parser.add_argument('--do-test', help='do-test', action='store_true')
     parser.add_argument('--do-debug', help='do-debug', action='store_true')
+    parser.add_argument('--do-debug-data', help='do-debug about data', action='store_true')
+    parser.add_argument('--do-debug-model', help='do-debug about model', action='store_true')
     parser.add_argument('--do-train-valid', help='do-train and valid', action='store_true')
     parser.add_argument('--do-train-test', help='do-train and test', action='store_true')
     parser.add_argument('--do-train-valid-test', help='do-train and valid and test', action='store_true')
@@ -142,6 +150,7 @@ def setup_parser(args=None) -> Namespace:
     # transformere
     parser.add_argument('--nhead', type=int, default=8, help='nhead. Default: 8.')
     parser.add_argument('--num-layers', type=int, default=4, help='num layers. Default: 4.')
+    parser.add_argument('--position-encoder-drop', type=float, default=0.1, help='position-encoder-drop. Default: 0.1.')
     parser.add_argument('--transformer-drop', type=float, default=0.1, help='transformer-drop. Default: 0.1.')
 
     # コマンドライン引数をパースして対応するハンドラ関数を実行
@@ -155,27 +164,43 @@ def setup_parser(args=None) -> Namespace:
     return _args
 
 
-def _select_model(args, model_name, e_length, r_length, **kwargs) -> Union[KGE_ERTails, KGE_ERE]:
-    if model_name in name2model.keys():
-        model: Union[KGE_ERTails, KGE_ERE] = name2model[model_name](args, e_length, r_length, **kwargs)
-    else:
-        raise Exception(f"Unknown model! :{model_name}")
-    return model
+def make_dataloader_all_tail_debug_model(data_helper: MyDataHelper, batch_size, *, logger, debug=False):
+    logger.info("make_dataloader_all_tail_debug_model")
+    from datasets.datasets import MyDataset, MyDatasetWithFilter
+    er_list = data_helper.processed_er_list
+    label_sparse = data_helper.label_sparse_for_debug
+
+    train_dataset = MyDataset(er_list, label_sparse, 1, del_if_no_tail=False)
+    valid_dataset = MyDatasetWithFilter(er_list, label_sparse, 1, del_if_no_tail=True)
+    # test_dataset = MyDatasetWithFilter(er_list, label_sparse, 1, del_if_no_tail=True)
+
+    from tqdm import tqdm
+    with torch.no_grad():
+        """
+        for er, e2s in tqdm(train_dataset):
+            assert e2s[er[0]] == 1.
+            assert torch.count_nonzero(e2s) == 1
+        """
+        for er, e2s, e2s_all in tqdm(valid_dataset):
+            assert e2s[er[0]] == 1.
+            assert torch.count_nonzero(e2s) == 1
+            assert torch.equal(e2s.to(torch.int), e2s_all.to(torch.int))
+
+    train = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
+    valid = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
+    # test = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+
+    data_helper.set_loaders(train, valid, valid)
 
 
-def make_dataloader_all_tail(data_helper: MyDataHelper, batch_size, eco_memory, *, logger):
-    train_dataset = data_helper.get_train_dataset(eco_memory=False, more_eco_memory=eco_memory)
-    valid_dataset = data_helper.get_valid_dataset(more_eco_memory=eco_memory)
-    test_dataset = data_helper.get_test_dataset(more_eco_memory=eco_memory)
-
-    """
-    for i in range(100):
-        output, counts = torch.unique(valid_dataset[i][1], return_counts=True)
-        logger.debug(f"{output=}, {counts=}")
-        output, counts = torch.unique(valid_dataset[i][2], return_counts=True)
-        logger.debug(f"{output=}, {counts=}")
-        # logger.debug(f"{test_dataset[0]=}")
-    """
+def make_dataloader_all_tail(data_helper: MyDataHelper, batch_size, *, logger, debug=False):
+    logger.info("make_dataloader_all_tail")
+    train_dataset = data_helper.get_train_dataset()
+    valid_dataset = data_helper.get_valid_dataset() if not debug else None
+    test_dataset = data_helper.get_test_dataset()
+    if debug:
+        logger.info("data debug mode")
+        valid_dataset = data_helper.get_train_valid_dataset()
 
     train = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     valid = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
@@ -184,15 +209,15 @@ def make_dataloader_all_tail(data_helper: MyDataHelper, batch_size, eco_memory, 
     data_helper.set_loaders(train, valid, test)
 
 
-def make_dataloader_triple(data_helper: MyDataHelper, batch_size, eco_memory, is_do_negative_sampling, negative_count):
-    train_triple: MyTripleTrainDataset = data_helper.get_train_triple_dataset(train_mode=True)
-    valid_dataset = data_helper.get_valid_dataset(more_eco_memory=eco_memory)
-    test_dataset = data_helper.get_valid_dataset(more_eco_memory=eco_memory)
+def make_dataloader_triple(data_helper: MyDataHelper, batch_size, is_do_negative_sampling, negative_count):
+    train_triple: MyTripleDataset = data_helper.get_train_triple_dataset()
+    valid_dataset = data_helper.get_valid_dataset()
+    test_dataset = data_helper.get_valid_dataset()
 
     if is_do_negative_sampling:
-        assert negative_count is not None
+        assert negative_count is not None, "negative_count must be True or False."
         special_num, _ = data_helper.get_er_special_num()
-        train_data = data_helper.get_train_dataset(more_eco_memory=True)
+        train_data = data_helper.get_train_dataset()
         train_triple.add_negative(negative_count, train_data, special_num)
 
     train = DataLoader(train_triple, batch_size=batch_size, shuffle=True)
@@ -202,9 +227,12 @@ def make_dataloader_triple(data_helper: MyDataHelper, batch_size, eco_memory, is
     data_helper.set_loaders(train, valid, test)
 
 
-def get_model(args, data_helper):
-    model = _select_model(
-        args, args.model, data_helper.get_final_e_length(), data_helper.get_final_r_length(), data_helper=data_helper)
+def get_model(args, data_helper) -> Union[KGE_ERE, KGE_ERTails]:
+    model_name = args.model
+
+    assert model_name in name2model.keys(), f"Unknown model! :{model_name}"
+    model = name2model[model_name](
+        args, data_helper.processed_e_length, data_helper.processed_r_length, data_helper=data_helper)
     model.init()
     return model
 
@@ -231,6 +259,8 @@ def training(
     # data
     train = data_helper.train_dataloader
     train_type = args.train_type
+    # if debug
+    do_debug_model = args.do_debug_model
 
     #
     opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=args.l2)
@@ -258,19 +288,32 @@ def training(
         model.train()
         loss = torch.tensor(0., requires_grad=False, device=device)
         sum_train = 0
+        # for debug
+        percent = torch.tensor(0., requires_grad=False, device=device)
+        _negative_percent = torch.tensor(0., requires_grad=False, device=device)
 
         for idx, x in decorate_loader(train, no_show_bar=no_show_bar):
             opt.zero_grad()
             _loss: torch.Tensor
+            # for debug
+            _percent: torch.Tensor
+            _negative_percent: torch.Tensor
+
             if train_type == 'all_tail':
-                er, e2s = [_x.to(device) for _x in x]
-                output, counts = torch.unique(e2s, return_counts=True)
-                # logger.debug(f"{output=}, {counts=}")
+                er, e2s = x
+                er, e2s = er.to(device), e2s.to(device)
                 e2s = ((1.0 - label_smoothing) * e2s) + (1.0 / e2s.size(1))
                 e, r = er.split(1, 1)
                 pred: torch.Tensor = model.forward((e, r))
                 _loss = model.loss(pred, e2s)
-                del e, r, er, pred, e2s
+                if do_debug_model:
+                    with torch.no_grad():
+                        e2s = x[1].to(torch.int)
+                        _percent = pred[e2s].sum()
+                        _negative_percent = pred.sum() - _percent
+                        _percent /= e2s.size(0)
+                        _negative_percent /= (e2s.size(0) * (e2s.size(1)-1))
+
             elif train_type == 'triples':
                 er, tail, is_exists = [_x.to(device) for _x in x]
                 e, r = er.split(1, 1)
@@ -279,12 +322,15 @@ def training(
                 del e, r, er, tail, pred
             else:
                 raise "this is not supported."
+                pass
 
             _loss.backward()
             opt.step()
             # loss check
             _loss = _loss.detach().sum()
             loss += _loss
+            if do_debug_model:
+                pass
             _cec()
 
         logger.debug(f"sum_train: {sum_train}")
@@ -334,10 +380,6 @@ def testing(
     device = args.device
     train_type = args.train_type
 
-    if train_type == 'triples':
-        entity_special_num = args.entity_special_num
-        pass
-
     if is_valid:
         logger.debug(f"{'-' * 5}This is valid{'-' * 5}")
         test = data_helper.valid_dataloader
@@ -352,7 +394,7 @@ def testing(
     zero_tensor = torch.tensor(0., dtype=torch.float32, device=device)
 
     # test
-    model.to(device)
+    # model.to(device)
     model.eval()
 
     mrr = torch.tensor(0., device=device, dtype=torch.float32, requires_grad=False)
@@ -360,21 +402,23 @@ def testing(
 
     for idx, (er, e2s, e2s_all) in decorate_loader(test, no_show_bar=no_show_bar):
         e, r = er.to(device).split(1, 1)
-        """
-        output, counts = torch.unique(e2s, return_counts=True)
-        logger.debug(f"{output=}, {counts=}")
-        output, counts = torch.unique(e2s_all, return_counts=True)
-        logger.debug(f"{output=}, {counts=}")
-        """
+        assert train_type == 'all_tail' or train_type == 'triples', "train_type!!!"
         if train_type == 'all_tail':
             # model: KGE_ERTails
             pred: torch.Tensor = model.forward((e, r))
-        elif train_type == 'triples':
+            assert torch.all(pred > 0.)
+        else:  # if train_type == 'triples':
+            pred: torch.Tensor = model.forward((e, r))
             # model: KGE_ERE
+            # todo
+            pass
+            """
             pred = torch.zeros_like(e2s)
             for i in tqdm(range(entity_special_num, e2s.shape[1]), leave=False):
                 _pred = model.forward((e, r, torch.full((len(e), 1), i).to(device)))
                 pred[:, i] = _pred[:, 0, ]
+            """
+
         del e, r, er
         # make filter
         e2s = e2s.to(device)
@@ -393,13 +437,19 @@ def testing(
         pred[e2s_all_binary] = zero_tensor
         del e2s_all_binary
         #
-        ranking = torch.argsort(pred, dim=1, descending=True)  # これは0 始まり
-        del pred
-        _cec()
-        ranks = torch.argsort(ranking, dim=1)[row, column]
-        del ranking
-        _cec()
-        ranks += 1
+        ranks_list = []
+        _batch_size = 128
+        for i in range(0, len(pred), _batch_size):
+            _pred = pred[i: i + _batch_size]
+            _column = column[i: i + _batch_size]
+            _row = list(range(len(_pred)))
+            assert is_same_len_in_list(_pred, _row, _column)
+            _ranking = torch.argsort(_pred, dim=1, descending=True)  # これは0 始まり
+            _ranks = torch.argsort(_ranking, dim=1)[_row, _column]
+            _ranks += 1  # これは1 始まり
+            ranks_list.append(_ranks)
+
+        ranks = torch.cat(ranks_list, dim=0)
         # mrr and hit
         mrr += (1. / ranks).sum()
         for i in range(10):
@@ -435,6 +485,7 @@ def train_setup(args, *, logger: Logger):
     train_type = args.train_type
     is_do_negative_sampling = args.do_negative_sampling
     negative_count = args.negative_count
+    debug_data = args.do_debug_data
 
     assert batch_size is not None
     assert train_type is not None
@@ -447,11 +498,13 @@ def train_setup(args, *, logger: Logger):
 
     # dataloader
     logger.info(_info_str(f"make dataloader start."))
-    if train_type == 'all_tail':
-        make_dataloader_all_tail(data_helper, batch_size, eco_memory, logger=logger)
+    if args.do_debug_model and train_type == 'all_tail':
+        make_dataloader_all_tail_debug_model(data_helper, batch_size, logger=logger, debug=debug_data)
+    elif train_type == 'all_tail':
+        make_dataloader_all_tail(data_helper, batch_size, logger=logger, debug=debug_data)
     elif train_type == 'triples':
         assert is_do_negative_sampling is not None
-        make_dataloader_triple(data_helper, batch_size, eco_memory, is_do_negative_sampling, negative_count)
+        make_dataloader_triple(data_helper, batch_size, is_do_negative_sampling, negative_count)
     else:
         pass
     logger.info(_info_str(f"make dataloader complete."))
@@ -543,7 +596,7 @@ def do_1train(args: Namespace, *, logger: Logger, progress_helper: ProgressHelpe
 
 def do_optuna(args, *, logger: Logger, progress_helper: ProgressHelper, ):
     assert type(args) is ChangeDisableNamespace
-    batch_size = args.batch_size
+    # batch_size = args.batch_size
     no_show_bar = args.no_show_bar
 
     study_name = args.study_name
@@ -620,9 +673,9 @@ def select_function(args, *, logger: Logger, progress_helper: ProgressHelper):
             do_1train(const_args, logger=logger, progress_helper=progress_helper)
 
 
-def main():
+def main(args=None):
     torch_fix_seed(seed=42)
-    args, logger, device = setup(setup_parser, PROJECT_DIR)
+    args, logger, device = setup(setup_parser, PROJECT_DIR, parser_args=args)
     version_check(torch, nn, np, pd, h5py, optuna, logger=logger)
     try:
         args.project_dir = PROJECT_DIR
@@ -630,7 +683,7 @@ def main():
         args.device = device
         args.completed = {}
         logger.debug(vars(args))
-        logger.debug(f"process id = {args.pid}")
+        logger.info(f"process id = {args.pid}")
         progress_helper = ProgressHelper("log/progress.{pid}.txt", pid=args.pid)
         select_function(args, logger=logger, progress_helper=progress_helper)
         progress_helper.finish(delete=True)

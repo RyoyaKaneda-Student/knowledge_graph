@@ -11,6 +11,8 @@ from argparse import Namespace
 import torch
 from .torch import get_device
 
+from utils.utils import tqdm2notebook_tqdm
+
 
 class ChangeDisableNamespace(Namespace):
     def __setattr__(self, name, value):
@@ -73,6 +75,8 @@ def setup(setup_parser, project_dir, *, parser_args=None) -> Tuple[Namespace, Lo
     device: torch.device = get_device(device_name=args.device_name, logger=logger)
     # process id
     args.pid = os.getpid()
+    if args.notebook:
+        tqdm2notebook_tqdm()
     return args, logger, device
 
 
@@ -108,5 +112,3 @@ def main(setup_parser, project_dir):
 
     finally:
         save_param(args)
-
-
