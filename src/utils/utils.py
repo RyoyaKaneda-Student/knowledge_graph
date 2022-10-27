@@ -122,8 +122,7 @@ def force_gc():
 
 def force_gc_after_function(func):
     """
-    関数が終わり次第強制的にgcするためのデコレータ
-    メモリやばい時のため
+    Decorator to force gc as soon as the function finishes. Since I don't know the default spec.
     """
 
     def wrapper(*args, **kwargs):

@@ -93,3 +93,4 @@ target/
 /github_sankou/
 
 log/
+/poetry.lock

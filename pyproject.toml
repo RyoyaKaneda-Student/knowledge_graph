@@ -1,0 +1,83 @@
+[tool.poetry]
+name = "knowledge_graph"
+version = "0.1.1"
+description = ""
+authors = ["Ryoya-Kaneda-Student <kaneda.ss.cs.osakafu-u.ac.jp>"]
+packages = [
+    {include = "models", from = "src"},
+    {include = "utils", from = "src"},
+]
+
+[tool.poetry.dependencies]
+python = "3.9.12"
+setuptools = "59.5.0"
+notebook = { version = "^6.5.1", source = "pypi" }
+jupyterlab = { version = "^3.0.16", source = "pypi" }
+attrdict = { version = "^2.0.1", source = "pypi" }
+ipywidgets = { version = "^7.6.3", source = "pypi" }
+widgetsnbextension = { version = "^3.5.1", source = "pypi" }
+python-dotenv = { version = "^0.19.1", source = "pypi" }
+PyYAML = { version = "^5.3.1", source = "pypi" }
+h5py = { version = "^3.7.0", source = "pypi" }
+rdflib = { version = "^6.1.1", source = "pypi" }
+path = { version = "^16.4.0", source = "pypi" }
+matplotlib = { version = "^3.4.3", source = "pypi" }
+networkx = { version = "^2.8", source = "pypi" }
+numpy = { version = "^1.23.4", source = "pypi" }
+numba = { version = "^0.56.3", source = "pypi"}
+spacy = { version = ">=2.1.0,<3.4", source = "pypi" }
+scipy = { version = "^1.8.0", source = "pypi" }
+pandas = { version = "^1.4.3", source = "pypi" }
+sklearn = { version = "^0.0", source = "pypi" }
+datasets = { version = "^1.6.0", source = "pypi" }
+sentencepiece = { version = "^0.1.96", source = "pypi" }
+tensorboard = { version = "^2.5.0", source = "pypi" }
+
+optuna = {version = "^3.0.3", source = "pypi"}
+pyknp = { version = "^0.4.6", source = "pypi" }
+nltk = { version = "^3.7", source = "pypi" }
+allennlp = {version = "^2.10.1", source = "pypi"}
+
+[tool.poetry.group.torch-cpu]
+optional = true
+
+[tool.poetry.group.torch-cpu.dependencies]
+torch = "1.10.2"
+pytorch-ignite = "^0.4.7"
+torch-scatter = "^2.0.9"
+torch-sparse = "^0.6.13"
+torch-cluster = "^1.6.0"
+torch-spline-conv = "^1.2.1"
+torch-geometric = "^2.0.4"
+transformers = "^4.11.3"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "*"
+flake8 = "*"
+black = "*"
+isort = "*"
+mypy = "*"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+target-version = ['py39']
+line-length = 120
+
+[tool.isort]
+line_length = 120
+multi_line_output = 3
+include_trailing_comma = true
+known_local_folder=['config',]
+
+[tool.mypy]
+python_version = "3.9"
+no_strict_optional = true
+ignore_missing_imports = true
+check_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests",]
+filterwarnings = ["ignore::DeprecationWarning",]

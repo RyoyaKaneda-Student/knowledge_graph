@@ -19,7 +19,10 @@ from torch.nn.init import xavier_normal_, xavier_uniform_
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torch.nn import TransformerEncoderLayer, TransformerEncoder, Softmax
 
-from utils.torch import PositionalEncoding, MM
+from utils.torch import MM
+
+from models.utilModules.tranformer import PositionalEncoding
+from models.utilModules.mlp_mixer import MlpMixer, MlpMixerLayer
 
 
 class KGE_ERTails(torch.nn.Module, metaclass=abc.ABCMeta):
@@ -220,57 +223,6 @@ class ConvE(KGE_ERTails):
         return pred
 
 
-class TransformerE(torch.nn.Module):
-    def __init__(self, args, num_entities, num_relations):
-        super(TransformerE, self).__init__()
-        raise "this mode is not supported"
-        embedding_dim = args.embedding_dim
-        input_drop = args.input_drop
-        hidden_drop = args.hidden_drop
-        nhead = args.nhead
-        transformer_drop = args.transformer_drop
-        num_layers = 4
-
-        self.emb_e = torch.nn.Embedding(num_entities, embedding_dim)
-        self.emb_rel = torch.nn.Embedding(num_relations, embedding_dim)
-        self.inp_drop = torch.nn.Dropout(input_drop)
-        self.hidden_drop = torch.nn.Dropout(hidden_drop)
-        self.loss = torch.nn.BCELoss()
-
-        self.encoder_layer = TransformerEncoderLayer(
-            d_model=embedding_dim, nhead=nhead, dropout=transformer_drop, batch_first=True
-        )
-        self.transformer_encoder = TransformerEncoder(self.encoder_layer, num_layers)
-        self.fc = torch.nn.Linear(embedding_dim * 2, embedding_dim)
-        self.bn2 = torch.nn.BatchNorm1d(embedding_dim)
-        self.register_parameter('b', Parameter(torch.zeros(num_entities)))
-
-    def init(self):
-        xavier_normal_(self.emb_e.weight.data)
-        xavier_normal_(self.emb_rel.weight.data)
-
-    def forward(self, x):
-        e1, rel = x
-        e1_embedded = self.emb_e(e1)
-        rel_embedded = self.emb_rel(rel)
-        x = torch.cat([e1_embedded, rel_embedded], dim=1)
-        x = self.inp_drop(x)
-
-        x = self.transformer_encoder(x)
-        x = F.relu(x)
-        x = torch.flatten(x, start_dim=1)
-
-        x = self.fc(x)
-        x = self.hidden_drop(x)
-        x = self.bn2(x)
-        x = F.relu(x)
-        x = torch.mm(x, self.emb_e.weight.transpose(1, 0))
-        x += self.b.expand_as(x)
-        pred = torch.sigmoid(x)
-
-        return pred
-
-
 class TransformerVer2E(KGE_ERTails):
     def __init__(self, args, num_entities, num_relations, **kwargs):
         embedding_dim = args.embedding_dim
@@ -279,6 +231,7 @@ class TransformerVer2E(KGE_ERTails):
         nhead = args.nhead
         position_encoder_drop = args.position_encoder_drop
         transformer_drop = args.transformer_drop
+        dim_feedforward = args.dim_feedforward
         num_layers = args.num_layers
         padding_token = args.padding_token_e
         cls_token = args.cls_token_e
@@ -299,7 +252,9 @@ class TransformerVer2E(KGE_ERTails):
         self.loss = torch.nn.BCELoss()
 
         encoder_layer = TransformerEncoderLayer(
-            d_model=embedding_dim, nhead=nhead, dropout=transformer_drop, batch_first=True
+            d_model=embedding_dim, nhead=nhead, dropout=transformer_drop, batch_first=True,
+            dim_feedforward=dim_feedforward,
+            activation=F.gelu, norm_first=True
         )
 
         self.emb_e: torch.nn.Embedding
@@ -321,26 +276,30 @@ class TransformerVer2E(KGE_ERTails):
         xavier_normal_(self.emb_e.weight.data)
         xavier_normal_(self.emb_rel.weight.data)
 
-    def get_cls_emb_e(self):
-        return self.emb_e.weight[self.cls_token_num]
+    def get_cls_emb_e(self) -> torch.Tensor:
+        return self.emb_e(self.cls_token_num)
 
-    def get_emb_e(self, e1):
+    def get_emb_e(self, e1) -> torch.Tensor:
         return self.emb_e(e1)
 
-    def get_emb_rel(self, rel):
+    def get_emb_rel(self, rel) -> torch.Tensor:
         return self.emb_rel(rel)
+
+    def encoding(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.pos_encoder(x)
+        return self.transformer_encoder(x)
 
     def forward(self, x: Tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
         e1, rel = x
+        batch_size = e1.shape[0]
 
         e1_embedded = self.get_emb_e(e1)
         rel_embedded = self.get_emb_rel(rel)
-        cls_embedded = self.get_cls_emb_e().expand_as(e1_embedded)
+        cls_embedded = self.get_cls_emb_e().repeat(batch_size, 1).view((batch_size, 1, -1))
 
         x = torch.cat([cls_embedded, e1_embedded, rel_embedded], dim=1)
         x = self.inp_drop(x)
-        x = self.pos_encoder(x)
-        x = self.transformer_encoder(x)
+        x = self.encoding(x)
         x = x[:, 0]  # cls
         x = self.bn01(x)
         x = self.relu1(x)
@@ -582,16 +541,31 @@ class TransformerVer3E_1(TransformerVer3E):
         num_layers = 4
 
         encoder_layer = TransformerEncoderLayer(
-            d_model=embedding_dim*2, nhead=nhead, dropout=transformer_drop, batch_first=True
+            d_model=embedding_dim * 2, nhead=nhead, dropout=transformer_drop, batch_first=True
         )
-        self.pos_encoder = PositionalEncoding(embedding_dim*2, dropout=0)
+        self.pos_encoder = PositionalEncoding(embedding_dim * 2, dropout=0)
         self.transformer_encoder = TransformerEncoder(encoder_layer, num_layers)
 
-        self.fc = torch.nn.Linear(embedding_dim*2, embedding_dim)
+        self.fc = torch.nn.Linear(embedding_dim * 2, embedding_dim)
 
     # override
     def combination_node_attr(self, neighbor_node, neighbor_attr):
         x = torch.concat((neighbor_node, neighbor_attr), dim=2)
+        return x
+
+
+class MlpMixE(TransformerVer2E):
+    def __init__(self, args, num_entities, num_relations, **kwargs):
+        super(MlpMixE, self).__init__(args, num_entities, num_relations, **kwargs)
+        del self.transformer_encoder
+        embedding_dim = args.embedding_dim
+        num_layers = args.num_layers
+        self.mlp_mixer = MlpMixer(MlpMixerLayer(embedding_dim, dim_feedforward=embedding_dim * 2), num_layers)
+
+    # override
+    def encoding(self, x: torch.Tensor):
+        x = self.pos_encoder(x)
+        x = self.mlp_mixer(x)
         return x
 
 

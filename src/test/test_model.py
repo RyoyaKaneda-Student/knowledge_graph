@@ -1,5 +1,4 @@
 import unittest
-import model
 
 # coding: UTF-8
 import os
@@ -10,26 +9,13 @@ PROJECT_DIR = Path(__file__).resolve().parents[2]
 sys.path.append(os.path.join(PROJECT_DIR, 'src'))
 
 # python
-from logging import Logger
-from typing import List, Dict, Tuple, Optional, Callable
-import dataclasses
-from tqdm import tqdm
 # Machine learning
-import h5py
-import numpy as np
-import pandas as pd
 # torch
-import torch
-from torch.utils.data import Dataset
-from torch import nn
-import torch.nn.functional as F
-from torch.utils.data.dataloader import DataLoader
 # Made by me
-from utils.setup import setup, save_param
 from model import ConvE, DistMult, Complex, TransformerE
 
-from models.run import *
-from models.run import _info_str
+from run import *
+from run import _info_str
 
 PROCESSED_DATA_PATH = './data/processed/'
 EXTERNAL_DATA_PATH = './data/external/'

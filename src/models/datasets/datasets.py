@@ -3,7 +3,6 @@ import os
 import sys
 from pathlib import Path
 # ========== My Utils ==========
-from utils.torch import onehot_target
 from utils.utils import version_check, is_same_len_in_list
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
@@ -141,7 +140,7 @@ class MyTripleDataset(Dataset):
         self.er = torch.cat((self.er, negative_er), dim=0)
         self.tail = torch.cat((self.tail, negative_tail), dim=0)
         self.er_list_index = torch.cat((self.er_list_index, negative_index), dim=0)
-        self.is_exist = torch.cat((self.is_exist, onehot_target(1, 2, len(negative_er))), dim=0)
+        self.is_exist = torch.cat((self.is_exist, torch.zeros(len(negative_er), dtype=torch.bool)), dim=0)
         assert is_same_len_in_list(self.er, self.tail, self.er_list_index, self.is_exist), \
             "check the len of self.er, self.tail, self.er_list_index, self.is_exist"
 

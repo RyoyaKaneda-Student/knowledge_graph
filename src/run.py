@@ -1,16 +1,14 @@
-# coding: UTF-8
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
 import os
 import sys
 from pathlib import Path
-
-PROJECT_DIR = Path(__file__).resolve().parents[2]
-sys.path.append(os.path.join(PROJECT_DIR, 'src'))
-
 # ========== python ==========
 from logging import Logger
+# noinspection PyUnresolvedReferences
 from collections import namedtuple
 # noinspection PyUnresolvedReferences
-from typing import List, Dict, Tuple, Optional, Union, Callable, Final
+from typing import List, Dict, Tuple, Optional, Union, Callable, Final, Literal
 # noinspection PyUnresolvedReferences
 from argparse import Namespace
 # Machine learning
@@ -23,29 +21,37 @@ import torch
 from torch import nn
 from torch.utils.data.dataloader import DataLoader
 
-"""
-# torch ignite
-from ignite.engine import Events, create_supervised_trainer, create_supervised_evaluator
-from ignite.metrics import Accuracy, Loss
-from ignite.contrib.handlers.tensorboard_logger import *
-"""
+from utils.log_helper import LoggerStartEnd
+
+PROJECT_DIR = Path(__file__).resolve().parents[1]
+sys.path.append(os.path.join(PROJECT_DIR, 'src'))
 
 # Made by me
 from utils.utils import force_gc, force_gc_after_function, get_from_dict, version_check, is_same_len_in_list
 from utils.str_process import line_up_key_value, blank_or_NOT, info_str as _info_str
 from utils.setup import setup, save_param, ChangeDisableNamespace
 from utils.torch import (
-    cuda_empty_cache as _cec, load_model, save_model, decorate_loader, param_count_check,
+    cuda_empty_cache as _cec, load_model, save_model, decorate_loader, requires_grad_param_num,
     force_cuda_empty_cache_after_function, LossHelper, torch_fix_seed,
-    DeviceName
+    DeviceName, ZERO_TENSOR, ZERO_FLOAT32_TENSOR, force_cuda_empty_cache_per_loop
 )
 from utils.textInOut import SQLITE_PREFIX
 from utils.progress_manager import ProgressHelper
+from utils.result_helper import ResultPerEpoch
 
-from model import ConvE, DistMult, Complex, TransformerE, TransformerVer2E, TransformerVer2E_ERE, \
-    TransformerVer3E, TransformerVer3E_1, KGE_ERE, KGE_ERTails
+from models.KGModel.model import (
+    ConvE, DistMult, Complex, TransformerVer2E, TransformerVer2E_ERE,
+    TransformerVer3E, TransformerVer3E_1, KGE_ERE, KGE_ERTails,
+    MlpMixE,
+)
+
 from models.datasets.data_helper import MyDataHelper, load_preprocess_data
 from models.datasets.datasets import MyTripleDataset
+
+from ignite.metrics import Accuracy, Loss
+
+Loss(output_transform=lambda x: x['loss'])
+Accuracy(output_transform=lambda x: x['loss'])
 
 PROCESSED_DATA_PATH = './data/processed/'
 EXTERNAL_DATA_PATH = './data/external/'
@@ -63,110 +69,109 @@ name2model = {
     'conve': ConvE,
     'distmult': DistMult,
     'complex': Complex,
-    'transformere1': TransformerE,
     'transformere2': TransformerVer2E,
     'transformere2_ere': TransformerVer2E_ERE,
     'transformere3': TransformerVer3E,
     'transformere3_1': TransformerVer3E_1,
+    'mlpmixere': MlpMixE,
 }
-
-TRAIN_TYPE: Final = namedtuple(
-    'TRAIN_TYPE', ['do_1train', 'do_optuna', 'do_test'])('do_1train', 'do_optuna', 'do_test')
 
 
 def setup_parser(args=None) -> Namespace:
+    """
+    Args:
+        args:
+
+    Returns:
+
+    """
     import argparse  # 1. argparseをインポート
     parser = argparse.ArgumentParser(description='データの初期化')
-    parser.add_argument('--notebook', help='ノートブック', action='store_true')
-    parser.add_argument('--logfile', help='ログファイルのパス', type=str)
-    parser.add_argument('--param-file', help='パラメータを保存するファイルのパス', type=str)
-    parser.add_argument('--console-level', help='コンソール出力のレベル', type=str, default='info')
-    parser.add_argument('--no-show-bar', help='バーを表示しない', action='store_true')
-    parser.add_argument('--device-name', help="cpu or cuda or mps",
-                        type=str, default='cpu', choices=['cpu', 'cuda', 'mps'])
+    paa = parser.add_argument
+    paa('--notebook', help='if use notebook, use this argument.', action='store_true')
+    paa('--logfile', help='the path of saving log', type=str)
+    paa('--param-file', help='the path of saving param', type=str)
+    paa('--console-level', help='log level on console', type=str, default='info', choices=['info', 'debug'])
+    paa('--no-show-bar', help='no show bar', action='store_true')
+    paa('--device-name', help=DeviceName.ALL_INFO, type=str, default='cpu', choices=DeviceName.ALL_LIST)
     # select function
-    parser.add_argument('--function', help='function', type=str,
-                        choices=['do_1train', 'do_optuna', 'do_test'])
+    paa('--function', help='function', type=str, choices=['do_1train', 'do_optuna', 'do_test'])
     # optuna setting
-    parser.add_argument('--optuna-file', help='optuna file', type=str)
-    parser.add_argument('--study-name', help='optuna study-name', type=str)
-    parser.add_argument('--n-trials', help='optuna n-trials', type=int, default=20)
+    paa('--optuna-file', help='optuna file', type=str)
+    paa('--study-name', help='optuna study-name', type=str)
+    paa('--n-trials', help='optuna n-trials', type=int, default=20)
 
-    parser.add_argument('--KGdata', help=' or '.join(KGDATA_ALL), type=str,
-                        choices=KGDATA_ALL)
-    parser.add_argument('--train-type', help='', type=str, choices=['all_tail', 'triples'])
-    parser.add_argument('--do-negative-sampling', help='', action='store_true')
-    parser.add_argument('--negative-count', help='', type=int, default=None)
-    parser.add_argument('--eco-memory', help='メモリに優しく', action='store_true')
-    parser.add_argument('--entity-special-num', help='エンティティ', type=int, default=None)
-    parser.add_argument('--relation-special-num', help='リレーション', type=int, default=None)
+    paa('--KGdata', help=' or '.join(KGDATA_ALL), type=str, choices=KGDATA_ALL)
+    paa('--train-type', help='', type=str, choices=['all_tail', 'triples'])
+    paa('--do-negative-sampling', help='', action='store_true')
+    paa('--negative-count', help='', type=int, default=None)
+    paa('--eco-memory', help='メモリに優しく', action='store_true')
+    paa('--entity-special-num', help='エンティティ', type=int, default=None)
+    paa('--relation-special-num', help='リレーション', type=int, default=None)
     # e special
-    parser.add_argument('--padding-token-e', help='padding', type=int, default=None)
-    parser.add_argument('--cls-token-e', help='cls', type=int, default=None)
-    parser.add_argument('--mask-token-e', help='mask', type=int, default=None)
+    paa('--padding-token-e', help='padding', type=int, default=None)
+    paa('--cls-token-e', help='cls', type=int, default=None)
+    paa('--mask-token-e', help='mask', type=int, default=None)
     # r special
-    parser.add_argument('--padding-token-r', help='padding', type=int, default=None)
-    parser.add_argument('--cls-token-r', help='cls', type=int, default=None)
-    parser.add_argument('--self-loop-token-r', help='self-loop', type=int, default=None)
+    paa('--padding-token-r', help='padding', type=int, default=None)
+    paa('--cls-token-r', help='cls', type=int, default=None)
+    paa('--self-loop-token-r', help='self-loop', type=int, default=None)
 
-    parser.add_argument('--model', type=str, help=f"Choose from: {', '.join(name2model.keys())}")
-    parser.add_argument('--embedding-dim', type=int, default=200,
-                        help='The embedding dimension (1D). Default: 200')
-    parser.add_argument('--batch-size', help='batch size', type=int)
-    parser.add_argument('--epoch', help='max epoch', type=int)
-    parser.add_argument('--early-stopping-count', help='early-stopping-count', type=int, default=-1)
+    paa('--model', type=str, help=f"Choose from: {', '.join(name2model.keys())}")
+    paa('--embedding-dim', type=int, default=200,
+        help='The embedding dimension (1D). Default: 200')
+    paa('--batch-size', help='batch size', type=int)
+    paa('--epoch', help='max epoch', type=int)
+    paa('--early-stopping-count', help='early-stopping-count', type=int, default=-1)
 
-    parser.add_argument('--model-path', type=str, help='model path')
-    parser.add_argument('--do-train', help='do-train', action='store_true')
-    parser.add_argument('--do-valid', help='do-valid', action='store_true')
-    parser.add_argument('--do-test', help='do-test', action='store_true')
-    parser.add_argument('--do-debug', help='do-debug', action='store_true')
-    parser.add_argument('--do-debug-data', help='do-debug about data', action='store_true')
-    parser.add_argument('--do-debug-model', help='do-debug about model', action='store_true')
-    parser.add_argument('--do-train-valid', help='do-train and valid', action='store_true')
-    parser.add_argument('--do-train-test', help='do-train and test', action='store_true')
-    parser.add_argument('--do-train-valid-test', help='do-train and valid and test', action='store_true')
-    parser.add_argument('--valid-interval', type=int, default=1, help='valid-interval', )
-
-    parser.add_argument('--embedding-shape1', type=int, default=20,
-                        help='The first dimension of the reshaped 2D embedding. '
-                             'The second dimension is inferred. Default: 20')
+    paa('--model-path', type=str, help='model path')
+    paa('--do-train', help='do-train', action='store_true')
+    paa('--do-valid', help='do-valid', action='store_true')
+    paa('--do-test', help='do-test', action='store_true')
+    paa('--do-debug', help='do-debug', action='store_true')
+    paa('--do-debug-data', help='do-debug about data', action='store_true')
+    paa('--do-debug-model', help='do-debug about model', action='store_true')
+    paa('--do-train-valid', help='do-train and valid', action='store_true')
+    paa('--do-train-test', help='do-train and test', action='store_true')
+    paa('--do-train-valid-test', help='do-train and valid and test', action='store_true')
+    paa('--valid-interval', type=int, default=1, help='valid-interval', )
+    paa('--embedding-shape1', type=int, default=20,
+        help='The first dimension of the reshaped 2D embedding. The second dimension is inferred. Default: 20')
     # optimizer
-    parser.add_argument('--lr', type=float, default=0.003, help='learning rate (default: 0.003)')
-    parser.add_argument('--l2', type=float, default=0.0,
-                        help='Weight decay value to use in the optimizer. Default: 0.0')
-    parser.add_argument('--label-smoothing', type=float, default=0.1, help='Label smoothing value to use. Default: 0.1')
+    paa('--lr', type=float, default=0.003, help='learning rate (default: 0.003)')
+    paa('--l2', type=float, default=0.0, help='Weight decay value to use in the optimizer. Default: 0.0')
+    paa('--label-smoothing', type=float, default=0.1, help='Label smoothing value to use. Default: 0.1')
     # convE
-    parser.add_argument('--hidden-drop', type=float, default=0.3, help='Dropout for the hidden layer. Default: 0.3.')
-    parser.add_argument('--input-drop', type=float, default=0.2, help='Dropout for the input embeddings. Default: 0.2.')
-    parser.add_argument('--feat-drop', type=float, default=0.2,
-                        help='Dropout for the convolutional features. Default: 0.2.')
-    parser.add_argument('--use-bias', action='store_true', help='Use a bias in the convolutional layer. Default: True')
-    parser.add_argument('--lr-decay', type=float, default=0.995,
-                        help='Decay the learning rate by this factor every epoch. Default: 0.995')
-    parser.add_argument('--hidden-size', type=int, default=9728,
-                        help='The side of the hidden layer. The required size changes with the size of the embeddings. '
-                             'Default: 9728 (embedding size 200).')
+    paa('--input-drop', type=float, default=0.2, help='Dropout for the input embeddings. Default: 0.2.')
+    paa('--hidden-drop', type=float, default=0.3, help='Dropout for the hidden layer. Default: 0.3.')
+    paa('--feat-drop', type=float, default=0.2,
+        help='Dropout for the convolutional features. Default: 0.2.')
+    paa('--use-bias', action='store_true', help='Use a bias in the convolutional layer. Default: True')
+    paa('--lr-decay', type=float, default=0.995,
+        help='Decay the learning rate by this factor every epoch. Default: 0.995')
+    paa('--hidden-size', type=int, default=9728,
+        help='The side of the hidden layer. The required size changes with the size of the embeddings. '
+             'Default: 9728 (embedding size 200).')
     # transformere
-    parser.add_argument('--nhead', type=int, default=8, help='nhead. Default: 8.')
-    parser.add_argument('--num-layers', type=int, default=4, help='num layers. Default: 4.')
-    parser.add_argument('--position-encoder-drop', type=float, default=0.1, help='position-encoder-drop. Default: 0.1.')
-    parser.add_argument('--transformer-drop', type=float, default=0.1, help='transformer-drop. Default: 0.1.')
+    # paa('--input-drop', type=float, default=0.2, help='')
+    # paa('--hidden-drop', type=float, default=0.3, help='')
+    paa('--transformer-drop', type=float, default=0.1, help='transformer-drop. Default: 0.1.')
+    paa('--position-encoder-drop', type=float, default=0.1, help='position-encoder-drop. Default: 0.1.')
+    paa('--nhead', type=int, default=8, help='nhead. Default: 8.')
+    paa('--dim-feedforward', type=int, default=8, help='dim-feedforward. Default: 256')
+    paa('--num-layers', type=int, default=4, help='num layers. Default: 4.')
 
-    # コマンドライン引数をパースして対応するハンドラ関数を実行
-    _args = parser.parse_args(args=args)
-    if _args.do_train_valid_test:
-        del _args.do_train_valid_test
-        _args.do_train = True
-        _args.do_valid = True
-        _args.do_test = True
+    args = parser.parse_args(args=args)
+    if args.do_train_valid_test:
+        del args.do_train_valid_test
+        args.do_train, args.do_valid, args.do_test = True, True, True
 
-    return _args
+    return args
 
 
-def make_dataloader_all_tail_debug_model(data_helper: MyDataHelper, batch_size, *, logger, debug=False):
+def make_dataloader_all_tail_debug_model(data_helper: MyDataHelper, batch_size, *, logger):
     logger.info("make_dataloader_all_tail_debug_model")
-    from datasets.datasets import MyDataset, MyDatasetWithFilter
+    from models.datasets.datasets import MyDataset, MyDatasetWithFilter
     er_list = data_helper.processed_er_list
     label_sparse = data_helper.label_sparse_for_debug
 
@@ -237,130 +242,103 @@ def get_model(args, data_helper) -> Union[KGE_ERE, KGE_ERTails]:
     return model
 
 
+def use_values_in_train(args: Namespace, data_helper: MyDataHelper, do_valid: bool, uid: Optional[str]):
+    device = args.device
+    max_epoch = args.epoch
+    early_stopping_count = args.early_stopping_count
+    checkpoint_path = MODEL_TMP_PATH.format(line_up_key_value(pid=args.pid, uid=uid))
+    valid_interval = args.valid_interval if do_valid else -1
+    label_smoothing = args.label_smoothing
+    # data
+    train = data_helper.train_dataloader
+    # if debug
+    do_debug_model = args.do_debug_model
+    l2 = args.l2
+    return (
+        device, max_epoch, early_stopping_count, checkpoint_path, valid_interval,
+        label_smoothing, train, do_debug_model, l2
+    )
+
+
 @force_gc_after_function
-def training(
+def training_er_tails(
         args: Namespace, *, logger,
         progress_helper: ProgressHelper,
-        model, data_helper,
+        model, data_helper: MyDataHelper,
         lr,
         do_valid,
         no_show_bar=False,
         uid=None,
         resume_result=None
 ):
-    device = args.device
-    max_epoch = args.epoch
-    pid = args.pid
-    early_stopping_count = args.early_stopping_count
-    checkpoint_path = MODEL_TMP_PATH.format(line_up_key_value(pid=pid, uid=uid))
-    valid_interval = args.valid_interval if do_valid else -1
-    lr = lr
-    label_smoothing = args.label_smoothing
-    # data
-    train = data_helper.train_dataloader
-    train_type = args.train_type
-    # if debug
-    do_debug_model = args.do_debug_model
+    (device, max_epoch, early_stopping_count, checkpoint_path, valid_interval,
+     label_smoothing, train, do_debug_model, l2) = use_values_in_train(args, data_helper, do_valid, uid)
 
-    #
     opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=args.l2)
-
     model.to(device)
-
-    result = {
-        'train_loss': [],
-        'mrr': [],
-        'hit_': [],
-        'completed_epoch': -1
-    } if resume_result is None else resume_result
-
     loss_helper = LossHelper(progress_helper=progress_helper, early_total_count=early_stopping_count)
+    result = ResultPerEpoch(keywords=['train_loss', 'percent', 'negative_percent', 'mrr', 'hit_', ])
 
-    def append_to_result(_name, _value, *, _epoch=None):
-        if not _epoch:
-            result[_name].append(_value)
-        else:
-            result[_name][_epoch] = _value
+    @force_gc_after_function
+    def train_core(_er, _e2s) -> Tuple[torch.Tensor, torch.Tensor]:
+        opt.zero_grad()
+        _er, _e2s = _er.to(device), _e2s.to(device)
+        _e2s = ((1.0 - label_smoothing) * _e2s) + (1.0 / _e2s.size(1))
+        _pred = model(_er.split(1, 1))
+        _loss = model.loss(_pred, _e2s)
+        _loss.backward()
+        opt.step()
+        return _loss, _pred
+
+    def check_point():
+        save_model(model, checkpoint_path, device=device)
 
     for epoch in progress_helper.progress(range(max_epoch), 'epoch', total=max_epoch):
-        # train
         logger.info(f"{'-' * 10}epoch {epoch + 1} start. {'-' * 10}")
-        model.train()
-        loss = torch.tensor(0., requires_grad=False, device=device)
-        sum_train = 0
-        # for debug
-        percent = torch.tensor(0., requires_grad=False, device=device)
-        _negative_percent = torch.tensor(0., requires_grad=False, device=device)
+        assert result.start_epoch() == epoch
 
-        for idx, x in decorate_loader(train, no_show_bar=no_show_bar):
-            opt.zero_grad()
-            _loss: torch.Tensor
-            # for debug
-            _percent: torch.Tensor
-            _negative_percent: torch.Tensor
+        loss_avg, percent_avg, negative_percent_avg = 0., 0., 0.
+        loader_len = 0
 
-            if train_type == 'all_tail':
-                er, e2s = x
-                er, e2s = er.to(device), e2s.to(device)
-                e2s = ((1.0 - label_smoothing) * e2s) + (1.0 / e2s.size(1))
-                e, r = er.split(1, 1)
-                pred: torch.Tensor = model.forward((e, r))
-                _loss = model.loss(pred, e2s)
-                if do_debug_model:
-                    with torch.no_grad():
-                        e2s = x[1].to(torch.int)
-                        _percent = pred[e2s].sum()
-                        _negative_percent = pred.sum() - _percent
-                        _percent /= e2s.size(0)
-                        _negative_percent /= (e2s.size(0) * (e2s.size(1)-1))
+        for idx, (er, e2s) in force_cuda_empty_cache_per_loop(decorate_loader(train, no_show_bar=no_show_bar)):
+            (loss, pred) = train_core(er, e2s)
+            loss = loss.detach()
+            pred = pred.detach()
+            # _loss, _percent, _negative_percent
+            percent = pred[e2s.to(torch.bool)].sum()
+            negative_percent = (pred.sum() - percent)
+            percent /= e2s.size(0)
+            negative_percent /= (e2s.size(0) * (e2s.size(1) - 1))
 
-            elif train_type == 'triples':
-                er, tail, is_exists = [_x.to(device) for _x in x]
-                e, r = er.split(1, 1)
-                pred: torch.Tensor = model.forward((e, r, tail))
-                _loss = model.loss(pred, is_exists)
-                del e, r, er, tail, pred
-            else:
-                raise "this is not supported."
-                pass
+            loss_avg += loss.item()
+            percent_avg += percent.item()
+            negative_percent_avg += negative_percent.item()
+            loader_len += 1
 
-            _loss.backward()
-            opt.step()
-            # loss check
-            _loss = _loss.detach().sum()
-            loss += _loss
-            if do_debug_model:
-                pass
-            _cec()
+        loss_avg /= loader_len
+        percent_avg /= loader_len
+        negative_percent_avg /= loader_len
+        result.write_all([('train_loss', loss_avg), ('percent', percent_avg), ('negative_percent', negative_percent_avg)])
 
-        logger.debug(f"sum_train: {sum_train}")
-        loss /= len(train)
-        loss = loss.to(CPU).item()
-
-        loss_helper.update(loss)
-
-        append_to_result('train_loss', loss)
-        logger.info("-----train result (epoch={}): loss = {}".format(epoch + 1, loss))
-        logger.debug(f"{'-' * 5}epoch {epoch + 1} train end. {'-' * 5}")
-        del loss
+        loss_helper.update(loss_avg)
         _cec()
         # valid
         if do_valid and (epoch + 1) % valid_interval == 0:
-            logger.debug(f"{'-' * 10}epoch {epoch + 1} valid start. {'-' * 5}")
-            _, _result = testing(args, logger=logger, model=model, data_helper=data_helper, is_valid=True,
-                                 no_show_bar=no_show_bar)
-            mrr, hit_ = get_from_dict(_result, ('mrr', 'hit_'))
-            append_to_result('mrr', mrr)
-            append_to_result('hit_', hit_)
-            logger.info("-----valid result (epoch={}): mrr = {}".format(epoch + 1, mrr))
-            logger.info("-----valid result (epoch={}): hit = {}".format(epoch + 1, hit_))
-            logger.debug(f"{'-' * 5}epoch {epoch + 1} valid end. {'-' * 5}")
+            with LoggerStartEnd(logger, f"epoch {epoch + 1} valid", log_level='debug'):
+                _, _result = testing(args, logger=logger, model=model, data_helper=data_helper, is_valid=True,
+                                     no_show_bar=no_show_bar)
+                mrr, hit_ = get_from_dict(_result, ('mrr', 'hit_'))
+                result.write('mrr', mrr)
+                result.write('hit_', hit_)
+                logger.info("-----valid result (epoch={}): mrr = {}".format(epoch + 1, mrr))
+                logger.info("-----valid result (epoch={}): hit = {}".format(epoch + 1, hit_))
+            model.train()
 
         logger.info(f"{'-' * 10}epoch {epoch + 1} end.{'-' * 10}")
-        save_model(model, checkpoint_path, device=device)
-        result['completed_epoch'] = epoch + 1
+        check_point()
+        result.complete_epoch()
         # early stopping
-        if 0 < early_stopping_count <= loss_helper.not_update_count:
+        if loss_helper.is_early_stopping:
             logger.info(f"early stopping")
             break
 
@@ -473,47 +451,39 @@ def testing(
 
 
 def train_setup(args, *, logger: Logger):
-    # padding token is 0
-    # cls token is 1
-    # so special num is 1
     kg_data = args.KGdata
     eco_memory = args.eco_memory
     entity_special_num = args.entity_special_num
     relation_special_num = args.relation_special_num
-    # padding_token = 0
     batch_size = args.batch_size
     train_type = args.train_type
     is_do_negative_sampling = args.do_negative_sampling
     negative_count = args.negative_count
     debug_data = args.do_debug_data
 
-    assert batch_size is not None
-    assert train_type is not None
+    assert batch_size is not None and train_type is not None
 
     # load data
-    logger.info(_info_str(f"load data start."))
-    data_helper = load_preprocess_data(kg_data, eco_memory, entity_special_num, relation_special_num, logger=logger)
-    logger.debug(f"=====this is {blank_or_NOT(eco_memory)} eco_memory mode=====")
-    logger.info(_info_str(f"load data complete."))
+    with LoggerStartEnd(logger, "make dataloader"):
+        data_helper = load_preprocess_data(kg_data, eco_memory, entity_special_num, relation_special_num, logger=logger)
+        logger.debug(f"=====this is {blank_or_NOT(eco_memory)} eco_memory mode=====")
 
     # dataloader
-    logger.info(_info_str(f"make dataloader start."))
-    if args.do_debug_model and train_type == 'all_tail':
-        make_dataloader_all_tail_debug_model(data_helper, batch_size, logger=logger, debug=debug_data)
-    elif train_type == 'all_tail':
-        make_dataloader_all_tail(data_helper, batch_size, logger=logger, debug=debug_data)
-    elif train_type == 'triples':
-        assert is_do_negative_sampling is not None
-        make_dataloader_triple(data_helper, batch_size, is_do_negative_sampling, negative_count)
-    else:
-        pass
-    logger.info(_info_str(f"make dataloader complete."))
+    with LoggerStartEnd(logger, "make dataloader"):
+        if args.do_debug_model and train_type == 'all_tail':
+            make_dataloader_all_tail_debug_model(data_helper, batch_size, logger=logger)
+        elif train_type == 'all_tail':
+            make_dataloader_all_tail(data_helper, batch_size, logger=logger, debug=debug_data)
+        elif train_type == 'triples':
+            assert is_do_negative_sampling is not None
+            make_dataloader_triple(data_helper, batch_size, is_do_negative_sampling, negative_count)
+        else:
+            pass
 
     # model
-    logger.info(_info_str(f"make model start."))
-    model = get_model(args, data_helper)
-    logger.info(_info_str(f"make model complete."))
-    logger.info(f"grad param count: {param_count_check(model)}")
+    with LoggerStartEnd(logger, "make model"):
+        model = get_model(args, data_helper)
+    logger.info(f"grad param count: {requires_grad_param_num(model)}")
     return data_helper, model
 
 
@@ -552,7 +522,7 @@ def do_1train(args: Namespace, *, logger: Logger, progress_helper: ProgressHelpe
         assert model_path is not None
         logger.info(_info_str(f"Train start."))
 
-        model, result = training(
+        model, result = training_er_tails(
             args, logger=logger, progress_helper=progress_helper,
             data_helper=data_helper,
             model=model,

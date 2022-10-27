@@ -1,74 +1,101 @@
-import os
-import warnings
-import random
-import numpy as np
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+""" utils related to pytorch
+This module is the utils for pytorch basic operations and devices.
+todo:
 
+"""
+
+import os
+# noinspection PyUnresolvedReferences
+import warnings
+from logging import Logger
+import random
+# noinspection PyUnresolvedReferences
+import math
+import numpy as np
 import torch
 import torch.nn as nn
-from logging import Logger
+from torch.utils.data.dataloader import DataLoader
 # noinspection PyUnresolvedReferences
-from typing import List, Dict, Tuple, Optional, Callable, Union, Final, NamedTuple
-import math
-
+from typing import List, Dict, Tuple, Optional, Callable, Union, Final, NamedTuple, Literal, cast, Iterable, TypeVar
+# from utils.utils import none_count, is_same_len_in_list
 from utils.progress_manager import ProgressHelper
-from utils.utils import none_count, is_same_len_in_list
+from utils.utils import tqdm  # default tqdm or jupyter tqdm.
 
-INF = float('inf')
+# region const value
+INF: Final = float('inf')
+ZERO_TENSOR: Final = torch.tensor(0)
+ONE_TENSOR: Final = torch.tensor(1)
+
+ZERO_FLOAT32_TENSOR: Final = torch.tensor(0., dtype=torch.float32)
 
 ndarray_Tensor = Union[np.ndarray, torch.Tensor]
+_T = TypeVar('_T')
+_U = TypeVar('_U')
 
 
-class _DeviceName(NamedTuple):
-    CPU: str = 'cpu'
-    CUDA: str = 'cuda'
-    MPS: str = 'mps'
+# endregion
 
-    @classmethod
-    def ALL_LIST(cls):
+# region functions related to device type
+class _DeviceName:
+    """
+    const values for device name
+    """
+    CPU: Final[str] = 'cpu'
+    CUDA: Final[str] = 'cuda'
+    MPS: Final[str] = 'mps'
+
+    @property
+    def ALL_LIST(self) -> list:
+        """
+        list: the list of all usable device name.
+        """
         if getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
-            return [cls.CPU, cls.CUDA, cls.MPS]
+            return [self.CPU, self.CUDA, self.MPS]
         else:
-            return [cls.CPU, cls.CUDA]
+            return [self.CPU, self.CUDA]
+
+    @property
+    def ALL_INFO(self) -> str:
+        """
+        str: all usable device name info.
+        """
+        return ', '.join(self.ALL_LIST)
 
 
-DeviceName = _DeviceName()
+DeviceName: Final[_DeviceName] = _DeviceName()
+DeviceNameType: Final = Literal['cpu', 'cuda', 'mps']
 
 
-def get_device(device_name, *, logger: Logger = None):
-    if device_name == "cuda" and torch.cuda.is_available():
+def get_device(device_name: DeviceNameType, *, logger: Logger = None):
+    assert device_name in DeviceName.ALL_LIST
+    if device_name == DeviceName.CUDA:
+        assert torch.cuda.is_available()
         logger.info("use gpu")
-        return torch.device("cuda")
-    elif device_name == "cuda" and not torch.cuda.is_available():
-        logger.info("GPU使えないのに使おうとすんな. cpuで")
-        return torch.device("cpu")
+        return torch.device(DeviceName.CUDA)
     elif device_name == "mps":
-        if getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
-            return torch.device("mps")
-        else:
-            logger.info("mpsは使えませんのでcpu")
-            return torch.device("cpu")
+        assert getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available()
+        return torch.device("mps")
     else:
         return torch.device("cpu")
+    pass
 
 
-def torch_fix_seed(seed=42):
-    # Python random
-    random.seed(seed)
-    # Numpy
-    np.random.seed(seed)
-    # Pytorch
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.use_deterministic_algorithms = True
+# endregion
 
-
+# region functions related to gpu
 def cuda_empty_cache():
+    """torch.cuda.empty_cache()"""
     torch.cuda.empty_cache()
 
 
-# decorator
 def force_cuda_empty_cache_after_function(func):
+    """
+    This is decorator.
+    torch.cuda.empty_cache() after function.
+    """
+
     def wrapper(*args, **kwargs):
         rev = func(*args, **kwargs)
         cuda_empty_cache()
@@ -77,56 +104,17 @@ def force_cuda_empty_cache_after_function(func):
     return wrapper
 
 
-def load_model(model: nn.Module, model_path: str, device, *, delete_file=False):
-    with force_cpu(model, device):
-        model.load_state_dict(torch.load(model_path))
-        if delete_file:
-            os.remove(model_path)
-    return model
-
-
-def save_model(model: nn.Module, model_path: str, device):
-    with force_cpu(model, device):
-        torch.save(model.state_dict(), model_path)
-
-
-def decorate_loader(_loader, no_show_bar):
-    if no_show_bar:
-        return enumerate(_loader)
-    else:
-        from utils.utils import tqdm
-        return tqdm(enumerate(_loader), total=len(_loader), leave=False)
-
-
-def onehot(items: Union[List[int], torch.Tensor], num_classes) -> torch.Tensor:
-    if not torch.is_tensor(items):
-        items = torch.tensor(items)
-    return torch.nn.functional.one_hot(items, num_classes=num_classes)
-
-
-def insert_to_front_of_all_batch(tensor_, full_value):
-    return torch.cat(torch.full((len(tensor_), 1), tensor_))
-
-
-def param_count_check(model):
-    params = 0
-    for p in model.parameters():
-        if p.requires_grad:
-            params += p.numel()
-    return params
-
-
-def random_choice(x: torch.Tensor, n: Union[torch.Tensor, int], filter_: Optional[torch.Tensor] = None):
-    indices = random_indices_choice(x, n, filter_)
-    return torch.index_select(x, 0, indices)
-
-
-def onehot_target(target_num, target_len, len_, dtype: torch.dtype = None):
-    return torch.tensor([1 if i == target_num else 0 for i in range(target_len)], dtype=dtype).repeat(len_)
+def force_cuda_empty_cache_per_loop(iterable: Iterable[_T]):
+    for x in iterable:
+        yield x
+        cuda_empty_cache()
 
 
 class force_cpu(object):
     def __init__(self, model: nn.Module, device: torch.device):
+        """
+        Within with... , device is forced to be cpu.
+        """
         self.model = model
         self.device = device
         if not isinstance(device, torch.device):
@@ -141,61 +129,166 @@ class force_cpu(object):
         del self.model, self.device
 
 
-class PositionalEncoding(nn.Module):
-    """ PositionalEncoding
-    batch first
+# endregion
+
+# region functions related to load and save model.
+def load_model(model: nn.Module, model_path: str, device: torch.device, *, delete_file=False):
     """
+    load model function. if `delete_file' is True, delete file after loaded.
+    Returns: model.
+    """
+    with force_cpu(model, device):
+        model.load_state_dict(torch.load(model_path))
+        if delete_file:
+            os.remove(model_path)
+    return model
 
-    def __init__(self, d_model, dropout=0.1, max_len=5000):
-        super(PositionalEncoding, self).__init__()
-        self.dropout = nn.Dropout(p=dropout)
 
-        pe = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0)
-        self.register_buffer('pe', pe)
+def save_model(model: nn.Module, model_path: str, device: torch.device):
+    """
+    Save cpu model. After saving, the model device is returned to the input `device' value.
+    Args:
+        model:
+        model_path:
+        device:
 
-    def forward(self, x):
-        x = x + self.pe[:, :x.size(1)]
-        x = self.dropout(x)
-        return x
+    Returns:
+
+    """
+    with force_cpu(model, device):
+        torch.save(model.state_dict(), model_path)
+
+
+# endregion
+
+# region util functions.
+def torch_fix_seed(seed: int = 42) -> None:
+    """
+    Fix the seed and expect reproducibility when using Pytorch.
+
+    Args:
+        seed (int): seed value
+
+    Returns:
+        None
+    """
+    # Python random
+    random.seed(seed)
+    # Numpy
+    np.random.seed(seed)
+    # Pytorch
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.use_deterministic_algorithms = True
+
+
+def decorate_loader(_loader: DataLoader, no_show_bar: bool = False) -> Union[enumerate, tqdm]:
+    """
+    decorate with tqdm and enumerate.
+
+    Args:
+        _loader (DataLoader): DataLoader that you want to decorate.
+        no_show_bar (:obj:`bool`, optional): if True, not use enumerate. Defaults to False.
+
+    Returns:
+        DataLoader: decorated loader.
+
+    """
+    if no_show_bar:
+        return enumerate(_loader)
+    else:
+        return tqdm(enumerate(_loader), total=len(_loader), leave=False)
+
+
+def requires_grad_param_num(model: nn.Module):
+    """
+    Get the number of gradable params.
+    Args:
+        model (nn.Module): PyTorch model.
+
+    Returns:
+        The number of gradable params.
+
+    """
+    params = 0
+    for p in model.parameters():
+        if p.requires_grad:
+            params += p.numel()
+    return params
 
 
 class MM(nn.Module):
-    """ PositionalEncoding
-    batch first
+    """
+    Only torch.mm. It's just that it can be visualized by making it a module.
     """
 
     def __init__(self):
         super(MM, self).__init__()
 
-    def forward(self, x, y):
+    @staticmethod
+    def forward(x, y):
         return torch.mm(x, y)
 
 
 class LossHelper:
+    """
+    This is helper of loss manage.
+    """
+
     def __init__(self, update_min_d=1e-6, progress_helper: ProgressHelper = None, early_total_count=20):
-        self._loss_list = [INF]
+        """
+        Args:
+            update_min_d (:obj:`float`, optional):
+                If the updated value is smaller than this value, it is not considered updated.
+            progress_helper (ProgressHelper): todo. write this.
+            early_total_count (:obj:`int`, optional):
+                if no updated count >= early_total_count,
+        """
+        self._loss_list = []
         self.min_loss = INF
         self.update_min_d = update_min_d
         self.not_update_count = 0
         self.progress_helper = progress_helper
+        self.early_total_count = early_total_count
         progress_helper.add_key('early_count', total=early_total_count)
 
-    def update(self, loss):
+    def update(self, loss: Union[float, torch.Tensor]):
+        """
+        update per loss checked.
+        Args:
+            loss (float or torch.Tensor): loss param.
+
+        Returns:
+            True if min loss is update, else False
+        """
+        loss = loss.item() if type(loss) is torch.Tensor else loss
         self._loss_list.append(loss)
         rev = (self.min_loss - loss) > self.update_min_d
         if rev:
             self.not_update_count = 0
             self.progress_helper.reset_key('early_count')
+            self.min_loss = loss
         else:
             self.not_update_count += 1
             self.progress_helper.update_key('early_count')
-        self.min_loss = min(self.min_loss, loss)
+        return rev
+
+    @property
+    def is_early_stopping(self):
+        """
+        bool: True when the number of non-updates exceeds self.early_total_count.
+        """
+        if self.early_total_count <= 0:
+            return False
+        else:
+            return self.not_update_count >= self.early_total_count
 
     @property
     def all_loss(self):
-        return self._loss_list[1:]
+        """
+        list[float]: The list of all loss
+        """
+        return self._loss_list[:]
+
+# endregion

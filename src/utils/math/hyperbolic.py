@@ -1,4 +1,4 @@
-"""Hyperbolic operations utils functions."""
+"""Hyperbolic operations utilModules functions."""
 
 import torch
 from torch import tanh, sinh, cosh, atanh
