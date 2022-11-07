@@ -81,6 +81,9 @@ class ProgressHelper:
     def __del__(self):
         if not self._finish: self.finish(delete=False)
 
+    def __str__(self):
+        return "ProgressHelper: file={}".format(self.file_name)
+
 
 def main():
     pw = ProgressHelper(file_name="./test_progress.txt")

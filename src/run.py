@@ -2,38 +2,40 @@
 # -*- coding: utf-8 -*-
 import os
 import sys
-from pathlib import Path
-# ========== python ==========
-from logging import Logger
-# noinspection PyUnresolvedReferences
-from collections import namedtuple
-# noinspection PyUnresolvedReferences
-from typing import List, Dict, Tuple, Optional, Union, Callable, Final, Literal
 # noinspection PyUnresolvedReferences
 from argparse import Namespace
+# noinspection PyUnresolvedReferences
+from collections import namedtuple
+# ========== python ==========
+from logging import Logger
+from pathlib import Path
+# noinspection PyUnresolvedReferences
+from typing import List, Dict, Tuple, Optional, Union, Callable, Final, Literal
+
 # Machine learning
 import h5py
 import numpy as np
-import pandas as pd
 import optuna
+import pandas as pd
 # torch
 import torch
 from torch import nn
+import torch.nn.functional as F
 from torch.utils.data.dataloader import DataLoader
+from torch.utils.tensorboard import SummaryWriter
+from utils.numpy import negative_sampling
 
-from utils.log_helper import LoggerStartEnd
-
-PROJECT_DIR = Path(__file__).resolve().parents[1]
-sys.path.append(os.path.join(PROJECT_DIR, 'src'))
+from models.utilMetrics.ranking_metric import RankingMetric
 
 # Made by me
-from utils.utils import force_gc, force_gc_after_function, get_from_dict, version_check, is_same_len_in_list
-from utils.str_process import line_up_key_value, blank_or_NOT, info_str as _info_str
+from utils.utils import force_gc, force_gc_after_function, version_check, elapsed_time_str, true_count, del_none, \
+    get_true_position_items
+from utils.str_process import line_up_key_value, info_str as _info_str
 from utils.setup import setup, save_param, ChangeDisableNamespace
 from utils.torch import (
-    cuda_empty_cache as _cec, load_model, save_model, decorate_loader, requires_grad_param_num,
-    force_cuda_empty_cache_after_function, LossHelper, torch_fix_seed,
-    DeviceName, ZERO_TENSOR, ZERO_FLOAT32_TENSOR, force_cuda_empty_cache_per_loop
+    load_model, save_model,
+    force_cuda_empty_cache_after_function, torch_fix_seed,
+    DeviceName
 )
 from utils.textInOut import SQLITE_PREFIX
 from utils.progress_manager import ProgressHelper
@@ -45,13 +47,16 @@ from models.KGModel.model import (
     MlpMixE,
 )
 
-from models.datasets.data_helper import MyDataHelper, load_preprocess_data
-from models.datasets.datasets import MyTripleDataset
+from models.datasets.data_helper import MyDataHelper, load_preprocess_data, add_negative_to_triple
+from models.datasets.datasets import MyDataset, MyDatasetWithFilter, MyTripleDataset
 
-from ignite.metrics import Accuracy, Loss
+from ignite.engine import Events
+from ignite.metrics import Average
+from ignite.engine import Engine
+from ignite.handlers import Timer
 
-Loss(output_transform=lambda x: x['loss'])
-Accuracy(output_transform=lambda x: x['loss'])
+PROJECT_DIR = Path(__file__).resolve().parents[1]
+sys.path.append(os.path.join(PROJECT_DIR, 'src'))
 
 PROCESSED_DATA_PATH = './data/processed/'
 EXTERNAL_DATA_PATH = './data/external/'
@@ -61,8 +66,13 @@ MODEL_TMP_PATH = 'saved_models/.tmp/check-point.{}.model'
 CPU: str = 'cpu'
 TRAIN: str = 'train'
 TEST: str = 'test'
+LOSS: str = 'loss'
 MRR: str = 'mrr'
 HIT_: str = 'hit_'
+STUDY: str = 'study'
+
+ALL_TAIL = 'all_tail'
+TRIPLE = 'triple'
 
 KGDATA_ALL = ['FB15k-237', 'WN18RR', 'YAGO3-10']
 name2model = {
@@ -91,9 +101,10 @@ def setup_parser(args=None) -> Namespace:
     paa('--notebook', help='if use notebook, use this argument.', action='store_true')
     paa('--logfile', help='the path of saving log', type=str)
     paa('--param-file', help='the path of saving param', type=str)
+    paa('--tensorboard-dir', help='tensorboard direction', type=str)
     paa('--console-level', help='log level on console', type=str, default='info', choices=['info', 'debug'])
     paa('--no-show-bar', help='no show bar', action='store_true')
-    paa('--device-name', help=DeviceName.ALL_INFO, type=str, default='cpu', choices=DeviceName.ALL_LIST)
+    paa('--device-name', help=DeviceName.ALL_INFO, type=str, default=DeviceName.CPU, choices=DeviceName.ALL_LIST)
     # select function
     paa('--function', help='function', type=str, choices=['do_1train', 'do_optuna', 'do_test'])
     # optuna setting
@@ -102,7 +113,7 @@ def setup_parser(args=None) -> Namespace:
     paa('--n-trials', help='optuna n-trials', type=int, default=20)
 
     paa('--KGdata', help=' or '.join(KGDATA_ALL), type=str, choices=KGDATA_ALL)
-    paa('--train-type', help='', type=str, choices=['all_tail', 'triples'])
+    paa('--train-type', help='', type=str, choices=[ALL_TAIL, TRIPLE])
     paa('--do-negative-sampling', help='', action='store_true')
     paa('--negative-count', help='', type=int, default=None)
     paa('--eco-memory', help='メモリに優しく', action='store_true')
@@ -170,66 +181,55 @@ def setup_parser(args=None) -> Namespace:
 
 
 def make_dataloader_all_tail_debug_model(data_helper: MyDataHelper, batch_size, *, logger):
-    logger.info("make_dataloader_all_tail_debug_model")
-    from models.datasets.datasets import MyDataset, MyDatasetWithFilter
-    er_list = data_helper.processed_er_list
-    label_sparse = data_helper.label_sparse_for_debug
-
-    train_dataset = MyDataset(er_list, label_sparse, 1, del_if_no_tail=False)
-    valid_dataset = MyDatasetWithFilter(er_list, label_sparse, 1, del_if_no_tail=True)
-    # test_dataset = MyDatasetWithFilter(er_list, label_sparse, 1, del_if_no_tail=True)
-
-    from tqdm import tqdm
-    with torch.no_grad():
-        """
-        for er, e2s in tqdm(train_dataset):
-            assert e2s[er[0]] == 1.
-            assert torch.count_nonzero(e2s) == 1
-        """
-        for er, e2s, e2s_all in tqdm(valid_dataset):
-            assert e2s[er[0]] == 1.
-            assert torch.count_nonzero(e2s) == 1
-            assert torch.equal(e2s.to(torch.int), e2s_all.to(torch.int))
-
-    train = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
-    valid = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
-    # test = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-
-    data_helper.set_loaders(train, valid, valid)
+    logger.debug(data_helper, batch_size)
+    raise "todo"
 
 
-def make_dataloader_all_tail(data_helper: MyDataHelper, batch_size, *, logger, debug=False):
+def make_dataloader_all_tail(data_helper: MyDataHelper, batch_size, *, logger):
     logger.info("make_dataloader_all_tail")
-    train_dataset = data_helper.get_train_dataset()
-    valid_dataset = data_helper.get_valid_dataset() if not debug else None
-    test_dataset = data_helper.get_test_dataset()
-    if debug:
-        logger.info("data debug mode")
-        valid_dataset = data_helper.get_train_valid_dataset()
+    processed_ers = data_helper.processed_ers
+    sparse_all_tail_data = data_helper.sparse_all_tail_data
+    train_dataset = MyDataset(processed_ers, sparse_all_tail_data, 1, del_if_no_tail=True)
+    train_valid_dataset = MyDatasetWithFilter(processed_ers, sparse_all_tail_data, 1, del_if_no_tail=True)
+    valid_dataset = MyDatasetWithFilter(processed_ers, sparse_all_tail_data, 2, del_if_no_tail=True)
+    test_dataset = MyDatasetWithFilter(processed_ers, sparse_all_tail_data, 3, del_if_no_tail=True)
 
     train = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    train_valid = DataLoader(train_valid_dataset, batch_size=batch_size, shuffle=False)
     valid = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
     test = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-    data_helper.set_loaders(train, valid, test)
+    data_helper.set_loaders(train, train_valid, valid, test)
 
 
-def make_dataloader_triple(data_helper: MyDataHelper, batch_size, is_do_negative_sampling, negative_count):
-    train_triple: MyTripleDataset = data_helper.get_train_triple_dataset()
-    valid_dataset = data_helper.get_valid_dataset()
-    test_dataset = data_helper.get_valid_dataset()
+def make_dataloader_triple(data_helper: MyDataHelper, batch_size):
+    """
+    todo
+    Args:
+        data_helper:
+        batch_size:
+        is_do_negative_sampling:
+        negative_count:
 
-    if is_do_negative_sampling:
-        assert negative_count is not None, "negative_count must be True or False."
-        special_num, _ = data_helper.get_er_special_num()
-        train_data = data_helper.get_train_dataset()
-        train_triple.add_negative(negative_count, train_data, special_num)
+    Returns:
 
-    train = DataLoader(train_triple, batch_size=batch_size, shuffle=True)
+    """
+    train_triple, valid_triple, test_triple = (
+        data_helper.processed_train_triple, data_helper.processed_valid_triple, data_helper.processed_test_triple)
+
+    processed_r_is_reverse_list = data_helper.processed_r_is_reverse_list
+    er2id = data_helper.processed_er2id
+
+    train_dataset, valid_dataset, test_dataset = [
+        MyTripleDataset.default_init(train_triple, processed_r_is_reverse_list, er_or_ee2id_dict=er2id
+                                     ) for _triple in [train_triple, valid_triple, test_triple]
+    ]
+
+    train = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    train_valid = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
     valid = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
     test = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-
-    data_helper.set_loaders(train, valid, test)
+    data_helper.set_loaders(train, train_valid, valid, test)
 
 
 def get_model(args, data_helper) -> Union[KGE_ERE, KGE_ERTails]:
@@ -237,12 +237,12 @@ def get_model(args, data_helper) -> Union[KGE_ERE, KGE_ERTails]:
 
     assert model_name in name2model.keys(), f"Unknown model! :{model_name}"
     model = name2model[model_name](
-        args, data_helper.processed_e_length, data_helper.processed_r_length, data_helper=data_helper)
+        args, data_helper.processed_entity_length, data_helper.processed_relation_length, data_helper=data_helper)
     model.init()
     return model
 
 
-def use_values_in_train(args: Namespace, data_helper: MyDataHelper, do_valid: bool, uid: Optional[str]):
+def _use_values_in_train(args: Namespace, data_helper: MyDataHelper, do_valid: bool, uid: Optional[str]):
     device = args.device
     max_epoch = args.epoch
     early_stopping_count = args.early_stopping_count
@@ -263,236 +263,436 @@ def use_values_in_train(args: Namespace, data_helper: MyDataHelper, do_valid: bo
 @force_gc_after_function
 def training_er_tails(
         args: Namespace, *, logger,
-        progress_helper: ProgressHelper,
         model, data_helper: MyDataHelper,
         lr,
         do_valid,
-        no_show_bar=False,
+        summary_writer: SummaryWriter = None,
         uid=None,
-        resume_result=None
+        calculate_percent=False
 ):
     (device, max_epoch, early_stopping_count, checkpoint_path, valid_interval,
-     label_smoothing, train, do_debug_model, l2) = use_values_in_train(args, data_helper, do_valid, uid)
+     label_smoothing, train, do_debug_model, l2) = _use_values_in_train(args, data_helper, do_valid, uid)
 
     opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=args.l2)
     model.to(device)
-    loss_helper = LossHelper(progress_helper=progress_helper, early_total_count=early_stopping_count)
-    result = ResultPerEpoch(keywords=['train_loss', 'percent', 'negative_percent', 'mrr', 'hit_', ])
+    result = ResultPerEpoch(keywords=[LOSS, 'percent', 'negative_percent', MRR, HIT_, ])
+    progress_helper: ProgressHelper = args.progress_helper
+    loss_fn = model.loss
 
     @force_gc_after_function
-    def train_core(_er, _e2s) -> Tuple[torch.Tensor, torch.Tensor]:
+    def train_step(_: Engine, batch) -> dict:
+        er, e2s = batch
         opt.zero_grad()
-        _er, _e2s = _er.to(device), _e2s.to(device)
-        _e2s = ((1.0 - label_smoothing) * _e2s) + (1.0 / _e2s.size(1))
-        _pred = model(_er.split(1, 1))
-        _loss = model.loss(_pred, _e2s)
-        _loss.backward()
+        er, e2s = er.to(device), e2s.to(device)
+        e2s = ((1.0 - label_smoothing) * e2s) + (1.0 / e2s.size(1))
+        pred = model(er.split(1, 1))
+        loss = loss_fn(pred, e2s)
+        loss.backward()
         opt.step()
-        return _loss, _pred
+        return {LOSS: loss, 'pred': pred, 'er': er, 'e2s': batch[1].to(torch.bool)}
 
-    def check_point():
+    def loss_transformer(output: dict):
+        return output.get(LOSS).detach()
+
+    def percent_transformer(output: dict):
+        _pred, _er, _e2s = output['pred'].detach(), output['er'], output['e2s']
+        _positive = _pred[_e2s].sum()
+        _negative = _pred.sum() - _positive
+        _positive = _positive / _pred.size(0)
+        _negative = _negative / (_pred.size(0) * (_pred.size(1) - 1))
+        # logger.info(f"{_positive=}, {_negative=}")
+        _percent = torch.stack([_positive, _negative]).detach()
+        output['percent'] = _percent
+        return _percent
+
+    trainer = Engine(train_step)
+    loss_metric = Average(output_transform=loss_transformer)
+    loss_metric.attach(trainer, LOSS)
+    if calculate_percent:
+        percent_metric = Average(output_transform=percent_transformer)
+        percent_metric.attach(trainer, 'percent')
+
+    @trainer.on(Events.EPOCH_STARTED)
+    def start_epoch_func(engine: Engine):
+        epoch = engine.state.epoch
+        logger.debug("----- epoch: {:>5} start -----".format(epoch))
+        result.start_epoch()
+
+    @trainer.on(Events.EPOCH_COMPLETED)
+    def end_epoch_func(engine: Engine):
+        epoch = engine.state.epoch
         save_model(model, checkpoint_path, device=device)
+        loss = engine.state.metrics[LOSS]
+        result.write(LOSS, loss)
+        logger.debug(f"loss = {loss}")
+        if summary_writer is not None:
+            logger.debug("write loss to tensorboard")
+            summary_writer.add_scalar("train/loss", loss, global_step=epoch)
 
-    for epoch in progress_helper.progress(range(max_epoch), 'epoch', total=max_epoch):
-        logger.info(f"{'-' * 10}epoch {epoch + 1} start. {'-' * 10}")
-        assert result.start_epoch() == epoch
+    @trainer.on(Events.EPOCH_COMPLETED)
+    def end_epoch_func_for_percent(engine: Engine):
+        epoch = engine.state.epoch
+        if not calculate_percent: return
+        percent, negative_percent = engine.state.metrics['percent']
+        result.write('percent', percent)
+        result.write('negative_percent', negative_percent)
+        logger.debug(f"{percent=}, {negative_percent=}")
+        if summary_writer is not None:
+            logger.debug("write loss to tensorboard")
+            summary_writer.add_scalar("train/percent", percent, global_step=epoch)
 
-        loss_avg, percent_avg, negative_percent_avg = 0., 0., 0.
-        loader_len = 0
+    @trainer.on(Events.EPOCH_COMPLETED(every=1000))
+    def train_valid(engine: Engine):
+        epoch = engine.state.epoch
+        _, _result = testing_er_tails(
+            args, model=model, data_helper=data_helper, is_train=True,
+            logger=logger)
+        logger.debug("----- epoch: {:>5} train valid result -----".format(epoch))
+        logger.debug("mrr: {}".format(_result['ranking_metric'][MRR]))
+        logger.debug("hit_: {}".format([hit_i.item for hit_i in _result['ranking_metric'][HIT_]]))
 
-        for idx, (er, e2s) in force_cuda_empty_cache_per_loop(decorate_loader(train, no_show_bar=no_show_bar)):
-            (loss, pred) = train_core(er, e2s)
-            loss = loss.detach()
-            pred = pred.detach()
-            # _loss, _percent, _negative_percent
-            percent = pred[e2s.to(torch.bool)].sum()
-            negative_percent = (pred.sum() - percent)
-            percent /= e2s.size(0)
-            negative_percent /= (e2s.size(0) * (e2s.size(1) - 1))
+    @trainer.on(Events.EPOCH_COMPLETED(every=valid_interval))
+    def valid(engine: Engine):
+        epoch = engine.state.epoch
+        _, _result = testing_er_tails(
+            args, model=model, data_helper=data_helper, is_valid=True,
+            logger=logger)
+        result.write_all({key: _result['ranking_metric'][key] for key in (MRR, HIT_)})
+        logger.debug("----- epoch: {:>5} valid result -----".format(epoch))
+        logger.debug("mrr: {}".format(_result['ranking_metric'][MRR]))
+        logger.debug("hit_: {}".format([hit_i.item() for hit_i in _result['ranking_metric'][HIT_]]))
+        if summary_writer is not None:
+            logger.debug("write  to tensorboard")
+            summary_writer.add_scalar("valid/loss", _result[LOSS], global_step=epoch)
+            summary_writer.add_scalar("valid/mrr", _result['ranking_metric'][MRR], global_step=epoch)
+            summary_writer.add_scalars(
+                "valid/hit", global_step=epoch,
+                tag_scalar_dict={str(i + 1): hit_i.item() for i, hit_i in enumerate(_result['ranking_metric'][HIT_])},
+            )
 
-            loss_avg += loss.item()
-            percent_avg += percent.item()
-            negative_percent_avg += negative_percent.item()
-            loader_len += 1
+    total_timer = Timer(average=False)
 
-        loss_avg /= loader_len
-        percent_avg /= loader_len
-        negative_percent_avg /= loader_len
-        result.write_all([('train_loss', loss_avg), ('percent', percent_avg), ('negative_percent', negative_percent_avg)])
+    @trainer.on(Events.STARTED)
+    def start_train(engine: Engine):
+        total_timer.reset()
+        logger.info("training start. epoch length = {}".format(engine.state.max_epochs))
 
-        loss_helper.update(loss_avg)
-        _cec()
-        # valid
-        if do_valid and (epoch + 1) % valid_interval == 0:
-            with LoggerStartEnd(logger, f"epoch {epoch + 1} valid", log_level='debug'):
-                _, _result = testing(args, logger=logger, model=model, data_helper=data_helper, is_valid=True,
-                                     no_show_bar=no_show_bar)
-                mrr, hit_ = get_from_dict(_result, ('mrr', 'hit_'))
-                result.write('mrr', mrr)
-                result.write('hit_', hit_)
-                logger.info("-----valid result (epoch={}): mrr = {}".format(epoch + 1, mrr))
-                logger.info("-----valid result (epoch={}): hit = {}".format(epoch + 1, hit_))
-            model.train()
+    @trainer.on(Events.COMPLETED)
+    def complete_train(engine: Engine):
+        epoch = engine.state.epoch
+        time_str = elapsed_time_str(total_timer.value())
+        logger.info("training complete. finish epoch: {:>5}, time: {:>7}".format(epoch, time_str))
 
-        logger.info(f"{'-' * 10}epoch {epoch + 1} end.{'-' * 10}")
-        check_point()
-        result.complete_epoch()
-        # early stopping
-        if loss_helper.is_early_stopping:
-            logger.info(f"early stopping")
-            break
+    @trainer.on(Events.EPOCH_COMPLETED)
+    def logging_time_per_epoch(engine: Engine):
+        epoch = engine.state.epoch
+        time_str = elapsed_time_str(total_timer.value())
+        print_text = "----- epoch: {:>5} complete. time: {:>8.2f}. total time: {:>7} -----".format(
+            epoch, engine.state.times['EPOCH_COMPLETED'], time_str)
 
+        logger.info(print_text)
+
+    @trainer.on(Events.ITERATION_COMPLETED(every=100))
+    def print_info_per_some_iter(engine: Engine):
+        output = engine.state.output
+        epoch = engine.state.epoch
+        print_text = ', '.join(del_none([
+            f"loss={output[LOSS].item()}",
+            f"positive={output['percent'][0].item()}" if 'percent' in output else None,
+            f"negative={output['percent'][1].item()}" if 'percent' in output else None,
+        ]))
+        logger.debug("----- epoch: {:>5} iter {:>6} complete. total time: {:>7} -----".format(
+            epoch, engine.state.iteration, elapsed_time_str(total_timer.value())))
+        logger.debug(print_text)
+
+    # about progress_helper
+    trainer.add_event_handler(Events.STARTED, lambda x: progress_helper.add_key(TRAIN, total=max_epoch))
+    trainer.add_event_handler(Events.EPOCH_COMPLETED, lambda x: progress_helper.update_key(TRAIN))
+    trainer.add_event_handler(Events.COMPLETED, lambda x: progress_helper.finish_key(TRAIN))
+    try:
+        trainer.run(train, max_epochs=max_epoch)
+    except KeyboardInterrupt as e:
+        load_model(model, checkpoint_path, device=device, delete_file=True)
+        raise e
+
+    del total_timer, trainer
+    load_model(model, checkpoint_path, device=device, delete_file=True)
+    return model, result
+
+
+@force_gc_after_function
+def training_ere(
+        args: Namespace, *, logger,
+        model, data_helper: MyDataHelper,
+        lr,
+        do_valid,
+        summary_writer: SummaryWriter = None,
+        uid=None,
+        calculate_percent=False
+):
+    (device, max_epoch, early_stopping_count, checkpoint_path, valid_interval,
+     label_smoothing, train, do_debug_model, l2) = _use_values_in_train(args, data_helper, do_valid, uid)
+
+    opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=args.l2)
+    model.to(device)
+    result = ResultPerEpoch(keywords=[LOSS, MRR, HIT_, ])
+    progress_helper: ProgressHelper = args.progress_helper
+    count_per_items = data_helper.processed_id2count_entity
+    loss_fn = model.loss
+
+    @force_gc_after_function
+    def train_step(_: Engine, batch) -> dict:
+        head, relation, tail, _, _ = batch
+        batch_size = len(head)
+        opt.zero_grad()
+        head, relation, tail = head.to(device), relation.to(device), tail.to(device)
+
+        head, relation = head.view(batch_size, 1), relation.view(batch_size, 1)
+        negative_tails = torch.from_numpy(
+            negative_sampling(np.arange(len(count_per_items)), count_per_items, size=batch_size)
+        ).to(device).reshape(batch_size, 1)
+
+        pred_embedding = model((head, relation)).reshape(batch_size, -1)
+        positive_embedding = model.emb_e(tail).reshape(batch_size, -1)
+        negative_embedding = model.emb_e(negative_tails).reshape(batch_size, -1)
+
+        # positive_score = torch.linalg.norm(pred_embedding - positive_embedding, dim=1)
+        # negative_score = torch.linalg.norm(pred_embedding - negative_embedding, dim=1)
+
+        positive_score = (pred_embedding * positive_embedding).sum(dim=1)
+        negative_score = (pred_embedding * negative_embedding).sum(dim=1)
+
+        loss = (+ loss_fn(positive_score, torch.ones_like(positive_score, device=device))
+                + loss_fn(negative_score, torch.zeros_like(negative_score, device=device)))
+
+        loss.backward()
+        opt.step()
+        return {LOSS: loss, 'pred': pred_embedding, 'head': head, 'relation': relation, tail: 'tail'}
+
+    def loss_transformer(output: dict):
+        return output.get(LOSS).detach()
+
+    trainer = Engine(train_step)
+    loss_metric = Average(output_transform=loss_transformer)
+    loss_metric.attach(trainer, LOSS)
+
+    @trainer.on(Events.EPOCH_STARTED)
+    def start_epoch_func(engine: Engine):
+        epoch = engine.state.epoch
+        logger.debug("----- epoch: {:>5} start -----".format(epoch))
+        result.start_epoch()
+
+    @trainer.on(Events.EPOCH_COMPLETED)
+    def end_epoch_func(engine: Engine):
+        epoch = engine.state.epoch
+        save_model(model, checkpoint_path, device=device)
+        loss = engine.state.metrics[LOSS]
+        result.write(LOSS, loss)
+        logger.debug(f"loss = {loss}")
+        if summary_writer is not None:
+            logger.debug("write loss to tensorboard")
+            summary_writer.add_scalar("train/loss", loss, global_step=epoch)
+
+    @trainer.on(Events.EPOCH_COMPLETED(every=1000))
+    def train_valid(engine: Engine):
+        epoch = engine.state.epoch
+        _, _result = testing_ere(
+            args, model=model, data_helper=data_helper, is_train=True,
+            logger=logger)
+        logger.debug("----- epoch: {:>5} train valid result -----".format(epoch))
+        logger.debug("mrr: {}".format(_result['ranking_metric'][MRR]))
+        logger.debug("hit_: {}".format([hit_i.item for hit_i in _result['ranking_metric'][HIT_]]))
+
+    @trainer.on(Events.EPOCH_COMPLETED(every=valid_interval))
+    def valid(engine: Engine):
+        epoch = engine.state.epoch
+        _, _result = testing_ere(
+            args, model=model, data_helper=data_helper, is_valid=True,
+            logger=logger)
+        result.write_all({key: _result['ranking_metric'][key] for key in (MRR, HIT_)})
+        logger.debug("----- epoch: {:>5} valid result -----".format(epoch))
+        logger.debug("mrr: {}".format(_result['ranking_metric'][MRR]))
+        logger.debug("hit_: {}".format([hit_i.item() for hit_i in _result['ranking_metric'][HIT_]]))
+        if summary_writer is not None:
+            logger.debug("write  to tensorboard")
+            summary_writer.add_scalar("valid/loss", _result[LOSS], global_step=epoch)
+            summary_writer.add_scalar("valid/mrr", _result['ranking_metric'][MRR], global_step=epoch)
+            summary_writer.add_scalars(
+                "valid/hit", global_step=epoch,
+                tag_scalar_dict={str(i + 1): hit_i.item() for i, hit_i in enumerate(_result['ranking_metric'][HIT_])},
+            )
+
+    total_timer = Timer(average=False)
+
+    @trainer.on(Events.STARTED)
+    def start_train(engine: Engine):
+        total_timer.reset()
+        logger.info("training start. epoch length = {}".format(engine.state.max_epochs))
+
+    @trainer.on(Events.COMPLETED)
+    def complete_train(engine: Engine):
+        epoch = engine.state.epoch
+        time_str = elapsed_time_str(total_timer.value())
+        logger.info("training complete. finish epoch: {:>5}, time: {:>7}".format(epoch, time_str))
+
+    @trainer.on(Events.EPOCH_COMPLETED)
+    def print_time_per_epoch(engine: Engine):
+        epoch = engine.state.epoch
+        time_str = elapsed_time_str(total_timer.value())
+        print_text = "----- epoch: {:>5} complete. time: {:>8.2f}. total time: {:>7} -----".format(
+            epoch, engine.state.times['EPOCH_COMPLETED'], time_str)
+
+        logger.info(print_text)
+
+    @trainer.on(Events.ITERATION_COMPLETED(every=100))
+    def print_info_per_some_iter(engine: Engine):
+        output = engine.state.output
+        epoch = engine.state.epoch
+        logger.debug("----- epoch: {:>5} iter {:>6} complete. total time: {:>7} -----".format(
+            epoch, engine.state.iteration, elapsed_time_str(total_timer.value())))
+        logger.debug(f"loss={output[LOSS].item()}")
+
+    # about progress_helper
+    trainer.add_event_handler(Events.STARTED, lambda x: progress_helper.add_key(TRAIN, total=max_epoch))
+    trainer.add_event_handler(Events.EPOCH_COMPLETED, lambda x: progress_helper.update_key(TRAIN))
+    trainer.add_event_handler(Events.COMPLETED, lambda x: progress_helper.finish_key(TRAIN))
+    try:
+        trainer.run(train, max_epochs=max_epoch)
+    except KeyboardInterrupt as e:
+        load_model(model, checkpoint_path, device=device, delete_file=True)
+        raise e
+
+    del total_timer, trainer
     load_model(model, checkpoint_path, device=device, delete_file=True)
     return model, result
 
 
 @force_gc_after_function
 @torch.no_grad()
-def testing(
+def testing_er_tails(
         args: Namespace, *, logger,
-        model, data_helper,
-        is_valid=False, is_test=False,
-        no_show_bar=False,
+        model, data_helper: MyDataHelper,
+        is_train_valid=False, is_valid=False, is_test=False
 ):
     model = model
     device = args.device
-    train_type = args.train_type
+    test = data_helper.get_dataloader(False, is_train_valid, is_valid, is_test)
 
-    if is_valid:
-        logger.debug(f"{'-' * 5}This is valid{'-' * 5}")
-        test = data_helper.valid_dataloader
-    elif is_test:
-        logger.debug(f"{'-' * 5}This is test{'-' * 5}")
-        test = data_helper.test_dataloader
-    else:
-        raise "Either valid or test must be specified."
-        pass
+    def eval_step(_: Engine, batch) -> dict[str, torch.Tensor]:
+        er, e2s, e2s_all = batch
+        e, r = er.to(device).split(1, 1)
+        e2s = e2s.to(device)
+        e2s_all = e2s.to(device)
+        pred: torch.Tensor = model.forward((e, r))
+        loss = model.loss(pred, e2s)
+        return {LOSS: loss, 'pred': pred, 'e2s': e2s, 'e2s_all': e2s_all != 0}
 
-    len_test = 0
-    zero_tensor = torch.tensor(0., dtype=torch.float32, device=device)
+    def ranking_metric_transform(output: dict) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+        pred, e2s, e2s_all = map(output.get, ['pred', 'e2s', 'e2s_all'])
+        row, column = torch.where(e2s == 1)
+        return pred, (row, column), e2s_all
 
     # test
-    # model.to(device)
+    model.to(device)
     model.eval()
+    evaluator = Engine(eval_step)
+    ranking_metric = RankingMetric(output_transform=ranking_metric_transform)
+    ranking_metric.attach(evaluator, 'ranking_metric')
+    log_loss_metric = Average(output_transform=lambda x: x.get(LOSS).detach())
+    log_loss_metric.attach(evaluator, LOSS)
+    evaluator.run(test)
+    result = {key: value for key, value in evaluator.state.metrics.items()}
+    return model, result
 
-    mrr = torch.tensor(0., device=device, dtype=torch.float32, requires_grad=False)
-    hit_ = torch.tensor([0.] * 10, device=device, dtype=torch.float32, requires_grad=False)
 
-    for idx, (er, e2s, e2s_all) in decorate_loader(test, no_show_bar=no_show_bar):
-        e, r = er.to(device).split(1, 1)
-        assert train_type == 'all_tail' or train_type == 'triples', "train_type!!!"
-        if train_type == 'all_tail':
-            # model: KGE_ERTails
-            pred: torch.Tensor = model.forward((e, r))
-            assert torch.all(pred > 0.)
-        else:  # if train_type == 'triples':
-            pred: torch.Tensor = model.forward((e, r))
-            # model: KGE_ERE
-            # todo
-            pass
-            """
-            pred = torch.zeros_like(e2s)
-            for i in tqdm(range(entity_special_num, e2s.shape[1]), leave=False):
-                _pred = model.forward((e, r, torch.full((len(e), 1), i).to(device)))
-                pred[:, i] = _pred[:, 0, ]
-            """
+@force_gc_after_function
+@torch.no_grad()
+def testing_ere(
+        args: Namespace, *, logger,
+        model, data_helper: MyDataHelper,
+        is_train_valid=False, is_valid=False, is_test=False
+):
+    model: KGE_ERE = model
+    device = args.device
+    assert true_count(is_train_valid, is_valid, is_test) == 1
+    test = data_helper.get_dataloader(False, is_train_valid, is_valid, is_test)
+    all_tail = data_helper.sparse_all_tail_data
+    loss_fn = model.loss
 
-        del e, r, er
-        # make filter
-        e2s = e2s.to(device)
-        row, column = torch.where(e2s == 1)
-        del e2s
-        e2s_all_binary: torch.Tensor = e2s_all != 0
-        del e2s_all
-        #
-        pred = pred[row]  # 複製
-        e2s_all_binary = e2s_all_binary[row]  # 複製
-        # row is change
-        len_row = len(row)
-        row = [i for i in range(len_row)]
-        #
-        e2s_all_binary[row, column] = False
-        pred[e2s_all_binary] = zero_tensor
-        del e2s_all_binary
-        #
-        ranks_list = []
-        _batch_size = 128
-        for i in range(0, len(pred), _batch_size):
-            _pred = pred[i: i + _batch_size]
-            _column = column[i: i + _batch_size]
-            _row = list(range(len(_pred)))
-            assert is_same_len_in_list(_pred, _row, _column)
-            _ranking = torch.argsort(_pred, dim=1, descending=True)  # これは0 始まり
-            _ranks = torch.argsort(_ranking, dim=1)[_row, _column]
-            _ranks += 1  # これは1 始まり
-            ranks_list.append(_ranks)
+    def eval_step(engine: Engine, batch) -> dict[str, torch.Tensor]:
+        head, relation, tail, _, er_id = batch
+        e2s_all = torch.index_select(all_tail, 0, er_id).to_dense()
+        batch_size = len(head)
+        head, relation, tail = head.to(device), relation.to(device), tail.to(device)
+        head, relation = head.view(batch_size, 1), relation.view(batch_size, 1)
+        pred_embedding = model((head, relation)).reshape(batch_size, -1)
 
-        ranks = torch.cat(ranks_list, dim=0)
-        # mrr and hit
-        mrr += (1. / ranks).sum()
-        for i in range(10):
-            hit_[i] += torch.count_nonzero(ranks <= (i + 1))
-        del ranks, row, column
-        # after
-        _cec()
-        len_test += len_row
+        all_e_embeddings = model.emb_e.weight
+        pred_all_score = torch.mm(pred_embedding, all_e_embeddings.transpose(0, 1))
 
-    logger.debug(f"{mrr=}, {hit_=}, {len_test=}")
-    mrr = (mrr / len_test)
-    hit_ = (hit_ / len_test)
-    result = {
-        'mrr': mrr.item(), 'hit_': hit_.tolist()
-    }
-    del mrr, hit_
-    _cec()
-    logger.debug("=====Test result: mrr = {}".format(result['mrr']))
-    logger.debug("=====Test result: hit = {}".format(result['hit_']))
+        # positive_score = torch.linalg.norm(pred_embedding - positive_embedding, dim=1)
+        positive_score = pred_all_score[torch.arange(len(pred_all_score), device=device), tail]
+        loss = loss_fn(positive_score, torch.ones_like(positive_score, device=device))
+
+        return {LOSS: loss, 'pred': pred_all_score, 'tail': tail, 'e2s_all': e2s_all != 0}
+
+    def ranking_metric_transform(output: dict) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+        pred, tail, e2s_all = map(output.get, ['pred', 'tail', 'e2s_all'])
+        row, column = torch.arange(len(tail), device=device), tail
+        return pred, (row, column), e2s_all
+
+    # test
+    model.to(device)
+    model.eval()
+    evaluator = Engine(eval_step)
+    ranking_metric = RankingMetric(output_transform=ranking_metric_transform)
+    ranking_metric.attach(evaluator, 'ranking_metric')
+    log_loss_metric = Average(output_transform=lambda x: x.get(LOSS).detach())
+    log_loss_metric.attach(evaluator, LOSS)
+    evaluator.run(test)
+    result = {key: value for key, value in evaluator.state.metrics.items()}
     return model, result
 
 
 def train_setup(args, *, logger: Logger):
     kg_data = args.KGdata
-    eco_memory = args.eco_memory
     entity_special_num = args.entity_special_num
     relation_special_num = args.relation_special_num
     batch_size = args.batch_size
     train_type = args.train_type
-    is_do_negative_sampling = args.do_negative_sampling
-    negative_count = args.negative_count
-    debug_data = args.do_debug_data
 
     assert batch_size is not None and train_type is not None
 
     # load data
-    with LoggerStartEnd(logger, "make dataloader"):
-        data_helper = load_preprocess_data(kg_data, eco_memory, entity_special_num, relation_special_num, logger=logger)
-        logger.debug(f"=====this is {blank_or_NOT(eco_memory)} eco_memory mode=====")
+    logger.info("{} start".format("load data"))
+    data_helper = load_preprocess_data(kg_data, entity_special_num, relation_special_num, logger=logger)
+    logger.info("{} end".format("load data"))
 
     # dataloader
-    with LoggerStartEnd(logger, "make dataloader"):
-        if args.do_debug_model and train_type == 'all_tail':
-            make_dataloader_all_tail_debug_model(data_helper, batch_size, logger=logger)
-        elif train_type == 'all_tail':
-            make_dataloader_all_tail(data_helper, batch_size, logger=logger, debug=debug_data)
-        elif train_type == 'triples':
-            assert is_do_negative_sampling is not None
-            make_dataloader_triple(data_helper, batch_size, is_do_negative_sampling, negative_count)
-        else:
-            pass
+    logger.info("{} start".format("make dataloader"))
+    if args.do_debug_model and train_type == ALL_TAIL:
+        make_dataloader_all_tail_debug_model(data_helper, batch_size, logger=logger)
+    elif train_type == ALL_TAIL:
+        make_dataloader_all_tail(data_helper, batch_size, logger=logger)
+    elif train_type == TRIPLE:
+        make_dataloader_triple(data_helper, batch_size)
+    else:
+        pass
+    logger.info("{} end".format("make dataloader"))
 
     # model
-    with LoggerStartEnd(logger, "make model"):
-        model = get_model(args, data_helper)
-    logger.info(f"grad param count: {requires_grad_param_num(model)}")
+    logger.info("{} start".format("make model"))
+    model = get_model(args, data_helper)
+    logger.info("{} end".format("make model"))
+
     return data_helper, model
 
 
-def do_1train(args: Namespace, *, logger: Logger, progress_helper: ProgressHelper, ):
+def do_1train(args: Namespace, *, logger: Logger):
     """
     Args:
         args: Namespace
         logger: Logger
-        progress_helper: ProgressHelper
 
     Returns: None
 
@@ -500,9 +700,14 @@ def do_1train(args: Namespace, *, logger: Logger, progress_helper: ProgressHelpe
     assert type(args) is ChangeDisableNamespace
     is_do_train, is_do_valid, is_do_test = args.do_train, args.do_valid, args.do_test
     is_do_debug = args.do_debug
+    train_type = args.train_type
     model_path = args.model_path
     device = args.device
-    no_show_bar = args.no_show_bar
+    summary_writer = SummaryWriter(log_dir=args.tensorboard_dir)
+    train_func, test_func = None if train_type not in [ALL_TAIL, TRIPLE] \
+        else (training_er_tails, testing_er_tails) if train_type == ALL_TAIL \
+        else (training_ere, testing_ere) if train_type == TRIPLE \
+        else None
 
     logger.info(f"Function start".center(40, '='))
 
@@ -520,98 +725,88 @@ def do_1train(args: Namespace, *, logger: Logger, progress_helper: ProgressHelpe
 
     if is_do_train:
         assert model_path is not None
-        logger.info(_info_str(f"Train start."))
-
-        model, result = training_er_tails(
-            args, logger=logger, progress_helper=progress_helper,
+        model, result = train_func(
+            args, logger=logger,
             data_helper=data_helper,
             model=model,
             lr=lr,
             do_valid=is_do_valid,
-            no_show_bar=no_show_bar
+            summary_writer=summary_writer
         )
         save_model(model, args.model_path, device=device)
-        # args.train_result = result
-        logger.info(_info_str(f"Train complete."))
         del result
 
     model = load_model(model, model_path, device=device)
 
     if is_do_valid:
         logger.info(_info_str(f"Test valid start."))
-        model, result = testing(
+        model, result = test_func(
             args, logger=logger,
             data_helper=data_helper, model=model,
             is_valid=True,
-            no_show_bar=no_show_bar
         )
         # args.test_valid_result = result
-        logger.info(f"=====Test valid result. mrr: {result['mrr']}, hit_: {result['hit_']}")
+        logger.info(f"===== Test valid result =====")
+        logger.info(f"mrr: {result[MRR]}, ")
+        logger.info(f"hit_: {[h.item() for h in result[HIT_]]}")
         logger.info(_info_str(f"Test valid complete."))
 
     if is_do_test:
         logger.info(_info_str(f"Test start."))
-        model, result = testing(
+        model, result = test_func(
             args, logger=logger,
             data_helper=data_helper, model=model,
             is_test=True,
-            no_show_bar=no_show_bar,
         )
         # args.test_result = result
-        logger.info(f"=====Test result. mrr: {result['mrr']}, hit_: {result['hit_']}")
+        logger.info(f"===== Test result =====")
+        logger.info(f"mrr: {result[MRR]}, ")
+        logger.info(f"hit_: {[h.item() for h in result[HIT_]]}")
         logger.info(_info_str(f"Test complete."))
 
     logger.info(f"Function finish".center(40, '='))
 
 
-def do_optuna(args, *, logger: Logger, progress_helper: ProgressHelper, ):
+def do_optuna(args, *, logger: Logger):
     assert type(args) is ChangeDisableNamespace
-    # batch_size = args.batch_size
-    no_show_bar = args.no_show_bar
-
+    is_do_train, is_do_valid, is_do_test = args.do_train, args.do_valid, args.do_test
     study_name = args.study_name
     optuna_file = args.optuna_file
     n_trials = args.n_trials
-
-    logger.info(f"Optuna start".center(40, '='))
-
+    progress_helper: ProgressHelper = args.progress_helper
     data_helper, _ = train_setup(args, logger=logger)
-    progress_helper.add_key('study', total=n_trials)
 
-    @progress_helper.update_progress_after_function('study')
+    @progress_helper.update_progress_after_function(STUDY)
     @force_cuda_empty_cache_after_function
     def objective(trial: optuna.Trial):
-        nonlocal data_helper, progress_helper
-        lr = trial.suggest_loguniform('lr', 1e-6, 1e-2)
+        nonlocal data_helper
+        lr = trial.suggest_loguniform('lr', 1e-6, 5e-2)
 
         logger.info(_info_str(f"trial {trial.number} start."))
         model = get_model(args, data_helper)
         model.init()
         # train
-        model, _ = training(
-            args, logger=logger, progress_helper=progress_helper,
+        model, _ = training_er_tails(
+            args, logger=logger,
             data_helper=data_helper,
             model=model,
-            lr=lr,
-            do_valid=False,
-            no_show_bar=no_show_bar,
-            # optuna additional setting
-            uid=trial.number
+            lr=lr, do_valid=is_do_valid
         )
         # valid
-        _, result = testing(
+        _, result = testing_er_tails(
             args, logger=logger,
             data_helper=data_helper, model=model,
             is_valid=True,
-            no_show_bar=no_show_bar
         )
-        logger.info(f"=====Valid result. mrr: {result['mrr']}, hit_: {result['hit_']}")
-        return result['mrr']
+        logger.info(f"=====Valid result. mrr: {result[MRR]}, hit_: {result[HIT_]}")
+        return result[MRR]
 
     study = optuna.create_study(
         direction='maximize', study_name=study_name, storage=SQLITE_PREFIX + optuna_file, load_if_exists=True
     )
+    progress_helper.add_key(STUDY, total=n_trials)
     study.optimize(objective, n_trials=n_trials, gc_after_trial=True)
+    progress_helper.finish_key(STUDY)
 
     logger.info(_info_str("optuna study finish"))
     logger.info(f"==========best param = lr: {study.best_params['lr']}")
@@ -621,7 +816,7 @@ def do_optuna(args, *, logger: Logger, progress_helper: ProgressHelper, ):
     return study.best_params
 
 
-def select_function(args, *, logger: Logger, progress_helper: ProgressHelper):
+def select_function(args, *, logger: Logger):
     fname = args.function
     if fname == 'do_test':
         args.do_train = False
@@ -632,15 +827,15 @@ def select_function(args, *, logger: Logger, progress_helper: ProgressHelper):
         raise "you should select function"
     elif fname == 'do_1train':
         with ChangeDisableNamespace(args) as const_args:
-            do_1train(const_args, logger=logger, progress_helper=progress_helper)
+            do_1train(const_args, logger=logger)
 
     elif fname == 'do_optuna':
         with ChangeDisableNamespace(args) as const_args:
-            best_params = do_optuna(const_args, logger=logger, progress_helper=progress_helper)
+            best_params = do_optuna(const_args, logger=logger)
         args.lr = best_params['lr']
         force_gc()
         with ChangeDisableNamespace(args) as const_args:
-            do_1train(const_args, logger=logger, progress_helper=progress_helper)
+            do_1train(const_args, logger=logger)
 
 
 def main(args=None):
@@ -652,12 +847,13 @@ def main(args=None):
         args.logger = logger
         args.device = device
         args.completed = {}
+        args.progress_helper = ProgressHelper("log/progress.{pid}.txt", pid=args.pid)
         logger.debug(vars(args))
         logger.info(f"process id = {args.pid}")
-        progress_helper = ProgressHelper("log/progress.{pid}.txt", pid=args.pid)
-        select_function(args, logger=logger, progress_helper=progress_helper)
-        progress_helper.finish(delete=True)
+        select_function(args, logger=logger)
+        args.progress_helper.finish(delete=True)
     finally:
+        del args.progress_helper
         save_param(args)
         pass
 

@@ -136,8 +136,8 @@ class GAT(torch.nn.Module):
 
 def make_geodata(data_helper: MyDataHelper,
                  *, is_del_reverse=True, is_add_self_loop=False, num_self_loop=-1, logger=None) -> TorchGeoData:
-    e_length = data_helper.processed_e_length
-    r_length = data_helper.processed_r_length
+    e_length = data_helper.processed_entity_length
+    r_length = data_helper.processed_relation_length
 
     reverse_count = np.count_nonzero(data_helper.data.r_is_reverse_list)
     r_length = r_length - reverse_count if is_del_reverse else r_length
@@ -235,7 +235,7 @@ def do_1train(args, *, logger: Logger):
     data_helper = load_preprocess_data(kg_data, eco_memory=True, logger=logger,
                                        entity_special_num=special_token_num, relation_special_num=special_token_num)
     logger.info(_info_str(f"load data complete."))
-    data_helper.show(logger)
+    data_helper.show_log(logger)
 
     # make data
     logger.info(_info_str(f"make PyG data start."))

@@ -29,8 +29,8 @@ class ResultPerEpoch:
     def write(self, key: str, value: Any):
         self._dict[key][self._epoch] = value
 
-    def write_all(self, key_value_set):
-        for key, value in key_value_set:
+    def write_all(self, key_value):
+        for key, value in key_value.items():
             self.write(key, value)
 
     def save(self, file_):

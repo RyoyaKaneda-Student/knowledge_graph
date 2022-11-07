@@ -1,11 +1,16 @@
 import gc
 import random
-from typing import Tuple, List
+# noinspection PyUnresolvedReferences
+from typing import Tuple, List, Any, TypeVar, Generic, Iterable, Callable
 from logging import Logger
 
 from tqdm import tqdm as tqdm_default
+from rdflib import URIRef
 
 tqdm = tqdm_default
+
+_T = TypeVar('_T')
+_U = TypeVar('_U')
 
 
 def tqdm2notebook_tqdm():
@@ -58,18 +63,86 @@ def logger_is_optional(func):
     return wrapper
 
 
-def random_num_choice(count_: int, min_: int, max_: int, not_choice_list_=None):
-    list_ = [i for i in range(min_, max_) if i in not_choice_list_]
-    rep = random.sample(list_, len(list_))[count_]
-    assert len(rep) == count_
-    return rep
+def elapsed_time_str(seconds: float) -> str:
+    """
+
+    Args:
+        seconds:
+
+    Returns:
+
+    """
+    seconds = int(seconds + 0.5)  # 秒数を四捨五入
+    h = seconds // 3600  # 時の取得
+    m = (seconds - h * 3600) // 60  # 分の取得
+    s = seconds - h * 3600 - m * 60  # 秒の取得
+    return f"{h:02}:{m:02}:{s:02}"  # hh:mm:ss形式の文字列で返す
 
 
-def random_num_choice2(count_: int, min_: int, max_: int, not_choice_list_=None):
-    list_ = [i for i in range(min_, max_) if i in not_choice_list_]
-    rep = random.sample(list_, len(list_))[count_]
-    assert len(rep) == count_
-    return rep
+class EternalGenerator(Generic[_T]):
+    def __init__(self, queue_generator: Callable[[], Iterable[_T]]):
+        self.i = 0
+        self.queue_generator = queue_generator
+        self.queue_ = iter(queue_generator())
+
+    def get_next(self, conditional=None):
+        if conditional is None:
+            conditional = lambda _: True
+        while True:
+            try:
+                x = self.queue_.__next__()
+                if conditional(x):
+                    return x
+            except StopIteration:
+                self.queue_ = iter(self.queue_generator())
+
+
+def dict_to_list(dict_: dict[int, _T]) -> list[_T]:
+    for key in dict_:
+        assert type(key) is int
+    sorted_ = sorted(dict_.keys())
+    assert sorted_[0] >= 0
+    list_ = [None for _ in range(sorted_[-1])]
+    for key, value in dict_.items():
+        list_[key] = value
+    return list_
+
+
+def del_none(list_: list[Any]) -> list[Any]:
+    return [x for x in list_ if x is not None]
+
+
+def get_true_position_items_using_getter(
+        items: list[Callable[[], _T]],
+        bool_list: list[bool]
+) -> list[_T]:
+    """
+
+    Args:
+        items:
+        bool_list:
+
+    Returns:
+
+    """
+    rev: list[_T] = []
+    for item_getter, is_true in zip(items, bool_list):
+        if is_true: rev.append(item_getter())
+    return rev
+
+
+def get_true_position_items(
+        items: list[_T],
+        bool_list: list[bool]
+) -> list[_T]:
+    rev: list[_T] = []
+    for item, is_true in zip(items, bool_list):
+        if is_true: rev.append(item)
+    return rev
+
+
+def true_count(*args):
+    return len([True for item in args if item is True])
 
 
 def none_count(*args):

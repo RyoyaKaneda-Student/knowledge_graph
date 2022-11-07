@@ -37,6 +37,10 @@ def command_help(args):
     print(args.parser.parse_args([args.command, '--help']))
 
 
+def easy_logger(console_level=None):
+    return setup_logger('log', 'python_log.log', console_level)
+
+
 def setup_logger(name, logfile, console_level=None) -> Logger:
     import logging
     name = name
@@ -72,10 +76,11 @@ def setup(setup_parser, project_dir, *, parser_args=None) -> Tuple[Namespace, Lo
     load_dotenv()
     args: Namespace = setup_parser(parser_args)
     logger: Logger = setup_logger(__name__, f"{project_dir}/{args.logfile}", console_level=args.console_level)
-    device: torch.device = get_device(device_name=args.device_name, logger=logger)
+    device: torch.device = get_device(device_name=args.device_name, logger=logger
+                                      ) if hasattr(args, 'device_name') else None
     # process id
     args.pid = os.getpid()
-    if args.notebook:
+    if hasattr(args, 'device_name') and args.notebook:
         tqdm2notebook_tqdm()
     return args, logger, device
 
