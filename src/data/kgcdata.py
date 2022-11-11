@@ -3,9 +3,11 @@
 # ========== python ==========
 from logging import Logger
 from pathlib import Path
+from urllib.parse import urlparse, quote
 # noinspection PyUnresolvedReferences
-from typing import List, Dict, Tuple, Optional, Union, Callable, Final, Literal, get_args
+from typing import List, Dict, Tuple, Optional, Union, Callable, Final, Literal, Iterable, get_args
 import h5py
+from h5py import Group
 import numpy as np
 from rdflib import Graph, URIRef, Literal, Namespace, RDF, RDFS
 from rdflib.namespace import DefinedNamespace
@@ -16,10 +18,10 @@ PROJECT_DIR = Path(__file__).resolve().parents[2]
 print(f"{PROJECT_DIR=}")
 
 URL_DATA: Final = "http://kgc.knowledge-graph.jp/data"
-URL_PREDICATE: Final = "http://kgc.knowledge-graph.jp/data/predicate"
+URL_PREDICATE: Final = "http://kgc.knowledge-graph.jp/data/predicate/"
 DATA_FOLDER_PATH: Final = f"{PROJECT_DIR}/../KGCdata/KGRC-RDF"
 
-PREFIX_PREDICATE: Final = 'word:predicate'
+PREFIX_PREDICATE: Final = 'word.predicate'
 
 KGC_TYPE: Final = 'kgc:type'
 KGC_LABEL: Final = 'kgc:label'
@@ -116,9 +118,12 @@ ACTION_SET = {
 
 
 def get_type_match_people(graph_: Graph, type_set: set[URIRef]):
-    match_set = {s for s, _, o in graph_.triples((None, None, None))
-                 if o in type_set} - type_set
-    return match_set
+    match_list = [s for s, _, o in graph_.triples((None, None, None))
+                  if o in type_set]
+    match_list = sorted(set(match_list), key=match_list.index)
+    for type_ in type_set:
+        if type_ in match_list: del match_list[match_list.index(type_)]
+    return match_list
 
 
 def make_graph(title: str, data_file_path: Union[str, Path]) -> tuple[Graph, dict[str, Namespace]]:
@@ -145,30 +150,87 @@ def get_story_list(graph_, namespace_dict, title, l_):
     return story_list
 
 
+def del_data_if_exist(group: Group, names: Iterable[str]):
+    for name in names:
+        if name in group.keys():
+            del group[name]
+
+
+class ConstNameForHDF:
+    FILE_NAME: Final = f"{DATA_FOLDER_PATH}/../data/story_list.hdf5"
+    LENGTH_10: Final = 'length_10'
+    LENGTH_09: Final = 'length_09'
+    LENGTH_08: Final = 'length_08'
+    STORIES: Final = 'stories'
+    OBJECTS: Final = 'objects'
+    ACTIONS: Final = 'actions'
+    PEOPLE: Final = 'people'
+
+    @staticmethod
+    def all_list():
+        return [ConstNameForHDF.LENGTH_10, ConstNameForHDF.LENGTH_10, ConstNameForHDF.LENGTH_10,
+                ConstNameForHDF.STORIES, ConstNameForHDF.OBJECTS, ConstNameForHDF.ACTIONS, ConstNameForHDF.PEOPLE]
+
+
 def write_():
-    print(f"{DATA_FOLDER_PATH}/../data/story_list.hdf5")
-    with h5py.File(f"{DATA_FOLDER_PATH}/../data/story_list.hdf5", 'a') as f:
+    # print(f"{DATA_FOLDER_PATH}/../data/story_list.hdf5")
+    with h5py.File(ConstNameForHDF.FILE_NAME, 'a') as f:
+        people_dict: dict[str, list] = dict()
         for title_ja, (title, l10, l09, l08) in title_len_dict.items():
             data_file_path = f"{DATA_FOLDER_PATH}/{title}.ttl"
+            title_group = f.require_group(title)
+
             graph_, namespace_dict = make_graph(title, data_file_path)
+            namespace_manager = graph_.namespace_manager
 
             story_list = get_story_list(graph_, namespace_dict, title, l10)
-            object_set = get_type_match_people(graph_, OBJECT_SET)
-            actions_set = get_type_match_people(graph_, ACTION_SET)
-            people_set = get_type_match_people(graph_, {KGC.Person})
+            objects_node_list = get_type_match_people(graph_, OBJECT_SET)
+            actions_node_list = get_type_match_people(graph_, ACTION_SET)
+            people_node_list = get_type_match_people(graph_, {KGC.Person})
             ofobj_set = get_type_match_people(graph_, {KGC.OFobj})
-            print(people_set-ofobj_set)
-            # f[title] = np.array(story_list, dtype=h5py.special_dtype(vlen=str))
+
+            def make_shape_list(_node_list):
+                _str_list = [URIRef(urlparse(str(p)).geturl()).n3(namespace_manager) for p in _node_list]
+                _tuple_list = [tuple(p.split(':', 1)) for p in _str_list]
+                _item_list = [x[1] for x in _tuple_list]
+                return _str_list, _tuple_list, _item_list
+
+            _, _, objects_list = make_shape_list(objects_node_list)
+            _, _, actions_list = make_shape_list(actions_node_list)
+            _, _, people_list = make_shape_list(people_node_list)
+
+            objects_list = [l_ for l_ in objects_list if l_ not in people_list]
+            del people_list[people_list.index('Watson')], people_list[people_list.index('Holmes')]
+
+            del_data_if_exist(title_group, [
+                ConstNameForHDF.LENGTH_10, ConstNameForHDF.LENGTH_09, ConstNameForHDF.LENGTH_08,
+                ConstNameForHDF.STORIES, ConstNameForHDF.OBJECTS, ConstNameForHDF.ACTIONS, ConstNameForHDF.PEOPLE
+            ])
+
+            [
+                title_group.create_dataset(name, data=value) for name, value in [
+                (ConstNameForHDF.LENGTH_10, l10), (ConstNameForHDF.LENGTH_09, l09), (ConstNameForHDF.LENGTH_08, l08),
+                (ConstNameForHDF.STORIES, np.array(story_list, dtype=h5py.special_dtype(vlen=str))),
+                (ConstNameForHDF.OBJECTS, np.array(objects_list, dtype=h5py.special_dtype(vlen=str))),
+                (ConstNameForHDF.ACTIONS, np.array(actions_list, dtype=h5py.special_dtype(vlen=str))),
+                (ConstNameForHDF.PEOPLE, np.array(people_list, dtype=h5py.special_dtype(vlen=str))), ]
+            ]
+
+            people_dict[title] = people_list
+
+        # print(people_dict)
 
 
 def read_():
-    with h5py.File(f"{DATA_FOLDER_PATH}/../data/story_list.hdf5", 'r') as f:
+    with h5py.File(ConstNameForHDF.FILE_NAME, 'r') as f:
         for title_ja, (title, l10, l09, l08) in title_len_dict.items():
-            logger.info(f[title][:])
+            title_group = f.require_group(title)
+            [logger.info(title_group[name][()]) for name in ConstNameForHDF.all_list()]
 
 
 def main():
     write_()
+    read_()
 
 
 if __name__ == '__main__':
