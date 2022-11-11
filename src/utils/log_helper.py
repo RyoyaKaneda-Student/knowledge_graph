@@ -2,6 +2,27 @@ from logging import Logger
 from typing import Literal
 
 
+class NoOutputLogger:
+    def info(self, *_args, **_kwargs):
+        pass
+
+    def debug(self, *_args, **_kwargs):
+        pass
+
+
+def logger_is_optional(func):
+    """
+    this is decorator
+    """
+
+    def wrapper(*args, **kwargs):
+        if 'logger' not in kwargs:
+            kwargs['logger'] = NoOutputLogger
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
 class LoggerStartEnd:
     def __init__(self, logger: Logger, start_item_name: str, hyphen_num=5, log_level: Literal['info', 'debug'] = 'info',
                  start_message='start.', end_message='end.'

@@ -29,7 +29,7 @@ class FakeLogger(Logger):
         print(msg)
 
 
-def add_logger_if_logger_is_None(func):
+def add_logger_if_logger_is_none(func):
     """
     this is decorator
     """
@@ -37,25 +37,6 @@ def add_logger_if_logger_is_None(func):
     def wrapper(*args, **kwargs):
         if 'logger' not in kwargs:
             logger = FakeLogger()
-            kwargs['logger'] = logger
-        return func(*args, **kwargs)
-
-    return wrapper
-
-
-def logger_is_optional(func):
-    """
-    this is decorator
-    """
-
-    def wrapper(*args, **kwargs):
-        def _ignore_func(*_args, **_kwargs):
-            return None
-
-        if 'logger' not in kwargs:
-            logger = object()
-            logger.info = _ignore_func
-            logger.debug = _ignore_func
             kwargs['logger'] = logger
         return func(*args, **kwargs)
 
