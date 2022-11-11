@@ -41,7 +41,7 @@ def ranking_and_hits(model, dev_rank_batcher, vocab, name, *, log=None):
         e1, e2 = e1.data, e2.data
         e2_multi1, e2_multi2 = e2_multi1.data, e2_multi2.data
         for i in range(e1.shape[0]):
-            # these filters contain ALL labels
+            # these filters contain All labels
             filter1 = e2_multi1[i].long()
             filter2 = e2_multi2[i].long()
 

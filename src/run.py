@@ -1,7 +1,5 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-import os
-import sys
 # noinspection PyUnresolvedReferences
 from argparse import Namespace
 # noinspection PyUnresolvedReferences
@@ -10,7 +8,7 @@ from collections import namedtuple
 from logging import Logger
 from pathlib import Path
 # noinspection PyUnresolvedReferences
-from typing import List, Dict, Tuple, Optional, Union, Callable, Final, Literal
+from typing import List, Dict, Tuple, Optional, Union, Callable, Final, Literal, get_args
 
 # Machine learning
 import h5py
@@ -47,34 +45,31 @@ from models.KGModel.model import (
     MlpMixE,
 )
 
-from models.datasets.data_helper import MyDataHelper, load_preprocess_data, add_negative_to_triple
+from models.datasets.data_helper import (
+    KGDATA_LITERAL, KGDATA_ALL,
+    MyDataHelper, load_preprocess_data,
+)
 from models.datasets.datasets import MyDataset, MyDatasetWithFilter, MyTripleDataset
 
-from ignite.engine import Events
+from ignite.engine import Engine, Events
 from ignite.metrics import Average
-from ignite.engine import Engine
 from ignite.handlers import Timer
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
-sys.path.append(os.path.join(PROJECT_DIR, 'src'))
-
-PROCESSED_DATA_PATH = './data/processed/'
-EXTERNAL_DATA_PATH = './data/external/'
 
 MODEL_TMP_PATH = 'saved_models/.tmp/check-point.{}.model'
 
-CPU: str = 'cpu'
-TRAIN: str = 'train'
-TEST: str = 'test'
-LOSS: str = 'loss'
-MRR: str = 'mrr'
-HIT_: str = 'hit_'
-STUDY: str = 'study'
+CPU: Final = 'cpu'
+TRAIN: Final = 'train'
+TEST: Final = 'test'
+LOSS: Final = 'loss'
+MRR: Final = 'mrr'
+HIT_: Final = 'hit_'
+STUDY: Final = 'study'
 
 ALL_TAIL = 'all_tail'
 TRIPLE = 'triple'
 
-KGDATA_ALL = ['FB15k-237', 'WN18RR', 'YAGO3-10']
 name2model = {
     'conve': ConvE,
     'distmult': DistMult,
@@ -87,7 +82,7 @@ name2model = {
 }
 
 
-def setup_parser(args=None) -> Namespace:
+def setup_parser(args: Namespace = None) -> Namespace:
     """
     Args:
         args:
@@ -129,8 +124,7 @@ def setup_parser(args=None) -> Namespace:
     paa('--self-loop-token-r', help='self-loop', type=int, default=None)
 
     paa('--model', type=str, help=f"Choose from: {', '.join(name2model.keys())}")
-    paa('--embedding-dim', type=int, default=200,
-        help='The embedding dimension (1D). Default: 200')
+    paa('--embedding-dim', type=int, default=200, help='The embedding dimension (1D). Default: 200')
     paa('--batch-size', help='batch size', type=int)
     paa('--epoch', help='max epoch', type=int)
     paa('--early-stopping-count', help='early-stopping-count', type=int, default=-1)
@@ -232,7 +226,7 @@ def make_dataloader_triple(data_helper: MyDataHelper, batch_size):
     data_helper.set_loaders(train, train_valid, valid, test)
 
 
-def get_model(args, data_helper) -> Union[KGE_ERE, KGE_ERTails]:
+def get_model(args: Namespace, data_helper: MyDataHelper) -> Union[KGE_ERE, KGE_ERTails]:
     model_name = args.model
 
     assert model_name in name2model.keys(), f"Unknown model! :{model_name}"
@@ -263,12 +257,11 @@ def _use_values_in_train(args: Namespace, data_helper: MyDataHelper, do_valid: b
 @force_gc_after_function
 def training_er_tails(
         args: Namespace, *, logger,
-        model, data_helper: MyDataHelper,
-        lr,
-        do_valid,
+        model: KGE_ERTails, data_helper: MyDataHelper,
+        lr: float,
+        do_valid: bool,
         summary_writer: SummaryWriter = None,
-        uid=None,
-        calculate_percent=False
+        uid: Optional[str] = None, calculate_percent=False
 ):
     (device, max_epoch, early_stopping_count, checkpoint_path, valid_interval,
      label_smoothing, train, do_debug_model, l2) = _use_values_in_train(args, data_helper, do_valid, uid)
@@ -345,14 +338,15 @@ def training_er_tails(
     def train_valid(engine: Engine):
         epoch = engine.state.epoch
         _, _result = testing_er_tails(
-            args, model=model, data_helper=data_helper, is_train=True,
+            args, model=model, data_helper=data_helper, is_train_valid=True,
             logger=logger)
         logger.debug("----- epoch: {:>5} train valid result -----".format(epoch))
         logger.debug("mrr: {}".format(_result['ranking_metric'][MRR]))
         logger.debug("hit_: {}".format([hit_i.item for hit_i in _result['ranking_metric'][HIT_]]))
 
-    @trainer.on(Events.EPOCH_COMPLETED(every=valid_interval))
+    @trainer.on(Events.EPOCH_COMPLETED(every=valid_interval if valid_interval > 0 else max_epoch+1))
     def valid(engine: Engine):
+        if valid_interval < 0: return
         epoch = engine.state.epoch
         _, _result = testing_er_tails(
             args, model=model, data_helper=data_helper, is_valid=True,
@@ -423,11 +417,11 @@ def training_er_tails(
 @force_gc_after_function
 def training_ere(
         args: Namespace, *, logger,
-        model, data_helper: MyDataHelper,
-        lr,
-        do_valid,
+        model: KGE_ERTails, data_helper: MyDataHelper,
+        lr: float,
+        do_valid: bool,
         summary_writer: SummaryWriter = None,
-        uid=None,
+        uid: Optional[str] = None,
         calculate_percent=False
 ):
     (device, max_epoch, early_stopping_count, checkpoint_path, valid_interval,
@@ -497,7 +491,7 @@ def training_ere(
     def train_valid(engine: Engine):
         epoch = engine.state.epoch
         _, _result = testing_ere(
-            args, model=model, data_helper=data_helper, is_train=True,
+            args, model=model, data_helper=data_helper, is_train_valid=True,
             logger=logger)
         logger.debug("----- epoch: {:>5} train valid result -----".format(epoch))
         logger.debug("mrr: {}".format(_result['ranking_metric'][MRR]))
@@ -655,7 +649,7 @@ def testing_ere(
 
 
 def train_setup(args, *, logger: Logger):
-    kg_data = args.KGdata
+    kg_data: KGDATA_LITERAL = args.KGdata
     entity_special_num = args.entity_special_num
     relation_special_num = args.relation_special_num
     batch_size = args.batch_size

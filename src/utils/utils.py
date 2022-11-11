@@ -5,7 +5,6 @@ from typing import Tuple, List, Any, TypeVar, Generic, Iterable, Callable
 from logging import Logger
 
 from tqdm import tqdm as tqdm_default
-from rdflib import URIRef
 
 tqdm = tqdm_default
 

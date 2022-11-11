@@ -1,7 +1,7 @@
 # coding: UTF-8
 import dataclasses
 import os
-from typing import Tuple, Any
+from typing import Tuple, Optional, Any, Callable
 import sys
 from pathlib import Path
 import pickle
@@ -43,7 +43,6 @@ def easy_logger(console_level=None):
 
 def setup_logger(name, logfile, console_level=None) -> Logger:
     import logging
-    name = name
     console_level = logging.DEBUG if console_level == 'debug' else logging.INFO
 
     logger = logging.getLogger(name)
@@ -63,15 +62,17 @@ def setup_logger(name, logfile, console_level=None) -> Logger:
         '%(asctime)s - %(levelname)s - %(filename)s - %(lineno)d - %(message)s', '%Y-%m-%d %H:%M:%S')
     ch.setFormatter(ch_formatter)
 
-    # add the handlers to the logger
-    logger.addHandler(fh)
-    logger.addHandler(ch)
+    if not logger.hasHandlers():
+        # add the handlers to the logger
+        logger.addHandler(fh)
+        logger.addHandler(ch)
 
     logger.propagate = False
     return logger
 
 
-def setup(setup_parser, project_dir, *, parser_args=None) -> Tuple[Namespace, Logger, torch.device]:
+def setup(setup_parser: Callable[[Optional[list]], Namespace], project_dir, *, parser_args=None
+          ) -> Tuple[Namespace, Logger, torch.device]:
     from dotenv import load_dotenv
     load_dotenv()
     args: Namespace = setup_parser(parser_args)

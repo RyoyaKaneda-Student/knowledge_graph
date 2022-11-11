@@ -140,40 +140,44 @@ def _make_triple(read_path, write_path, dict_e: WordDictType, dict_r: WordDictTy
         f.create_dataset(TRIPLE, data=np.array(list_3))
 
 
-def make_triple(dataset_name, train_file='train.txt', valid_file='valid.txt', test_file='test.txt', *, logger: Logger):
+def count_e_r(counter_e, counter_r, path_):
+    with open(path_) as f:
+        line = f.readline()
+        while line:
+            e1, r, e2 = line.replace('\n', '').lower().split('\t')
+            counter_e[e1] += 1
+            counter_r[r] += 1
+            counter_e[e2] += 1
+            line = f.readline()
+    return counter_e, counter_r
+
+
+def make_triple(dataset_name, folder_=KGDATA, train_file='train.txt', valid_file='valid.txt', test_file='test.txt', *, logger: Logger):
     # mode_list = [TRAIN, VALID, TEST]
     logger.info("make triple data")
-    save_hdf_path = os.path.join(PROCESSED_DATA_PATH, 'KGdata', dataset_name, f"info.hdf5")
+    save_hdf_path = os.path.join(PROCESSED_DATA_PATH, folder_, dataset_name, f"info.hdf5")
     mode2file_list = {TRAIN: train_file, VALID: valid_file, TEST: test_file}
-    mode2triple_filepath = {
-        mode: os.path.join(EXTERNAL_DATA_PATH, KGDATA, dataset_name, file_)
-        for mode, file_ in mode2file_list.items()
-    }
 
     counter_e = Counter()
     counter_r = Counter()
 
-    for _, path_ in mode2triple_filepath.items():
-        with open(path_) as f:
-            line = f.readline()
-            while line:
-                e1, r, e2 = line.replace('\n', '').lower().split('\t')
-                counter_e[e1] += 1
-                counter_r[r] += 1
-                counter_e[e2] += 1
-                line = f.readline()
+    for _, file_ in mode2file_list.items():
+        if file_ is None: continue
+        path_ = os.path.join(EXTERNAL_DATA_PATH, folder_, dataset_name, file_)
+        counter_e, counter_r = count_e_r(counter_e, counter_r, path_)
     assert sum(counter_e.values()) // 2 == sum(counter_r.values())
 
     dict_e: WordDictType = {word: WordInfo(i, c) for i, (word, c) in enumerate(counter_e.most_common())}
     dict_r: WordDictType = {word: WordInfo(i, c, False) for i, (word, c) in enumerate(counter_r.most_common())}
 
     len_dict_r = len(dict_r)
-    dict_r |= {keyREVERSE(key): WordInfo(value.id, value.count, True) for key, value in dict_r.items()}
+    dict_r |= {keyREVERSE(key): WordInfo(value.id+len_dict_r, value.count, True) for key, value in dict_r.items()}
     assert len(dict_r) == 2 * len_dict_r
 
     for mode, file_ in mode2file_list.items():
-        read_path = os.path.join(EXTERNAL_DATA_PATH, KGDATA, dataset_name, file_)
-        write_path = os.path.join(PROCESSED_DATA_PATH, KGDATA, dataset_name, modeHDF5(mode))
+        if file_ is None: continue
+        read_path = os.path.join(EXTERNAL_DATA_PATH, folder_, dataset_name, file_)
+        write_path = os.path.join(PROCESSED_DATA_PATH, folder_, dataset_name, modeHDF5(mode))
         _make_triple(read_path, write_path, dict_e, dict_r, mode)
 
     entity_length = len(dict_e)
@@ -205,15 +209,19 @@ def make_triple(dataset_name, train_file='train.txt', valid_file='valid.txt', te
         f.create_dataset(INFO_KEY_NAME.id2is_reverse_relation, data=id2is_reverse_relation)
 
 
-def make_er_all_tail(dataset_name, *, logger: Logger):
+def make_er_all_tail(dataset_name, folder_=KGDATA, *, logger: Logger, do_train=True, do_valid=True, do_test=True):
     logger.info("make all_tail data")
-    mode_list = [TRAIN, VALID, TEST]
+    mode_list = [
+        TRAIN if do_train else None,
+        VALID if do_valid else None,
+        TEST if do_test else None
+    ]
     mode2id = {TRAIN: 1, VALID: 2, TEST: 3}
     # info_hdf_path = os.path.join(PROCESSED_DATA_PATH, 'KGdata', dataset_name, f"info.hdf5")
-    save_hdf_path = os.path.join(PROCESSED_DATA_PATH, 'KGdata', dataset_name, f"all_tail.hdf5")
+    save_hdf_path = os.path.join(PROCESSED_DATA_PATH, folder_, dataset_name, f"all_tail.hdf5")
     mode2triple_hdf_path = {
-        mode: os.path.join(PROCESSED_DATA_PATH, KGDATA, dataset_name, modeHDF5(mode))
-        for mode in mode_list
+        mode: os.path.join(PROCESSED_DATA_PATH, folder_, dataset_name, modeHDF5(mode))
+        for mode in mode_list if mode is not None
     }
     er2all_tail: defaultdict[ER_Type, All_Tail_Type] = defaultdict(lambda: [])
     for mode, triple_hdf_path in mode2triple_hdf_path.items():
@@ -304,6 +312,10 @@ def yago3_10(*, logger: Logger):
     make_triple(name, logger=logger)
     make_er_all_tail(name, logger=logger)
     make_ee_all_relation(name, logger=logger)
+
+
+def kgc_data(*, logger: Logger):
+    pass
 
 
 def main():

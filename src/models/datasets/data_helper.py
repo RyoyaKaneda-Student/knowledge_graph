@@ -7,7 +7,7 @@ from pathlib import Path
 # python
 from logging import Logger
 # noinspection PyUnresolvedReferences
-from typing import Tuple, Optional, Union, Callable
+from typing import Tuple, Optional, Union, Callable, Final, Literal, get_args
 from dataclasses import dataclass
 # from tqdm import tqdm
 # from argparse import Namespace
@@ -37,6 +37,9 @@ sys.path.append(os.path.join(PROJECT_DIR, 'src'))
 
 PROCESSED_DATA_PATH = './data/processed/'
 EXTERNAL_DATA_PATH = './data/external/'
+
+KGDATA_LITERAL: Final = Literal['FB15k-237', 'WN18RR', 'YAGO3-10', 'KGC-ALL']
+KGDATA_ALL: Final = get_args(KGDATA_LITERAL)
 
 
 @dataclass(init=False)
