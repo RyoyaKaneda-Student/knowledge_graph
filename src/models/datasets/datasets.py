@@ -141,6 +141,49 @@ class MyTripleDataset(Dataset):
         return len(self.triple)
 
 
+@dataclasses.dataclass(init=False)
+class SimpleTriple(Dataset):
+    triple: torch.Tensor
+
+    def __init__(self, triple: np.ndarray, ):
+        self.triple = torch.from_numpy(triple)
+
+    def __getitem__(self, index: int):
+        return self.triple[index]
+
+    def __len__(self) -> int:
+        return len(self.triple)
+
+
+@dataclasses.dataclass(init=False)
+class StoryTriple(Dataset):
+    triple: torch.Tensor
+    bos_indices: torch.Tensor
+    max_len: int
+
+    def __init__(self, triple: np.ndarray, bos_indices: np.ndarray,max_len: int,
+                 padding_h, padding_r, padding_t,
+                 sep_h, sep_r, sep_t):
+        self.padding_tensor = torch.tensor([padding_h, padding_r, padding_t])
+        self.sep_tensor = torch.tensor([sep_h, sep_r, sep_t])
+
+        self.triple = torch.from_numpy(triple)
+        self.bos_indices = torch.from_numpy(bos_indices)
+        self.max_len = max_len
+
+    def __getitem__(self, index: int):
+        index_ = self.bos_indices[index]
+        stories = self.triple[index_:]
+        if len(stories) > self.max_len:
+            return stories[:self.max_len]
+        else:
+            tmp = self.padding_tensor.repeat(self.max_len-len(stories), 1)
+            return torch.cat((stories, tmp))
+
+    def __len__(self) -> int:
+        return len(self.bos_indices)
+
+
 def main():
     pass
 

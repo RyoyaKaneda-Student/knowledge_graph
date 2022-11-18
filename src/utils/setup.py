@@ -94,9 +94,15 @@ def save_param(args: Namespace):
         param_file = f"{project_dir}/{param_file}"
 
         os.makedirs(os.path.dirname(param_file), exist_ok=True)
-        with open(param_file, "wb") as tf:
-            pickle.dump(args, tf)
+        with open(param_file, "wb") as bf:
+            pickle.dump(args, bf)
         args['logger'].info("save params")
+
+
+def load_param(param_file_path: str):
+    with open(param_file_path, 'rb') as bf:
+        args = pickle.load(bf)
+    return Namespace(**args)
 
 
 def main(setup_parser, project_dir):

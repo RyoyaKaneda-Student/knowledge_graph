@@ -121,6 +121,17 @@ def get_true_position_items(
     return rev
 
 
+def replace_list_value(list_: list[_T], before_after_list: Iterable[tuple[_T, _T]]) -> list[_T]:
+    for before_, after_ in before_after_list:
+        list_ = [v if v != before_ else after_ for v in list_]
+    return list_
+
+
+def remove_duplicate_order_save(list_):
+    return sorted(set(list_), key=list_.index)
+
+
+
 def true_count(*args):
     return len([True for item in args if item is True])
 

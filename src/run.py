@@ -21,6 +21,8 @@ from torch import nn
 import torch.nn.functional as F
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+
+from models.KGModel.kg_story_transformer import KgStoryTransformer01
 from utils.numpy import negative_sampling
 
 from models.utilMetrics.ranking_metric import RankingMetric
@@ -79,6 +81,7 @@ name2model = {
     'transformere3': TransformerVer3E,
     'transformere3_1': TransformerVer3E_1,
     'mlpmixere': MlpMixE,
+    'kg-story-transformer01': KgStoryTransformer01
 }
 
 
@@ -650,10 +653,10 @@ def testing_ere(
 
 def train_setup(args, *, logger: Logger):
     kg_data: KGDATA_LITERAL = args.KGdata
-    entity_special_num = args.entity_special_num
-    relation_special_num = args.relation_special_num
-    batch_size = args.batch_size
-    train_type = args.train_type
+    entity_special_num: int = args.entity_special_num
+    relation_special_num: int = args.relation_special_num
+    batch_size: int = args.batch_size
+    train_type: str = args.train_type
 
     assert batch_size is not None and train_type is not None
 
@@ -664,13 +667,56 @@ def train_setup(args, *, logger: Logger):
 
     # dataloader
     logger.info("{} start".format("make dataloader"))
-    if args.do_debug_model and train_type == ALL_TAIL:
-        make_dataloader_all_tail_debug_model(data_helper, batch_size, logger=logger)
-    elif train_type == ALL_TAIL:
-        make_dataloader_all_tail(data_helper, batch_size, logger=logger)
+    if train_type == ALL_TAIL:
+        if args.do_debug_model:
+            make_dataloader_all_tail_debug_model(data_helper, batch_size, logger=logger)
+        else:
+            make_dataloader_all_tail(data_helper, batch_size, logger=logger)
     elif train_type == TRIPLE:
         make_dataloader_triple(data_helper, batch_size)
+        pass
     else:
+        raise "Error."
+        pass
+    logger.info("{} end".format("make dataloader"))
+
+    # model
+    logger.info("{} start".format("make model"))
+    model = get_model(args, data_helper)
+    logger.info("{} end".format("make model"))
+
+    return data_helper, model
+
+
+def train_setup_for_kgc_data(args, *, logger: Logger):
+    kg_data: KGDATA_LITERAL = args.KGdata
+    entity_special_num: int = args.entity_special_num
+    relation_special_num: int = args.relation_special_num
+    batch_size: int = args.batch_size
+    train_type: str = args.train_type
+
+    assert batch_size is not None and train_type is not None
+
+    # load data
+    logger.info("{} start".format("load data"))
+    data_helper = MyDataHelper(
+        info_path, all_tail, train_path, None, None, logger=logger,
+        entity_special_num=entity_special_num, relation_special_num=relation_special_num,
+    )
+    logger.info("{} end".format("load data"))
+
+    # dataloader
+    logger.info("{} start".format("make dataloader"))
+    if train_type == ALL_TAIL:
+        if args.do_debug_model:
+            make_dataloader_all_tail_debug_model(data_helper, batch_size, logger=logger)
+        else:
+            make_dataloader_all_tail(data_helper, batch_size, logger=logger)
+    elif train_type == TRIPLE:
+        make_dataloader_triple(data_helper, batch_size)
+        pass
+    else:
+        raise "Error."
         pass
     logger.info("{} end".format("make dataloader"))
 

@@ -24,7 +24,9 @@ from torch.utils.data.dataloader import DataLoader
 from models.datasets.datasets import (
     MyDataset, MyDatasetWithFilter, MyTripleDataset
 )
+from utils.hdf5 import read_one_item
 from utils.setup import easy_logger
+from utils.typing import ConstValueClass
 from utils.utils import (
     version_check, EternalGenerator, true_count, get_true_position_items_using_getter
 )
@@ -38,8 +40,47 @@ sys.path.append(os.path.join(PROJECT_DIR, 'src'))
 PROCESSED_DATA_PATH = './data/processed/'
 EXTERNAL_DATA_PATH = './data/external/'
 
-KGDATA_LITERAL: Final = Literal['FB15k-237', 'WN18RR', 'YAGO3-10', 'KGC-ALL']
+KGDATA: Final = 'KGdata'
+KGCDATA: Final = 'KGCdata'
+KGDATA_LITERAL: Final = Literal['FB15k-237', 'WN18RR', 'YAGO3-10', 'KGC-ALL', 'KGC-ALL-SVO']
 KGDATA_ALL: Final = get_args(KGDATA_LITERAL)
+KGDATA2FOLDER_PATH = {
+    'FB15k-237': os.path.join(PROCESSED_DATA_PATH, KGDATA, 'FB15k-237'),
+    'WN18RR': os.path.join(PROCESSED_DATA_PATH, KGDATA, 'WN18RR'),
+    'YAGO3-10': os.path.join(PROCESSED_DATA_PATH, KGDATA, 'YAGO3-10'),
+    'KGC-ALL-SVO': os.path.join(PROCESSED_DATA_PATH, KGCDATA, 'All', 'SVO'),
+}
+
+
+class INFO_INDEX(ConstValueClass):
+    TRIPLE: Final = 'triple'
+    E_LEN: Final = 'entity_length'
+    R_LEN: Final = 'relation_length'
+    ENTITIES: Final = 'entities'
+    ID2COUNT_ENTITY: Final = 'id2count_entity'
+    RELATIONS: Final = 'relations'
+    IS_REV_RELATION: Final = 'id2is_reverse_relation'
+    ID2COUNT_RELATION: Final = 'id2count_relation'
+
+    @classmethod
+    def all_index(cls):
+        return [
+            cls.TRIPLE, cls.E_LEN, cls.R_LEN, cls.E_LEN, cls.ENTITIES,
+            cls.ID2COUNT_ENTITY, cls.RELATIONS, cls.IS_REV_RELATION, cls.ID2COUNT_RELATION
+        ]
+
+
+class ALL_TAIL_INDEX(ConstValueClass):
+    ER_LENGTH: Final = 'er_length'
+    ERS: Final = 'ers'
+    ID2ALL_TAIL_ROW: Final = 'id2all_tail_row'
+    ID2ALL_TAIL_ENTITY: Final = 'id2all_tail_entity'
+    ID2ALL_TAIL_MODE: Final = 'id2all_tail_mode'
+
+    @classmethod
+    def all_index(cls):
+        return [cls.ER_LENGTH, ALL_TAIL_INDEX.ERS,
+                ALL_TAIL_INDEX.ID2ALL_TAIL_ROW, ALL_TAIL_INDEX.ID2ALL_TAIL_ENTITY, ALL_TAIL_INDEX.ID2ALL_TAIL_MODE]
 
 
 @dataclass(init=False)
@@ -85,14 +126,14 @@ class MyRawData:
                  train_path: str, valid_path: str, test_path: str,
                  *, logger=None):
         with h5py.File(info_path, 'r') as f:
-            self.entity_length = f['entity_length'][()]
-            self.relation_length = f['relation_length'][()]
-            self.entities = [e.decode() for e in f['entities'][:]]
-            self.id2count_entity = f['id2count_entity'][:]
+            self.entity_length = f[INFO_INDEX.E_LEN][()]
+            self.relation_length = f[INFO_INDEX.R_LEN][()]
+            self.entities = [e.decode() for e in f[INFO_INDEX.ENTITIES][:]]
+            self.id2count_entity = f[INFO_INDEX.ID2COUNT_ENTITY][:]
 
-            self.relations = [r.decode() for r in f['relations'][:]]
-            self.is_reverse_relation = f['id2is_reverse_relation'][:]
-            self.id2count_relation = f['id2count_relation'][:]
+            self.relations = [r.decode() for r in f[INFO_INDEX.RELATIONS][:]]
+            self.is_reverse_relation = f[INFO_INDEX.IS_REV_RELATION][:]
+            self.id2count_relation = f[INFO_INDEX.ID2COUNT_RELATION][:]
 
         self.all_tail_path = all_tail_path
         self.all_relation_path = all_relation_path
@@ -108,25 +149,26 @@ class MyRawData:
 
     def init_triple(self, force_init=False) -> None:
         if self.loaded_triple and not force_init: return
-        train_path, valid_path, test_path = self.train_path, self.valid_path, self.test_path
-        rf = lambda _path: h5py.File(_path, 'r')
-        with rf(train_path) as f_train, rf(valid_path) as f_valid, rf(test_path) as f_test:
-            self.train_triple = f_train['triple'][:]
-            self.valid_triple = f_valid['triple'][:]
-            self.test_triple = f_test['triple'][:]
+        self.loaded_triple = True
+        self.train_triple, self.valid_triple, self.test_triple = [
+            read_one_item(_path, lambda f: f[INFO_INDEX.TRIPLE][:]) if _path is not None else None
+            for _path in (self.train_path, self.valid_path, self.test_path)
+        ]
 
     def init_all_tail(self, force_init=False) -> None:
         if self.loaded_all_tail and not force_init: return
+        self.loaded_all_tail = True
         all_tail_path = self.all_tail_path
         with h5py.File(all_tail_path, 'r') as f:
-            self.er_length = f['er_length'][()]
-            self.ers = f['ers'][:]
-            self.id2all_tail_row = f['id2all_tail_row'][:]
-            self.id2all_tail_entity = f['id2all_tail_entity'][:]
-            self.id2all_tail_mode = f['id2all_tail_mode'][:]
+            self.er_length = f[ALL_TAIL_INDEX.ER_LENGTH][()]
+            self.ers = f[ALL_TAIL_INDEX.ERS][:]
+            self.id2all_tail_row = f[ALL_TAIL_INDEX.ID2ALL_TAIL_ROW][:]
+            self.id2all_tail_entity = f[ALL_TAIL_INDEX.ID2ALL_TAIL_ENTITY][:]
+            self.id2all_tail_mode = f[ALL_TAIL_INDEX.ID2ALL_TAIL_MODE][:]
 
     def init_all_relation(self, force_init=False) -> None:
         if self.loaded_all_relation and not force_init: return
+        self.loaded_all_relation = True
         all_relation_path = self.all_relation_path
         with h5py.File(all_relation_path, 'r') as f:
             self.ee_length = f['ee_length'][()]
@@ -140,7 +182,8 @@ class MyRawData:
             logger.info("==========Show MyRawData==========")
             logger.info(f"entity_length: {self.entity_length}")
             logger.info(f"relation_length: {self.relation_length}")
-            logger.info(f"er_list length: {self.er_length}")
+            if self.loaded_all_tail:
+                logger.info(f"er_list length: {self.er_length}")
             logger.info("==========Show MyRawData==========")
 
     def __getattr__(self, item):
@@ -176,8 +219,8 @@ class MyRawData:
 @dataclass(init=False)
 class MyDataHelper:
     _data: MyRawData
-    _entity_special_num: int
-    _relation_special_num: int
+    _special_entity_list: list
+    _special_relation_list: list
 
     _processed_train_triple: Optional[np.ndarray]
     _processed_valid_triple: Optional[np.ndarray]
@@ -192,8 +235,8 @@ class MyDataHelper:
         super().__init__()
         self._data: MyRawData = MyRawData(
             info_path, all_tail_path, '', train_path, valid_path, test_path, logger=None)
-        self._entity_special_num: int = entity_special_num
-        self._relation_special_num: int = relation_special_num
+        self._special_entity_list: list = [f'special_e_{i}' for i in range(entity_special_num)]
+        self._special_relation_list: list = [f'special_d_{i}' for i in range(relation_special_num)]
 
         self._processed_train_triple = None
         self._processed_valid_triple = None
@@ -206,13 +249,21 @@ class MyDataHelper:
 
         self.show(logger)
 
+    def set_special_names(self, index2name_entity: dict[int, str], index2name_relation: dict[int, str]):
+        for i, name in index2name_entity.items():
+            assert type(i) is int and type(name) is str
+            self._special_entity_list[i] = name
+        for i, name in index2name_relation.items():
+            assert type(i) is int and type(name) is str
+            self._special_relation_list[i] = name
+
     def _processed_triple(self, triple) -> np.ndarray:
         e_special_num, r_special_num = self.get_er_special_num()
         triple = triple + np.array([e_special_num, r_special_num, e_special_num])
         return triple
 
     def get_er_special_num(self) -> Tuple[int, int]:
-        return self._entity_special_num, self._relation_special_num
+        return len(self._special_entity_list), len(self._special_relation_list)
 
     def set_loaders(self,
                     train_dataloader: DataLoader, train_valid_dataloader: DataLoader,
@@ -261,16 +312,16 @@ class MyDataHelper:
 
     @property
     def processed_entity_length(self) -> int:
-        return self.data.entity_length + self._entity_special_num
+        return self.data.entity_length + len(self._special_entity_list)
 
     @property
     def processed_relation_length(self) -> int:
-        return self.data.relation_length + self._relation_special_num
+        return self.data.relation_length + len(self._special_relation_list)
 
     @property
     def processed_r_length_without_reverse(self) -> int:
         assert self.data.relation_length % 2 == 0
-        return self.data.relation_length // 2 + self._relation_special_num
+        return self.data.relation_length // 2 + len(self._special_relation_list)
 
     @property
     def processed_ers(self) -> np.ndarray:
@@ -326,8 +377,7 @@ class MyDataHelper:
 
     @property
     def processed_entities(self) -> list:
-        entity_special_num, _ = self.get_er_special_num()
-        return [f'special_e_{i}' for i in range(entity_special_num)] + self.data.entities
+        return self._special_entity_list + self.data.entities
 
     @property
     def processed_id2count_entity(self):
@@ -337,8 +387,7 @@ class MyDataHelper:
 
     @property
     def processed_relations(self) -> list:
-        _, relation_special_num = self.get_er_special_num()
-        return [f'special_r_{i}' for i in range(relation_special_num)] + self.data.relations
+        return self._special_relation_list + self.data.relations
 
     @property
     def processed_id2count_relation(self):
@@ -359,8 +408,9 @@ class MyDataHelper:
             logger.info("==========")
             self.data.show_log(logger)
             logger.info("==========")
-            logger.info(f"entity_special_num: {self._entity_special_num}")
-            logger.info(f"relation_special_num: {self._relation_special_num}")
+            entity_special_num, relation_special_num = self.get_er_special_num()
+            logger.info(f"entity_special_num: {entity_special_num}")
+            logger.info(f"relation_special_num: {relation_special_num}")
             logger.info("==========Show DataHelper==========")
 
     def __str__(self):
@@ -402,15 +452,18 @@ def add_negative_to_triple(
     )
 
 
-def load_preprocess_data(kg_data, entity_special_num, relation_special_num, *, logger=None):
-    info_path, all_tail, train_path, valid_path, test_path = [
-        os.path.join(PROCESSED_DATA_PATH, 'KGdata', kg_data, _name)
+def load_preprocess_data(kg_data: KGDATA_LITERAL, entity_special_num, relation_special_num, *, logger=None):
+    paths = [
+        os.path.join(KGDATA2FOLDER_PATH[kg_data], _name)
         for _name in ('info.hdf5', 'all_tail.hdf5', 'train.hdf5', 'valid.hdf5', 'test.hdf5')
     ]
+    info_path, all_tail, train_path, valid_path, test_path = [
+        _path if os.path.exists(_path) else None for _path in paths
+    ]
+    logger.debug(f"{info_path=}, {all_tail=}, {train_path=}, {valid_path=}, {test_path=}")
     data_helper = MyDataHelper(
-        info_path, all_tail, train_path, valid_path, test_path,
+        info_path, all_tail, train_path, valid_path, test_path, logger=logger,
         entity_special_num=entity_special_num, relation_special_num=relation_special_num,
-        logger=logger
     )
     return data_helper
 
@@ -419,7 +472,7 @@ def main():
     version_check(torch, pd, optuna)
     logger = easy_logger(console_level='debug')
     logger.debug(f"{PROJECT_DIR=}")
-    kg_data = 'WN18RR'
+    kg_data: KGDATA_LITERAL = 'WN18RR'
     info_path, all_tail, train_path, valid_path, test_path = [
         os.path.join(PROCESSED_DATA_PATH, 'KGdata', kg_data, _name)
         for _name in ('info.hdf5', 'all_tail.hdf5', 'train.hdf5', 'valid.hdf5', 'test.hdf5')
@@ -446,3 +499,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    pass

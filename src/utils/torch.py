@@ -155,6 +155,7 @@ def save_model(model: nn.Module, model_path: str, device: torch.device):
     Returns:
 
     """
+    device = device or model.d
     with force_cpu(model, device):
         torch.save(model.state_dict(), model_path)
 
