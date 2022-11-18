@@ -27,7 +27,7 @@ from torch.utils.tensorboard import SummaryWriter
 from models.KGModel.kg_story_transformer import KgStoryTransformer01, add_bos_eos
 from models.datasets.data_helper import (
     MyDataHelper, )
-from models.datasets.datasets import StoryTriple
+from models.datasets.datasets import StoryTriple, StoryTripleForValid
 from utils.setup import setup, save_param
 from utils.str_process import line_up_key_value
 from utils.torch import (
@@ -129,12 +129,12 @@ def setup_parser(args: Namespace = None) -> Namespace:
     paa('--batch-size', help='batch size', type=int, default=4)
     paa('--max-len', help='max length of 1 batch. default: 256', type=int, default=256)
     paa('--mask-percent', help='default: 0.15', type=float, default=0.15)
-    paa('--epoch', help='max epoch', type=int)
+    paa('--epoch', help='max epoch', type=int, default=2)
 
     paa('--model-path', type=str, help='model path')
     # optimizer
     paa('--lr', type=float, default=0.003, help='learning rate (default: 0.003)')
-    paa('--label-smoothing', type=float, default=0.1, help='Label smoothing value to use. Default: 0.1')
+    paa('--valid-interval', type=int, default=1, help='valid-interval', )
     #
     paa('--transformer-drop', type=float, default=0.1, help='transformer-drop. Default: 0.1.')
     paa('--position-encoder-drop', type=float, default=0.1, help='position-encoder-drop. Default: 0.1.')
@@ -161,6 +161,7 @@ def pre_training(
     loss_fn = torch.nn.CrossEntropyLoss()
     checkpoint_path = MODEL_TMP_PATH.format(line_up_key_value(pid=args.pid, uid=uid))
     train = data_helper.train_dataloader
+    valid = data_helper.valid_dataloader
     mask_percent = args.mask_percent
     max_epoch = args.epoch
 
@@ -168,7 +169,7 @@ def pre_training(
 
     @force_gc_after_function
     def train_step(_: Engine, batch) -> dict:
-        triple = batch.to(device)
+        triple = batch
         # triple.shape = (batch, max_len, 3)
         opt.zero_grad()
         triple = triple.to(device)
@@ -181,26 +182,75 @@ def pre_training(
         triple[mask_head][:, 0] = mask_token_e
         triple[mask_relation][:, 1] = mask_token_r
         triple[mask_tail][:, 2] = mask_token_e
-        _, story_pred, relation_pred, entity_pred = model.pre_train_forward(triple, mask_head, mask_relation, mask_tail)
-        story_loss: torch.Tensor = loss_fn(story_pred, triple_ans[mask_head][:, 0])
-        relation_loss: torch.Tensor = loss_fn(relation_pred, triple_ans[mask_relation][:, 1])
-        entity_loss: torch.Tensor = loss_fn(entity_pred, triple_ans[mask_tail][:, 2])
-        loss: torch.Tensor = story_loss + relation_loss + entity_loss
-        loss.backward()
-        opt.step()
         rev = {
-            LOSS: loss,
             STORY_ANS: triple_ans[mask_head][:, 0],
             RELATION_ANS: triple_ans[mask_relation][:, 1],
             ENTITY_ANS: triple_ans[mask_tail][:, 2],
+        }
+        del triple_ans
+        _, story_pred, relation_pred, entity_pred = model.pre_train_forward(triple, mask_head, mask_relation, mask_tail)
+        story_loss: torch.Tensor = loss_fn(story_pred, rev[STORY_ANS])
+        relation_loss: torch.Tensor = loss_fn(relation_pred, rev[RELATION_ANS])
+        entity_loss: torch.Tensor = loss_fn(entity_pred, rev[ENTITY_ANS])
+        loss: torch.Tensor = story_loss + relation_loss + entity_loss
+        loss.backward()
+        opt.step()
+        tmp = {
+            LOSS: loss,
             STORY_PRED: story_pred, RELATION_PRED: relation_pred, ENTITY_PRED: entity_pred,
             STORY_LOSS: story_loss, RELATION_LOSS: relation_loss, ENTITY_LOSS: entity_loss,
         }
-        return {key: value.detach() for key, value in rev.items()}
+        rev.update({key: value.detach() for key, value in tmp.items()})
+        return rev
+
+    @torch.no_grad()
+    @force_gc_after_function
+    def valid_step(_: Engine, batch) -> dict:
+        triple, valid_filter = batch
+        batch_size = triple.shape[0]
+
+        # triple.shape = (batch, max_len, 3)
+        # valid_filter.shape = (batch, max_len)
+        triple_ans: torch.Tensor = triple.detach()
+        rev = {
+            STORY_ANS: triple_ans[valid_filter][:, 0],
+            RELATION_ANS: triple_ans[valid_filter][:, 1],
+            ENTITY_ANS: triple_ans[valid_filter][:, 2],
+        }
+
+        triple_check_s: torch.Tensor = triple.detach()
+        triple_check_r: torch.Tensor = triple.detach()
+        triple_check_e: torch.Tensor = triple.detach()
+
+        triple_check_s[valid_filter][:, 0] = mask_token_e
+        triple_check_r[valid_filter][:, 1] = mask_token_r
+        triple_check_e[valid_filter][:, 2] = mask_token_e
+        triple3 = torch.cat([triple_check_s, triple_check_r, triple_check_e])
+
+        tmp = torch.zeros_like(valid_filter)
+        valid_filter_s = torch.cat([valid_filter, tmp, tmp])
+        valid_filter_r = torch.cat([tmp, valid_filter, tmp])
+        valid_filter_e = torch.cat([tmp, tmp, valid_filter])
+
+        _, story_pred, relation_pred, entity_pred = model.pre_train_forward(
+            triple3, valid_filter_s, valid_filter_r, valid_filter_e)
+
+        story_loss: torch.Tensor = loss_fn(story_pred, rev[STORY_ANS])
+        relation_loss: torch.Tensor = loss_fn(relation_pred, rev[RELATION_ANS])
+        entity_loss: torch.Tensor = loss_fn(entity_pred, rev[ENTITY_ANS])
+        loss: torch.Tensor = story_loss + relation_loss + entity_loss
+
+        rev.update({
+            STORY_PRED: story_pred, RELATION_PRED: relation_pred, ENTITY_PRED: entity_pred,
+            LOSS: loss, STORY_LOSS: story_loss, RELATION_LOSS: relation_loss, ENTITY_LOSS: entity_loss,
+        })
+
+        return rev
 
     trainer = Engine(train_step)
+    evaluator = Engine(valid_step)
 
-    # loss and average
+    # loss and average of trainer
     Average(output_transform=lambda _dict: _dict[LOSS]).attach(trainer, LOSS)
     Average(output_transform=lambda x: x[STORY_LOSS]).attach(trainer, STORY_LOSS)
     Average(output_transform=lambda x: x[RELATION_LOSS]).attach(trainer, RELATION_LOSS)
@@ -209,6 +259,16 @@ def pre_training(
     Accuracy(output_transform=lambda x: (x[RELATION_PRED], x[RELATION_ANS])).attach(trainer, RELATION_ACCURACY)
     Accuracy(output_transform=lambda x: (x[RELATION_PRED], x[RELATION_ANS])).attach(trainer, RELATION_ACCURACY)
     Accuracy(output_transform=lambda x: (x[ENTITY_PRED], x[ENTITY_ANS])).attach(trainer, ENTITY_ACCURACY)
+
+    # loss and average of evaluator
+    Average(output_transform=lambda _dict: _dict[LOSS]).attach(evaluator, LOSS)
+    Average(output_transform=lambda x: x[STORY_LOSS]).attach(evaluator, STORY_LOSS)
+    Average(output_transform=lambda x: x[RELATION_LOSS]).attach(evaluator, RELATION_LOSS)
+    Average(output_transform=lambda x: x[ENTITY_LOSS]).attach(evaluator, ENTITY_LOSS)
+    Accuracy(output_transform=lambda x: (x[STORY_PRED], x[STORY_ANS])).attach(evaluator, STORY_ACCURACY)
+    Accuracy(output_transform=lambda x: (x[RELATION_PRED], x[RELATION_ANS])).attach(evaluator, RELATION_ACCURACY)
+    Accuracy(output_transform=lambda x: (x[RELATION_PRED], x[RELATION_ANS])).attach(evaluator, RELATION_ACCURACY)
+    Accuracy(output_transform=lambda x: (x[ENTITY_PRED], x[ENTITY_ANS])).attach(evaluator, ENTITY_ACCURACY)
 
     @trainer.on(Events.EPOCH_STARTED)
     def start_epoch_func(engine: Engine):
@@ -226,18 +286,31 @@ def pre_training(
             if summary_writer is not None:
                 summary_writer.add_scalar(f"pre_train/{_name}", _value, global_step=epoch)
 
+    @trainer.on(Events.EPOCH_COMPLETED(every=args.valid_interval))
+    def valid_func(engine: Engine):
+        epoch = engine.state.epoch
+        logger.info(f"----- valid start ({epoch=}) -----")
+        evaluator.run(valid)
+        metrics = evaluator.state.metrics
+        for _name in METRIC_NAMES:
+            _value = metrics[_name]
+            logger.debug(f"-----metrics[{_name}]={_value}")
+            if summary_writer is not None:
+                summary_writer.add_scalar(f"pre_valid/{_name}", _value, global_step=epoch)
+        logger.info("----- valid end -----")
+
     total_timer = Timer(average=False)
 
     @trainer.on(Events.STARTED)
     def start_train(engine: Engine):
         total_timer.reset()
-        logger.info("training start. epoch length = {}".format(engine.state.max_epochs))
+        logger.info("pre training start. epoch length = {}".format(engine.state.max_epochs))
 
     @trainer.on(Events.COMPLETED)
     def complete_train(engine: Engine):
         epoch = engine.state.epoch
         time_str = elapsed_time_str(total_timer.value())
-        logger.info("training complete. finish epoch: {:>5}, time: {:>7}".format(epoch, time_str))
+        logger.info("pre training complete. finish epoch: {:>5}, time: {:>7}".format(epoch, time_str))
 
     @trainer.on(Events.EPOCH_COMPLETED)
     def print_time_per_epoch(engine: Engine):
@@ -291,24 +364,46 @@ def main_function(args: Namespace, *, logger: Logger):
 
     num_entities, num_relations = len(data_helper.processed_entities), len(data_helper.processed_relations)
     triple = data_helper.processed_train_triple
+    len_of_default_triple = len(triple)
+
+    kill_entity = entities.index('word.predicate:kill')
+    notKill_entity = entities.index('word.predicate:notKill')
+    beKilled_entity = entities.index('word.predicate:beKilled')
 
     triple = add_bos_eos(triple,
                          bos_token_e, bos_token_r, bos_token_e,
                          eos_token_e, eos_token_r, eos_token_e,
-                         is_shuffle_in_same_head=True,
-                         )
+                         is_shuffle_in_same_head=True, )
+
+    cannot_valid_filter: np.ndarray = (triple[:, 0] < 6) | (triple[:, 2] == kill_entity) | \
+                                      (triple[:, 2] == notKill_entity) | (triple[:, 2] == beKilled_entity)
+    prob = (~cannot_valid_filter).astype(np.float)
+    valid_indices = np.random.choice(np.arange(len(triple)),
+                                     np.floor(0.1 * len_of_default_triple).astype(np.int), p=(prob / np.sum(prob)))
+    valid_filter = np.zeros(len(triple), dtype=bool)
+    valid_filter[valid_indices] = True
+
+    triple_train, triple_valid = triple[~valid_filter], triple
+
+    # region debug area
     logger.debug("----- show example -----")
     for i in range(20):
-        logger.debug(f"{entities[triple[i][0]]}, {relations[triple[i][1]]}, {entities[triple[i][2]]}")
+        logger.debug(f"{entities[triple_train[i][0]]}, {relations[triple_train[i][1]]}, {entities[triple_train[i][2]]}")
     logger.debug("----- show example -----")
+    # endregion
 
-    bos_indices = np.where(triple[:, 0] == bos_token_e)[0]
-    dataset = StoryTriple(triple, bos_indices, max_len,
-                          padding_token_e, padding_token_r, padding_token_e,
-                          sep_token_e, sep_token_r, sep_token_e)
+    dataset_train = StoryTriple(triple_train, np.where(triple_train[:, 0] == bos_token_e)[0], max_len,
+                                padding_token_e, padding_token_r, padding_token_e,
+                                sep_token_e, sep_token_r, sep_token_e)
+    dataset_valid = StoryTripleForValid(triple_valid,
+                                        np.where(triple_valid[:, 0] == bos_token_e)[0], valid_filter,
+                                        max_len,
+                                        padding_token_e, padding_token_r, padding_token_e,
+                                        sep_token_e, sep_token_r, sep_token_e)
 
-    dataloader = DataLoader(dataset, shuffle=True, batch_size=batch_size)
-    data_helper.set_loaders(dataloader, None, None, None)
+    dataloader_train = DataLoader(dataset_train, shuffle=True, batch_size=batch_size)
+    dataloader_valid = DataLoader(dataset_valid, shuffle=False, batch_size=batch_size // 4)
+    data_helper.set_loaders(dataloader_train, None, dataloader_valid, None)
 
     model = KgStoryTransformer01(args, num_entities, num_relations)
 
@@ -323,7 +418,7 @@ def main_function(args: Namespace, *, logger: Logger):
         )
         save_model(model, args.model_path, device=args.device)
 
-    return model, {'data_helper': data_helper, 'dataset': dataset}
+    return model, {'data_helper': data_helper, 'triple': triple, 'valid_filter': valid_filter}
 
 
 def main(args=None):

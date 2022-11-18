@@ -36,7 +36,7 @@ PREFIX_PREDICATE: Final = 'word.predicate'
 KGC_TYPE: Final = 'kgc:type'
 KGC_LABEL: Final = 'kgc:label'
 
-logger = easy_logger(console_level='info')
+logger: Logger = easy_logger(console_level='info')
 
 
 class KGC(DefinedNamespace):
@@ -410,7 +410,7 @@ class ConstName2:
     keyREVERSE: Final = lambda key: f'{key}_REVERSE'
 
 
-def write2_write_triples(fw_info, fw_train, entity_list, relation_list, is_rev_list, triple):
+def write2_write_triples(fw_info, fw_train, entity_list, relation_list, is_rev_list, triple, triple_raw=None):
     #
     del_data_if_exist(fw_info, INFO_INDEX.all_index())
     fw_info.create_dataset(INFO_INDEX.E_LEN, data=len(entity_list))
@@ -421,8 +421,9 @@ def write2_write_triples(fw_info, fw_train, entity_list, relation_list, is_rev_l
     fw_info.create_dataset(INFO_INDEX.ID2COUNT_ENTITY, data=np.bincount(triple[:, (0, 2)].flatten()))
     fw_info.create_dataset(INFO_INDEX.ID2COUNT_RELATION, data=np.bincount(triple[:, 1]))
     # triple
-    del_data_if_exist(fw_train, [INFO_INDEX.TRIPLE])
+    del_data_if_exist(fw_train, [INFO_INDEX.TRIPLE, f'{INFO_INDEX.TRIPLE}_raw'])
     fw_train.create_dataset(INFO_INDEX.TRIPLE, data=triple)
+    if triple_raw is not None: fw_train.create_dataset(f'{INFO_INDEX.TRIPLE}_raw', data=triple_raw)
 
 
 def write2_svo(title: str, read_group: Group):
@@ -475,22 +476,30 @@ def write2_sro(title: str, read_group: Group, general_read_group: Group):
     sro_triple_reverse = sro_triple[:, (2, 1, 0)]
     sro_triple_reverse[:, 1] += relation_len_no_reverse
 
+    # sro_triple = np.concatenate([sro_triple, sro_triple_reverse])
+
+    sro_triple_raw = [
+        [entity_list[s], relation_list[r], entity_list[o]]
+        for s, r, o in sro_triple
+    ]
+
     with (h5py.File(f"{ConstName2.WRITE_FILE}/{title}/SRO/info.hdf5", 'a') as fw_info,
           h5py.File(f"{ConstName2.WRITE_FILE}/{title}/SRO/train.hdf5", 'a') as fw_train):
-        write2_write_triples(fw_info, fw_train, entity_list, relation_list, is_rev_list, sro_triple)
+        write2_write_triples(fw_info, fw_train, entity_list, relation_list, is_rev_list, sro_triple,
+                             str_list_for_hdf5(sro_triple_raw))
 
 
 def write2_():
     with (h5py.File(ConstName1.FILE_NAME, 'r') as fr, ):
         general_read_group = fr[GENERAL]
-        for title_ja, (title, l10, l09, l08) in title_len_dict.items():
+        for title_ja, (title, _, _, _) in title_len_dict.items():
             # read
             read_group = fr[title]
             # svo
             write2_svo(title, read_group)
             # spo
             write2_sro(title, read_group, general_read_group)
-            del title_ja, title, l10, l09, l08
+            del title_ja, title
         read_group = fr[ALL_TITLE]
         write2_svo(ALL_TITLE, read_group)
         write2_sro(ALL_TITLE, read_group, general_read_group)

@@ -149,11 +149,11 @@ def make_story_list(g, usetitle, Edict, Rdict):
 def show_all_s(g, s, Edict: dict, Rdict: dict):
     for s, p, o in g.triples((s, None, None)):
         _s, _p, _o = change_name(g, s, p, o)
-        print("show SPO.", _s, _p, _o)
+        print("show SRO.", _s, _p, _o)
         _s = Edict[_s] if _s in Edict.keys() else '_'
         _p = Rdict[_p] if _p in Rdict.keys() else '_'
         _o = Edict[_o] if _o in Edict.keys() else '_'
-        # print("show SPO IDs.", _s, _p, _o)
+        # print("show SRO IDs.", _s, _p, _o)
 
 
 def function01(usetitle):

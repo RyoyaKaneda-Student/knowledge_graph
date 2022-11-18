@@ -157,16 +157,20 @@ class SimpleTriple(Dataset):
 
 @dataclasses.dataclass(init=False)
 class StoryTriple(Dataset):
+    padding_tensor: torch.Tensor
+    sep_tensor: torch.Tensor
     triple: torch.Tensor
     bos_indices: torch.Tensor
     max_len: int
 
-    def __init__(self, triple: np.ndarray, bos_indices: np.ndarray,max_len: int,
+    def __init__(self, triple: np.ndarray,
+                 bos_indices: np.ndarray,
+                 max_len: int,
                  padding_h, padding_r, padding_t,
-                 sep_h, sep_r, sep_t):
+                 sep_h, sep_r, sep_t,
+                 ):
         self.padding_tensor = torch.tensor([padding_h, padding_r, padding_t])
         self.sep_tensor = torch.tensor([sep_h, sep_r, sep_t])
-
         self.triple = torch.from_numpy(triple)
         self.bos_indices = torch.from_numpy(bos_indices)
         self.max_len = max_len
@@ -177,11 +181,40 @@ class StoryTriple(Dataset):
         if len(stories) > self.max_len:
             return stories[:self.max_len]
         else:
-            tmp = self.padding_tensor.repeat(self.max_len-len(stories), 1)
+            tmp = self.padding_tensor.repeat(self.max_len - len(stories), 1)
             return torch.cat((stories, tmp))
 
     def __len__(self) -> int:
         return len(self.bos_indices)
+
+
+@dataclasses.dataclass(init=False)
+class StoryTripleForValid(StoryTriple):
+    valid_filter: torch.Tensor
+
+    def __init__(self, triple: np.ndarray,
+                 bos_indices: np.ndarray,
+                 valid_filter: np.ndarray,
+                 max_len: int,
+                 padding_h, padding_r, padding_t,
+                 sep_h, sep_r, sep_t,
+                 ):
+        super().__init__(triple, bos_indices, max_len, padding_h, padding_r, padding_t, sep_h, sep_r, sep_t)
+        assert len(triple) == len(valid_filter)
+        self.valid_filter = torch.from_numpy(valid_filter)
+
+    def __getitem__(self, index: int):
+        triple = super(StoryTripleForValid, self).__getitem__(index)
+        index_ = self.bos_indices[index]
+        valid_filter = self.valid_filter[index_:]
+        max_len = self.max_len
+        if len(valid_filter) > max_len:
+            rev = valid_filter[:max_len]
+        else:
+            tmp_valid_indices = torch.zeros(max_len - len(valid_filter), dtype=torch.bool)
+            rev = torch.cat((valid_filter, tmp_valid_indices))
+        assert len(triple) == len(rev)
+        return triple, rev
 
 
 def main():
