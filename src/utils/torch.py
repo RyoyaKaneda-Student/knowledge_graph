@@ -184,24 +184,6 @@ def torch_fix_seed(seed: int = 42) -> None:
     torch.use_deterministic_algorithms = True
 
 
-def decorate_loader(_loader: DataLoader, no_show_bar: bool = False) -> Union[enumerate, tqdm]:
-    """
-    decorate with tqdm and enumerate.
-
-    Args:
-        _loader (DataLoader): DataLoader that you want to decorate.
-        no_show_bar (:obj:`bool`, optional): if True, not use enumerate. Defaults to False.
-
-    Returns:
-        DataLoader: decorated loader.
-
-    """
-    if no_show_bar:
-        return enumerate(_loader)
-    else:
-        return tqdm(enumerate(_loader), total=len(_loader), leave=False)
-
-
 def requires_grad_param_num(model: nn.Module):
     """
     Get the number of gradable params.

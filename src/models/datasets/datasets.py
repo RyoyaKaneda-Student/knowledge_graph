@@ -175,14 +175,27 @@ class StoryTriple(Dataset):
         self.bos_indices = torch.from_numpy(bos_indices)
         self.max_len = max_len
 
+    def shuffle_in_1story(self):
+        triple = self.triple
+        len_triple = len(self.triple)
+        bos_index = self.bos_indices[0]
+        for bos_index_new in self.bos_indices[1:]:
+            triple[bos_index+1: bos_index_new-1] = \
+                triple[bos_index+1: bos_index_new-1][torch.randperm(bos_index_new-bos_index-2)]
+            bos_index = bos_index_new
+        triple[bos_index+1: len(triple)-1] = \
+            triple[bos_index+1: len(triple)-1][torch.randperm(len(triple) - bos_index-2)]
+        assert len_triple == len(triple)
+        self.triple = triple
+
+
     def __getitem__(self, index: int):
         index_ = self.bos_indices[index]
         stories = self.triple[index_:]
         if len(stories) > self.max_len:
             return stories[:self.max_len]
         else:
-            tmp = self.padding_tensor.repeat(self.max_len - len(stories), 1)
-            return torch.cat((stories, tmp))
+            return torch.cat((stories, self.triple[0:self.max_len - len(stories)]))
 
     def __len__(self) -> int:
         return len(self.bos_indices)
@@ -211,9 +224,7 @@ class StoryTripleForValid(StoryTriple):
         if len(valid_filter) > max_len:
             rev = valid_filter[:max_len]
         else:
-            tmp_valid_indices = torch.zeros(max_len - len(valid_filter), dtype=torch.bool)
-            rev = torch.cat((valid_filter, tmp_valid_indices))
-        assert len(triple) == len(rev)
+            rev = torch.cat((valid_filter, self.valid_filter[0:max_len - len(valid_filter)]))
         return triple, rev
 
 

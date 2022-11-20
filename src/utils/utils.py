@@ -131,7 +131,6 @@ def remove_duplicate_order_save(list_):
     return sorted(set(list_), key=list_.index)
 
 
-
 def true_count(*args):
     return len([True for item in args if item is True])
 
@@ -159,8 +158,8 @@ def is_same_len_in_list(*args) -> bool:
     return is_same_item_in_list(*len_in_lists(*args))
 
 
-def version_check(*args, logger=None):
-    if logger is None: logger = FakeLogger()
+@add_logger_if_logger_is_none
+def version_check(*args, logger):
     logger.debug("====================version check====================")
     for item in args:
         try:

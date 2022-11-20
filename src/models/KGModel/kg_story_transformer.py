@@ -83,6 +83,8 @@ class KgStoryTransformer01(torch.nn.Module):
         self.weight_relation = torch.nn.Parameter(torch.tensor(1.0))
         self.weight_tail = torch.nn.Parameter(torch.tensor(1.0))
 
+        self.head_dense = torch.nn.Linear(embedding_dim, embedding_dim)
+
         self.pe = PositionalEncoding(embedding_dim, dropout=position_encoding_drop, max_len=self.max_len)
         self.transformer = TransformerEncoder(encoder_layer, num_layers)
         self.norm_after_transformer = torch.nn.LayerNorm([embedding_dim])
@@ -95,6 +97,8 @@ class KgStoryTransformer01(torch.nn.Module):
         #
         self.tail_maskdlm_layer = torch.nn.Linear(embedding_dim, embedding_dim)
         self.tail_maskdlm_norm = torch.nn.LayerNorm([embedding_dim])
+        #
+        self.no_use_pe = 'no_use_pe' in kwargs and kwargs['no_use_pe']
 
     def get_head_pred(self, x: torch.Tensor):
         # x.shape = [semi_batch, embedding_dim]
@@ -123,10 +127,12 @@ class KgStoryTransformer01(torch.nn.Module):
     def forward(self, triple: torch.Tensor):
         # x.shape = [batch, triple_len, 3]
         emb_head = self.emb_entity(triple[:, :, 0])
+        emb_head = F.gelu(self.head_dense(emb_head))
         emb_rel = self.emb_relation(triple[:, :, 1])
         emb_tail = self.emb_entity(triple[:, :, 2])
+        #
         x = emb_head * self.weight_head + emb_rel * self.weight_relation + emb_tail * self.weight_tail
-        x = self.pe(x)
+        x = self.pe(x) if not self.no_use_pe else x
         x = self.transformer.forward(x)
         x = self.norm_after_transformer(x)
         # x.shape = [batch, triple_len, embedding len]

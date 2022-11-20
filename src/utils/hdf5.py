@@ -30,5 +30,23 @@ def read_one_item(path_, func: Callable[[h5py.File], Any]):
         return func(f)
 
 
+class EscapeData:
+    def __init__(self, uid: str, tmp_folder='./.tmp'):
+        self._file = f"{tmp_folder}/{uid}.hdf5"
+
+    def put(self, data_name, data):
+        with h5py.File(self._file, 'a') as f:
+            f.create_dataset(data_name, data=data)
+
+    def get(self, data_name):
+        with h5py.File(self._file, 'ra') as f:
+            data = f[data_name][()]
+            del f[data_name]
+        return data
+
+
+
+
+
 if __name__ == '__main__':
     pass

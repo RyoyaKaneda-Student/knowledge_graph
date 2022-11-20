@@ -17,17 +17,20 @@ import optuna
 import pandas as pd
 # torch
 import torch
-from ignite.engine import Engine, Events
-from ignite.handlers import Timer
-from ignite.metrics import Average, Accuracy
 from torch import nn
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+
+from ignite.engine import Engine, Events
+from ignite.handlers import Timer
+from ignite.metrics import Average, Accuracy
+from ignite.contrib.handlers.tqdm_logger import ProgressBar
 
 from models.KGModel.kg_story_transformer import KgStoryTransformer01, add_bos_eos
 from models.datasets.data_helper import (
     MyDataHelper, )
 from models.datasets.datasets import StoryTriple, StoryTripleForValid
+from utils.hdf5 import EscapeData
 from utils.setup import setup, save_param
 from utils.str_process import line_up_key_value
 from utils.torch import (
@@ -75,6 +78,11 @@ ENTITY_ACCURACY: Final = 'entity_accuracy'
 ACCURACY_NAME3 = (STORY_ACCURACY, RELATION_ACCURACY, ENTITY_ACCURACY)
 
 METRIC_NAMES = [LOSS, *LOSS_NAME3, *ACCURACY_NAME3]
+
+ALL_TITLE_LIST = [
+    'ACaseOfIdentity', 'AbbeyGrange', 'CrookedMan', 'DancingMen',
+    'DevilsFoot', 'ResidentPatient', 'SilverBlaze', 'SpeckledBand'
+]
 
 
 def setup_parser(args: Namespace = None) -> Namespace:
@@ -129,6 +137,7 @@ def setup_parser(args: Namespace = None) -> Namespace:
     paa('--batch-size', help='batch size', type=int, default=4)
     paa('--max-len', help='max length of 1 batch. default: 256', type=int, default=256)
     paa('--mask-percent', help='default: 0.15', type=float, default=0.15)
+    paa('--no-use-pe', help='to check pe(position encoding) power, we have to make no pe model', action='store_true')
     paa('--epoch', help='max epoch', type=int, default=2)
 
     paa('--model-path', type=str, help='model path')
@@ -168,7 +177,8 @@ def pre_training(
     mask_token_e, mask_token_r = args.mask_token_e, args.mask_token_r
 
     @force_gc_after_function
-    def train_step(_: Engine, batch) -> dict:
+    def train_step(_, batch) -> dict:
+        model.train()
         triple = batch
         # triple.shape = (batch, max_len, 3)
         opt.zero_grad()
@@ -195,19 +205,22 @@ def pre_training(
         loss: torch.Tensor = story_loss + relation_loss + entity_loss
         loss.backward()
         opt.step()
+        rev = {key: value.to('cpu') for key, value in rev.items()}
         tmp = {
             LOSS: loss,
             STORY_PRED: story_pred, RELATION_PRED: relation_pred, ENTITY_PRED: entity_pred,
             STORY_LOSS: story_loss, RELATION_LOSS: relation_loss, ENTITY_LOSS: entity_loss,
         }
-        rev.update({key: value.detach() for key, value in tmp.items()})
+        rev.update({key: value.to('cpu').detach() for key, value in tmp.items()})
         return rev
 
     @torch.no_grad()
     @force_gc_after_function
-    def valid_step(_: Engine, batch) -> dict:
-        triple, valid_filter = batch
-        batch_size = triple.shape[0]
+    def valid_step(_, batch) -> dict:
+        model.eval()
+        triple = batch[0].to(device)
+        valid_filter = batch[1].to(device)
+        logger.debug(torch.count_nonzero(valid_filter))
 
         # triple.shape = (batch, max_len, 3)
         # valid_filter.shape = (batch, max_len)
@@ -244,31 +257,36 @@ def pre_training(
             STORY_PRED: story_pred, RELATION_PRED: relation_pred, ENTITY_PRED: entity_pred,
             LOSS: loss, STORY_LOSS: story_loss, RELATION_LOSS: relation_loss, ENTITY_LOSS: entity_loss,
         })
-
+        rev = {key: value.to('cpu') for key, value in rev.items()}
         return rev
 
     trainer = Engine(train_step)
     evaluator = Engine(valid_step)
+    ProgressBar().attach(trainer)
+    ProgressBar().attach(evaluator)
 
     # loss and average of trainer
-    Average(output_transform=lambda _dict: _dict[LOSS]).attach(trainer, LOSS)
+    Average(output_transform=lambda x: x[LOSS]).attach(trainer, LOSS)
     Average(output_transform=lambda x: x[STORY_LOSS]).attach(trainer, STORY_LOSS)
     Average(output_transform=lambda x: x[RELATION_LOSS]).attach(trainer, RELATION_LOSS)
     Average(output_transform=lambda x: x[ENTITY_LOSS]).attach(trainer, ENTITY_LOSS)
     Accuracy(output_transform=lambda x: (x[STORY_PRED], x[STORY_ANS])).attach(trainer, STORY_ACCURACY)
     Accuracy(output_transform=lambda x: (x[RELATION_PRED], x[RELATION_ANS])).attach(trainer, RELATION_ACCURACY)
-    Accuracy(output_transform=lambda x: (x[RELATION_PRED], x[RELATION_ANS])).attach(trainer, RELATION_ACCURACY)
     Accuracy(output_transform=lambda x: (x[ENTITY_PRED], x[ENTITY_ANS])).attach(trainer, ENTITY_ACCURACY)
 
     # loss and average of evaluator
-    Average(output_transform=lambda _dict: _dict[LOSS]).attach(evaluator, LOSS)
+    Average(output_transform=lambda x: x[LOSS]).attach(evaluator, LOSS)
     Average(output_transform=lambda x: x[STORY_LOSS]).attach(evaluator, STORY_LOSS)
     Average(output_transform=lambda x: x[RELATION_LOSS]).attach(evaluator, RELATION_LOSS)
     Average(output_transform=lambda x: x[ENTITY_LOSS]).attach(evaluator, ENTITY_LOSS)
     Accuracy(output_transform=lambda x: (x[STORY_PRED], x[STORY_ANS])).attach(evaluator, STORY_ACCURACY)
     Accuracy(output_transform=lambda x: (x[RELATION_PRED], x[RELATION_ANS])).attach(evaluator, RELATION_ACCURACY)
-    Accuracy(output_transform=lambda x: (x[RELATION_PRED], x[RELATION_ANS])).attach(evaluator, RELATION_ACCURACY)
     Accuracy(output_transform=lambda x: (x[ENTITY_PRED], x[ENTITY_ANS])).attach(evaluator, ENTITY_ACCURACY)
+
+    @trainer.on(Events.EPOCH_STARTED)
+    def shuffle_in_1story(_):
+        train.dataset.shuffle_in_1story()
+        logger.debug("----- shuffle_in_1story -----")
 
     @trainer.on(Events.EPOCH_STARTED)
     def start_epoch_func(engine: Engine):
@@ -285,6 +303,10 @@ def pre_training(
             logger.debug(f"-----metrics[{_name}]={_value}")
             if summary_writer is not None:
                 summary_writer.add_scalar(f"pre_train/{_name}", _value, global_step=epoch)
+
+        summary_writer.add_scalar(f"pre_train/model_weight/story", model.weight_head.data, global_step=epoch)
+        summary_writer.add_scalar(f"pre_train/model_weight/relation", model.weight_relation.data, global_step=epoch)
+        summary_writer.add_scalar(f"pre_train/model_weight/entity", model.weight_tail.data, global_step=epoch)
 
     @trainer.on(Events.EPOCH_COMPLETED(every=args.valid_interval))
     def valid_func(engine: Engine):
@@ -329,13 +351,14 @@ def pre_training(
             epoch, engine.state.iteration, elapsed_time_str(total_timer.value())))
         logger.debug(f"loss={output[LOSS].item()}")
 
-    trainer.run(train, max_epochs=max_epoch)
-    load_model(model, checkpoint_path, device=device, delete_file=True)
-    return model, {'state': trainer.state}
+    if max_epoch > 0:
+        trainer.run(train, max_epochs=max_epoch)
+        load_model(model, checkpoint_path, device=device, delete_file=True)
+    return model, {'trainer': trainer, 'evaluator': evaluator}
 
 
 def main_function(args: Namespace, *, logger: Logger):
-    summary_writer = SummaryWriter(log_dir=args.tensorboard_dir)
+    summary_writer = SummaryWriter(log_dir=args.tensorboard_dir) if 'tensorboard_dir' in args else None
     entity_special_num: int = args.entity_special_num
     relation_special_num: int = args.relation_special_num
     batch_size, lr = args.batch_size, args.lr
@@ -361,6 +384,7 @@ def main_function(args: Namespace, *, logger: Logger):
 
     entities = data_helper.processed_entities
     relations = data_helper.processed_relations
+    story001_indices = [entities.index(f'{_story}:001') for _story in ALL_TITLE_LIST]
 
     num_entities, num_relations = len(data_helper.processed_entities), len(data_helper.processed_relations)
     triple = data_helper.processed_train_triple
@@ -377,13 +401,28 @@ def main_function(args: Namespace, *, logger: Logger):
 
     cannot_valid_filter: np.ndarray = (triple[:, 0] < 6) | (triple[:, 2] == kill_entity) | \
                                       (triple[:, 2] == notKill_entity) | (triple[:, 2] == beKilled_entity)
-    prob = (~cannot_valid_filter).astype(np.float)
-    valid_indices = np.random.choice(np.arange(len(triple)),
-                                     np.floor(0.1 * len_of_default_triple).astype(np.int), p=(prob / np.sum(prob)))
+    prob = (~cannot_valid_filter).astype(float)
+    valid_test_indices = np.sort(
+        np.random.choice(
+            len(triple), size=np.floor(0.1 * len_of_default_triple).astype(int) * 2,
+            p=(prob / np.sum(prob)), replace=False
+        )
+    )
+
+    valid_indices, test_indices = valid_test_indices[0::2], valid_test_indices[1::2]
+
+    valid_test_filter = np.zeros(len(triple), dtype=bool)
+    valid_test_filter[valid_test_indices] = True
+    test_filter = np.zeros(len(triple), dtype=bool)
+    test_filter[test_indices] = True
     valid_filter = np.zeros(len(triple), dtype=bool)
     valid_filter[valid_indices] = True
+    assert np.array_equal(valid_test_filter, (test_filter | valid_filter))
+    assert np.count_nonzero(test_filter) + np.count_nonzero(valid_filter) == np.count_nonzero(valid_test_filter)
 
-    triple_train, triple_valid = triple[~valid_filter], triple
+    triple_train, triple_valid, triple_test = triple[~valid_test_filter], triple[~test_filter], triple
+    valid_filter = valid_filter[~test_filter]
+    assert np.count_nonzero(test_filter) + np.count_nonzero(valid_filter) == np.count_nonzero(valid_test_filter)
 
     # region debug area
     logger.debug("----- show example -----")
@@ -400,12 +439,19 @@ def main_function(args: Namespace, *, logger: Logger):
                                         max_len,
                                         padding_token_e, padding_token_r, padding_token_e,
                                         sep_token_e, sep_token_r, sep_token_e)
+    dataset_test = StoryTripleForValid(triple_test,
+                                       np.where(triple_test[:, 0] == bos_token_e)[0], test_filter,
+                                       max_len,
+                                       padding_token_e, padding_token_r, padding_token_e,
+                                       sep_token_e, sep_token_r, sep_token_e)
 
     dataloader_train = DataLoader(dataset_train, shuffle=True, batch_size=batch_size)
     dataloader_valid = DataLoader(dataset_valid, shuffle=False, batch_size=batch_size // 4)
-    data_helper.set_loaders(dataloader_train, None, dataloader_valid, None)
+    dataloader_test = DataLoader(dataset_test, shuffle=False, batch_size=batch_size // 4)
 
-    model = KgStoryTransformer01(args, num_entities, num_relations)
+    data_helper.set_loaders(dataloader_train, None, dataloader_valid, dataloader_test)
+
+    model = KgStoryTransformer01(args, num_entities, num_relations, no_use_pe=args.no_use_pe)
 
     if args.pre_train:
         assert args.model_path is not None
