@@ -180,14 +180,13 @@ class StoryTriple(Dataset):
         len_triple = len(self.triple)
         bos_index = self.bos_indices[0]
         for bos_index_new in self.bos_indices[1:]:
-            triple[bos_index+1: bos_index_new-1] = \
-                triple[bos_index+1: bos_index_new-1][torch.randperm(bos_index_new-bos_index-2)]
+            triple[bos_index+1: bos_index_new] = \
+                triple[bos_index+1: bos_index_new-1][torch.randperm(bos_index_new-(bos_index+1))]
             bos_index = bos_index_new
-        triple[bos_index+1: len(triple)-1] = \
-            triple[bos_index+1: len(triple)-1][torch.randperm(len(triple) - bos_index-2)]
+        triple[bos_index+1: len(triple)] = \
+            triple[bos_index+1: len(triple)-1][torch.randperm(len(triple) - (bos_index+1))]
         assert len_triple == len(triple)
         self.triple = triple
-
 
     def __getitem__(self, index: int):
         index_ = self.bos_indices[index]

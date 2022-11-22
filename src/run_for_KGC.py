@@ -26,7 +26,7 @@ from ignite.handlers import Timer
 from ignite.metrics import Average, Accuracy
 from ignite.contrib.handlers.tqdm_logger import ProgressBar
 
-from models.KGModel.kg_story_transformer import KgStoryTransformer01, add_bos_eos
+from models.KGModel.kg_story_transformer import KgStoryTransformer01, add_bos
 from models.datasets.data_helper import (
     MyDataHelper, )
 from models.datasets.datasets import StoryTriple, StoryTripleForValid
@@ -108,30 +108,27 @@ def setup_parser(args: Namespace = None) -> Namespace:
     paa('--study-name', help='optuna study-name', type=str)
     paa('--n-trials', help='optuna n-trials', type=int, default=20)
     #
-    paa('--story-special-num', help='ストーリー', type=int, default=6)
-    paa('--relation-special-num', help='リレーション', type=int, default=6)
-    paa('--entity-special-num', help='エンティティ', type=int, default=6)
+    paa('--story-special-num', help='ストーリー', type=int, default=5)
+    paa('--relation-special-num', help='リレーション', type=int, default=5)
+    paa('--entity-special-num', help='エンティティ', type=int, default=5)
     # e special
     paa('--padding-token-e', help='padding', type=int, default=0)
     paa('--cls-token-e', help='cls', type=int, default=1)
     paa('--mask-token-e', help='mask', type=int, default=2)
     paa('--sep-token-e', help='sep', type=int, default=3)
     paa('--bos-token-e', help='bos', type=int, default=4)
-    paa('--eos-token-e', help='eos', type=int, default=5)
     # r special
     paa('--padding-token-r', help='padding', type=int, default=0)
     paa('--cls-token-r', help='cls', type=int, default=1)
     paa('--mask-token-r', help='mask', type=int, default=2)
     paa('--sep-token-r', help='sep', type=int, default=3)
     paa('--bos-token-r', help='bos', type=int, default=4)
-    paa('--eos-token-r', help='eos', type=int, default=5)
     # story
     paa('--padding-token-s', help='padding', type=int, default=0)
     paa('--cls-token-s', help='cls', type=int, default=1)
     paa('--mask-token-s', help='mask', type=int, default=2)
     paa('--sep-token-s', help='sep', type=int, default=3)
     paa('--bos-token-s', help='bos', type=int, default=4)
-    paa('--eos-token-s', help='eos', type=int, default=5)
     # paa('--model', type=str, help=f"Choose from: {', '.join(name2model.keys())}")
     paa('--embedding-dim', type=int, default=128, help='The embedding dimension (1D). Default: 128')
     paa('--batch-size', help='batch size', type=int, default=4)
@@ -372,7 +369,6 @@ def main_function(args: Namespace, *, logger: Logger):
     padding_token_e, padding_token_r = args.padding_token_e, args.padding_token_r
     sep_token_e, sep_token_r = args.sep_token_e, args.sep_token_r
     bos_token_e, bos_token_r = args.bos_token_e, args.bos_token_r
-    eos_token_e, eos_token_r = args.eos_token_e, args.eos_token_r
 
     data_helper = MyDataHelper(
         "data/processed/KGCdata/All/SRO/info.hdf5",
@@ -383,8 +379,8 @@ def main_function(args: Namespace, *, logger: Logger):
         relation_special_num=relation_special_num
     )
     data_helper.set_special_names(
-        index2name_entity={0: '<pad_e>', 1: '<cls_e>', 2: '<mask_e>', 3: '<sep_e>', 4: '<bos_e>', 5: '<eos_e>'},
-        index2name_relation={0: '<pad_r>', 1: '<cls_r>', 2: '<mask_r>', 3: '<sep_r>', 4: '<bos_r>', 5: '<eos_r>'},
+        index2name_entity={0: '<pad_e>', 1: '<cls_e>', 2: '<mask_e>', 3: '<sep_e>', 4: '<bos_e>'},
+        index2name_relation={0: '<pad_r>', 1: '<cls_r>', 2: '<mask_r>', 3: '<sep_r>', 4: '<bos_r>'},
     )
 
     entities = data_helper.processed_entities
@@ -399,12 +395,11 @@ def main_function(args: Namespace, *, logger: Logger):
     notKill_entity = entities.index('word.predicate:notKill')
     beKilled_entity = entities.index('word.predicate:beKilled')
 
-    triple = add_bos_eos(triple,
-                         bos_token_e, bos_token_r, bos_token_e,
-                         eos_token_e, eos_token_r, eos_token_e,
-                         is_shuffle_in_same_head=True, )
+    triple = add_bos(triple,
+                     bos_token_e, bos_token_r, bos_token_e,
+                     is_shuffle_in_same_head=True, )
 
-    cannot_valid_filter: np.ndarray = (triple[:, 0] < 6) | (triple[:, 2] == kill_entity) | \
+    cannot_valid_filter: np.ndarray = (triple[:, 0] < entity_special_num) | (triple[:, 2] == kill_entity) | \
                                       (triple[:, 2] == notKill_entity) | (triple[:, 2] == beKilled_entity)
     prob = (~cannot_valid_filter).astype(float)
     valid_test_indices = np.sort(

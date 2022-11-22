@@ -26,13 +26,11 @@ from models.utilModules.mlp_mixer import MlpMixer, MlpMixerLayer
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 
 
-def add_bos_eos(triple: np.ndarray,
-                bos_token_h, bos_token_r, bos_token_t,
-                eos_token_h, eos_token_r, eos_token_t,
-                is_shuffle_in_same_head=False
-                ):
+def add_bos(triple: np.ndarray,
+            bos_token_h, bos_token_r, bos_token_t,
+            is_shuffle_in_same_head=False
+            ):
     array_bos = np.array([[bos_token_h, bos_token_r, bos_token_t]])
-    array_eos = np.array([[eos_token_h, eos_token_r, eos_token_t]])
     old_s = triple[0][0]
     before_i = 0
     tmp_list = []
@@ -45,7 +43,7 @@ def add_bos_eos(triple: np.ndarray,
             old_s, before_i = s, i
 
     new_triple = np.concatenate(
-        list(itertools.chain(*[(array_bos, _tmp, array_eos) for _tmp in tmp_list]))
+        list(itertools.chain(*[(array_bos, _tmp) for _tmp in tmp_list]))
     )
     return new_triple
 
@@ -72,7 +70,6 @@ class KgStoryTransformer01(torch.nn.Module):
         self.sep_token_r, self.sep_token_e = args.sep_token_r, args.sep_token_e
         self.mask_token_r, self.mask_token_e = args.mask_token_r, args.mask_token_e
         self.bos_token_r, self.bos_token_e = args.bos_token_r, args.bos_token_e
-        self.eos_token_r, self.eos_token_e = args.eos_token_r, args.eos_token_e
 
         self.emb_entity = torch.nn.Embedding(
             num_entities, embedding_dim, padding_idx=self.padding_token_e)
