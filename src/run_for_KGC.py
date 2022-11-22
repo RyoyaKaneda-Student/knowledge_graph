@@ -148,7 +148,7 @@ def setup_parser(args: Namespace = None) -> Namespace:
     paa('--transformer-drop', type=float, default=0.1, help='transformer-drop. Default: 0.1.')
     paa('--position-encoder-drop', type=float, default=0.1, help='position-encoder-drop. Default: 0.1.')
     paa('--nhead', type=int, default=4, help='nhead. Default: 4.')
-    paa('--num-layers', type=int, default=8, help='num layers. Default: 8.')
+    paa('--num-layers', type=int, default=4, help='num layers. Default: 4.')
 
     args = parser.parse_args(args=args)
     return args
@@ -183,21 +183,25 @@ def pre_training(
         # triple.shape = (batch, max_len, 3)
         opt.zero_grad()
         triple = triple.to(device)
-        triple_ans = triple.detach()
+        triple_ans = triple.detach().clone()
 
         batch_size = triple.shape[0]
         mask_head = torch.where(torch.rand(batch_size, max_len) < mask_percent, True, False).to(device)
         mask_relation = torch.where(torch.rand(batch_size, max_len) < mask_percent, True, False).to(device)
         mask_tail = torch.where(torch.rand(batch_size, max_len) < mask_percent, True, False).to(device)
-        triple[mask_head][:, 0] = mask_token_e
-        triple[mask_relation][:, 1] = mask_token_r
-        triple[mask_tail][:, 2] = mask_token_e
+
+        triple[:, :, 0][mask_head] = mask_token_e
+        triple[:, :, 1][mask_relation] = mask_token_r
+        triple[:, :, 2][mask_tail] = mask_token_e
+
         rev = {
-            STORY_ANS: triple_ans[mask_head][:, 0],
-            RELATION_ANS: triple_ans[mask_relation][:, 1],
-            ENTITY_ANS: triple_ans[mask_tail][:, 2],
+            STORY_ANS: triple_ans[:, :, 0][mask_head],
+            RELATION_ANS: triple_ans[:, :, 1][mask_relation],
+            ENTITY_ANS: triple_ans[:, :, 2][mask_tail],
         }
+
         del triple_ans
+
         _, story_pred, relation_pred, entity_pred = model.pre_train_forward(triple, mask_head, mask_relation, mask_tail)
         story_loss: torch.Tensor = loss_fn(story_pred, rev[STORY_ANS])
         relation_loss: torch.Tensor = loss_fn(relation_pred, rev[RELATION_ANS])
@@ -224,20 +228,21 @@ def pre_training(
 
         # triple.shape = (batch, max_len, 3)
         # valid_filter.shape = (batch, max_len)
-        triple_ans: torch.Tensor = triple.detach()
+        triple_ans: torch.Tensor = triple.detach().clone()
         rev = {
             STORY_ANS: triple_ans[valid_filter][:, 0],
             RELATION_ANS: triple_ans[valid_filter][:, 1],
             ENTITY_ANS: triple_ans[valid_filter][:, 2],
         }
 
-        triple_check_s: torch.Tensor = triple.detach()
-        triple_check_r: torch.Tensor = triple.detach()
-        triple_check_e: torch.Tensor = triple.detach()
+        triple_check_s: torch.Tensor = triple.detach().clone()
+        triple_check_r: torch.Tensor = triple.detach().clone()
+        triple_check_e: torch.Tensor = triple.detach().clone()
 
-        triple_check_s[valid_filter][:, 0] = mask_token_e
-        triple_check_r[valid_filter][:, 1] = mask_token_r
-        triple_check_e[valid_filter][:, 2] = mask_token_e
+        triple_check_s[:, :, 0][valid_filter] = mask_token_e
+        triple_check_r[:, :, 1][valid_filter] = mask_token_r
+        triple_check_e[:, :, 2][valid_filter] = mask_token_e
+
         triple3 = torch.cat([triple_check_s, triple_check_r, triple_check_e])
 
         tmp = torch.zeros_like(valid_filter)
