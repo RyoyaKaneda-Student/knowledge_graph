@@ -201,6 +201,14 @@ def requires_grad_param_num(model: nn.Module):
     return params
 
 
+def all_same_shape(*args: torch.Tensor):
+    _shape = args[0].shape
+    for _tensor in args:
+        assert type(_tensor) is torch.Tensor
+        if not _tensor.shape == _shape: return False
+    return True
+
+
 class MM(nn.Module):
     """
     Only torch.mm. It's just that it can be visualized by making it a module.

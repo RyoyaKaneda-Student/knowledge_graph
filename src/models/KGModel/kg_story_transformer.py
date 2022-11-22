@@ -1,5 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+import dataclasses
 import itertools
 import os
 import sys
@@ -7,18 +8,20 @@ from pathlib import Path
 
 # noinspection PyUnresolvedReferences
 from typing import List, Dict, Tuple, Optional, Union, Callable
+from collections import OrderedDict
 
 import abc
 
 import numpy as np
 import torch
 from torch.nn import functional as F, Parameter
+from torch.nn.functional import gelu
 
 from torch.nn.init import xavier_normal_
 # from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torch.nn import TransformerEncoderLayer, TransformerEncoder, Softmax
 
-from utils.torch import MM
+from utils.torch import MM, all_same_shape
 
 from models.utilModules.tranformer import PositionalEncoding
 from models.utilModules.mlp_mixer import MlpMixer, MlpMixerLayer
@@ -48,103 +51,204 @@ def add_bos(triple: np.ndarray,
     return new_triple
 
 
+class SpecialTokens:
+    padding_token_e: int
+    padding_token_r: int
+
+
+@dataclasses.dataclass
+class FakeSpecialTokens(SpecialTokens):
+    default: int = 0
+
+    def __getattr__(self):
+        return self.default
+
+
+@dataclasses.dataclass
+class SpecialTokens01(SpecialTokens):
+    padding_token_e: int
+    padding_token_r: int
+    cls_token_e: int
+    cls_token_r: int
+    sep_token_e: int
+    sep_token_r: int
+    mask_token_e: int
+    mask_token_r: int
+    bos_token_e: int
+    bos_token_r: int
+
+
 class KgStoryTransformer01(torch.nn.Module):
-    def __init__(self, args, num_entities, num_relations, **kwargs):
+    def __init__(self, args,
+                 num_entity: int, num_relations: int,
+                 special_tokens: SpecialTokens, **kwargs):
         super().__init__()
-        embedding_dim = args.embedding_dim
+        # get from args
+        embedding_dim, max_len = args.embedding_dim, args.max_len
+        nhead, num_layers, dim_feedforward = args.nhead, args.num_layers, args.dim_feedforward  # 適当 4, 4, 1028
+        position_encoder_drop, transformer_drop = args.position_encoder_drop, args.transformer_drop
+        padding_token_e, padding_token_r = special_tokens.padding_token_e, special_tokens.padding_token_r
+        # set default value
+        transformer_activation, transformer_norm_first = torch.nn.GELU(), True
+        no_use_pe = args.no_use_pe
+        is_separate_head_and_tail = args.separate_head_and_tail
+        del args
 
-        nhead, num_layers, dim_feedforward = 4, 4, 1028  # 適当
-        position_encoding_drop = 0.1
-        transformer_drop = 0.1
-
-        encoder_layer = TransformerEncoderLayer(
-            d_model=embedding_dim, nhead=nhead, dropout=transformer_drop,
-            batch_first=True, dim_feedforward=dim_feedforward,
-            activation=F.gelu, norm_first=True
-        )
-
+        # define some model params
         self.embedding_dim = embedding_dim
-        self.max_len = args.max_len
-        self.padding_token_r, self.padding_token_e = args.padding_token_e, args.padding_token_r
-        self.cls_token_r, self.cls_token_e = args.cls_token_r, args.cls_token_e
-        self.sep_token_r, self.sep_token_e = args.sep_token_r, args.sep_token_e
-        self.mask_token_r, self.mask_token_e = args.mask_token_r, args.mask_token_e
-        self.bos_token_r, self.bos_token_e = args.bos_token_r, args.bos_token_e
+        self.max_len = max_len
+        self.special_tokens = special_tokens
+        self.is_separate_head_and_tail = is_separate_head_and_tail
+        self.no_use_pe = no_use_pe
 
-        self.emb_entity = torch.nn.Embedding(
-            num_entities, embedding_dim, padding_idx=self.padding_token_e)
-        self.emb_relation = torch.nn.Embedding(
-            num_relations, embedding_dim, padding_idx=self.padding_token_r)
+        self.emb_entity = torch.nn.Embedding(num_entity, embedding_dim, padding_idx=padding_token_e)
+        self.emb_relation = torch.nn.Embedding(num_relations, embedding_dim, padding_idx=padding_token_r)
+        # head dense
+        self.head_dense = torch.nn.Linear(embedding_dim, embedding_dim)
+        self.head_dense_activation = torch.nn.GELU()
+        self.head_dense_norm = torch.nn.LayerNorm([embedding_dim])
 
         self.weight_head = torch.nn.Parameter(torch.tensor(1.0))
         self.weight_relation = torch.nn.Parameter(torch.tensor(1.0))
         self.weight_tail = torch.nn.Parameter(torch.tensor(1.0))
 
-        self.head_dense = torch.nn.Linear(embedding_dim, embedding_dim)
-
-        self.pe = PositionalEncoding(embedding_dim, dropout=position_encoding_drop, max_len=self.max_len)
-        self.transformer = TransformerEncoder(encoder_layer, num_layers)
-        self.norm_after_transformer = torch.nn.LayerNorm([embedding_dim])
-        #
+        self.pe = PositionalEncoding(embedding_dim, dropout=position_encoder_drop, max_len=self.max_len)
+        self.transformer = TransformerEncoder(
+            encoder_layer=TransformerEncoderLayer(
+                d_model=embedding_dim, nhead=nhead, dropout=transformer_drop,
+                batch_first=True, dim_feedforward=dim_feedforward,
+                activation=transformer_activation, norm_first=transformer_norm_first
+            ),
+            num_layers=num_layers
+        )
+        self.norm_after_transformer = torch.nn.LayerNorm([embedding_dim])  # it is because of norm first
+        # maskdlm for head
         self.head_maskdlm_layer = torch.nn.Linear(embedding_dim, embedding_dim)
+        self.head_maskdlm_activation = torch.nn.GELU()
         self.head_maskdlm_norm = torch.nn.LayerNorm([embedding_dim])
-        #
+        # maskdlm for relation
         self.relation_maskdlm_layer = torch.nn.Linear(embedding_dim, embedding_dim)
+        self.relation_maskdlm_activation = torch.nn.GELU()
         self.relation_maskdlm_norm = torch.nn.LayerNorm([embedding_dim])
-        #
+        # maskdlm for tail
         self.tail_maskdlm_layer = torch.nn.Linear(embedding_dim, embedding_dim)
+        self.tail_maskdlm_activation = torch.nn.GELU()
         self.tail_maskdlm_norm = torch.nn.LayerNorm([embedding_dim])
-        #
-        self.no_use_pe = 'no_use_pe' in kwargs and kwargs['no_use_pe']
 
     def get_head_pred(self, x: torch.Tensor):
         # x.shape = [semi_batch, embedding_dim]
         x = self.head_maskdlm_layer(x)
-        x = F.gelu(x)
+        x = self.head_maskdlm_activation(x)
         x = self.head_maskdlm_norm(x)
-        x = torch.mm(x, self.emb_entity.weight.transpose(1, 0))
         return x  # F.softmax(x, dim=)  # x.shape = [semi_batch, (num_story + some special entity num)]
 
     def get_relation_pred(self, x: torch.Tensor):
         # x.shape = [semi_batch, embedding_dim]
         x = self.relation_maskdlm_layer(x)
-        x = F.gelu(x)
+        x = self.relation_maskdlm_activation(x)
         x = self.relation_maskdlm_norm(x)
-        x = torch.mm(x, self.emb_relation.weight.transpose(1, 0))
         return x  # x.shape = [semi_batch, (num_relation + some special entity num)]
 
     def get_tail_pred(self, x: torch.Tensor):
         # x.shape = [semi_batch, embedding_dim]
         x = self.tail_maskdlm_layer(x)
-        x = F.gelu(x)
+        x = self.tail_maskdlm_activation(x)
         x = self.tail_maskdlm_norm(x)
-        x = torch.mm(x, self.emb_entity.weight.transpose(1, 0))
+        # x = torch.mm(x, self.emb_entity.weight.transpose(1, 0))
         return x  # F.softmax(x)  # x.shape = [semi_batch, (num_entities + some special entity num)]
 
-    def forward(self, triple: torch.Tensor):
-        # x.shape = [batch, triple_len, 3]
-        emb_head = self.emb_entity(triple[:, :, 0])
-        emb_head = F.gelu(self.head_dense(emb_head))
-        emb_rel = self.emb_relation(triple[:, :, 1])
-        emb_tail = self.emb_entity(triple[:, :, 2])
-        #
+    def get_embedding(self, head, relation, tail):
+        assert head.shape == relation.shape and relation.shape == tail.shape
+        assert head.shape.shape[2] == 3
+        emb_head = self.head_dense_activation(self.head_dense(self.emb_entity(head)))
+        emb_rel = self.emb_relation(relation)
+        emb_tail = self.emb_entity(tail)
+        return emb_head, emb_rel, emb_tail
+
+    def get_combined_head_relation_tail(self, emb_head, emb_rel, emb_tail):
+        assert emb_head.shape == emb_rel.shape and emb_rel.shape == emb_tail.shape
         x = emb_head * self.weight_head + emb_rel * self.weight_relation + emb_tail * self.weight_tail
-        x = self.pe(x) if not self.no_use_pe else x
-        x = self.transformer.forward(x)
+        return self.pe(x) if not self.no_use_pe else x
+
+    def forward(self, triple: torch.Tensor):
+        # batch, triple_len = triple.shape[0:2]  # for debugging
+        # assert triple.shape == (batch, triple_len, 3)
+        emb_head, emb_rel, emb_tail = self.get_embedding(triple[:, :, 0], triple[:, :, 1], triple[:, :, 2])
+        # assert all_same_shape(emb_head) and emb_head.shape == (batch, triple_len, self.embedding_dim)
+        x = self.get_combined_head_relation_tail(emb_head, emb_rel, emb_tail)
+        # assert x.shape == (batch, triple_len, self.embedding_dim)
+        x = self.transformer(x)
         x = self.norm_after_transformer(x)
-        # x.shape = [batch, triple_len, embedding len]
+        # assert x.shape == (batch, triple_len, self.embedding_dim)
         return x
 
     def pre_train_forward(self, triple: torch.Tensor,
                           mask_head: torch.Tensor, mask_relation: torch.Tensor, mask_tail: torch.Tensor):
-        #
+        # get item
         x = self.forward(triple)
         # entity mask
         x = x.reshape(-1, self.embedding_dim)
         head_pred = self.get_head_pred(x[mask_head.reshape(-1)])
         relation_pred = self.get_relation_pred(x[mask_relation.reshape(-1)])
         tail_pred = self.get_tail_pred(x[mask_tail.reshape(-1)])
-        return x, head_pred, relation_pred, tail_pred
+        # get mm
+        entity_embeddings = self.emb_entity.weight.transpose(1, 0)
+        relation_embeddings = self.emb_relation.weight.transpose(1, 0)
+        return (
+            x,
+            torch.mm(head_pred, entity_embeddings),
+            torch.mm(relation_pred, relation_embeddings),
+            torch.mm(tail_pred, entity_embeddings),
+        )
+
+
+@dataclasses.dataclass
+class SpecialTokens01Ver2(SpecialTokens):
+    padding_token_h: int
+    padding_token_r: int
+    padding_token_t: int
+    cls_token_e: int
+    cls_token_r: int
+    sep_token_e: int
+    sep_token_r: int
+    mask_token_e: int
+    mask_token_r: int
+    bos_token_e: int
+    bos_token_r: int
+
+
+class KgStoryTransformer01Ver2(KgStoryTransformer01):
+    """
+    This is almost same as KgStoryTransformer01.
+    However,
+    """
+
+    def __init__(self, args,
+                 num_head: int, num_relations: int, num_tail: int,
+                 special_tokens: SpecialTokens01Ver2, **kwargs):
+        super(KgStoryTransformer01Ver2, self).__init__(
+            args, 1, 1, FakeSpecialTokens(), **kwargs
+        )
+        del self.emb_entity, self.emb_relation
+        del self.head_dense, self.head_dense_activation, self.head_dense_norm
+        embedding_dim = self.embedding_dim
+        padding_token_h, padding_token_r, padding_token_t = \
+            special_tokens.padding_token_h, special_tokens.padding_token_r, special_tokens.padding_token_t
+
+        self.special_tokens = special_tokens
+        self.emb_head = torch.nn.Embedding(num_head, self.embedding_dim, padding_idx=padding_token_h)
+        self.emb_relation = torch.nn.Embedding(num_relations, embedding_dim, padding_idx=padding_token_r)
+        self.emb_tail = torch.nn.Embedding(num_tail, embedding_dim, padding_idx=padding_token_t)
+
+        assert (not hasattr(self, 'emb_entity'))
+
+    def get_embedding(self, head, relation, tail):
+        assert head.shape == relation.shape and relation.shape == tail.shape
+        assert head.shape.shape[2] == 3
+        emb_head = self.emb_head(head)
+        emb_rel = self.emb_relation(relation)
+        emb_tail = self.emb_tail(tail)
+        return emb_head, emb_rel, emb_tail
 
 
 if __name__ == '__main__':

@@ -26,7 +26,7 @@ from ignite.handlers import Timer
 from ignite.metrics import Average, Accuracy
 from ignite.contrib.handlers.tqdm_logger import ProgressBar
 
-from models.KGModel.kg_story_transformer import KgStoryTransformer01, add_bos
+from models.KGModel.kg_story_transformer import KgStoryTransformer01, add_bos, SpecialTokens01 as SpecialTokens
 from models.datasets.data_helper import (
     MyDataHelper, )
 from models.datasets.datasets import StoryTriple, StoryTripleForValid
@@ -129,11 +129,16 @@ def setup_parser(args: Namespace = None) -> Namespace:
     paa('--mask-token-s', help='mask', type=int, default=2)
     paa('--sep-token-s', help='sep', type=int, default=3)
     paa('--bos-token-s', help='bos', type=int, default=4)
-    # paa('--model', type=str, help=f"Choose from: {', '.join(name2model.keys())}")
+    # model
     paa('--embedding-dim', type=int, default=128, help='The embedding dimension (1D). Default: 128')
+    paa('--separate-head-and-tail', action='store_true', default=False,
+        help='If True, it head Embedding and tail Embedding are different.')
     paa('--batch-size', help='batch size', type=int, default=4)
     paa('--max-len', help='max length of 1 batch. default: 256', type=int, default=256)
     paa('--mask-percent', help='default: 0.15', type=float, default=0.15)
+    paa('--mask-mask-percent', help='default: 0.80', type=float, default=0.80)
+    paa('--mask-random-percent', help='default: 0.05', type=float, default=0.10)
+    paa('--mask-nomask-percent', help='default: 0.05', type=float, default=0.10)
     paa('--no-use-pe', help='to check pe(position encoding) power, we have to make no pe model', action='store_true')
     paa('--epoch', help='max epoch', type=int, default=2)
 
@@ -142,10 +147,11 @@ def setup_parser(args: Namespace = None) -> Namespace:
     paa('--lr', type=float, default=0.003, help='learning rate (default: 0.003)')
     paa('--valid-interval', type=int, default=1, help='valid-interval', )
     #
-    paa('--transformer-drop', type=float, default=0.1, help='transformer-drop. Default: 0.1.')
-    paa('--position-encoder-drop', type=float, default=0.1, help='position-encoder-drop. Default: 0.1.')
     paa('--nhead', type=int, default=4, help='nhead. Default: 4.')
     paa('--num-layers', type=int, default=4, help='num layers. Default: 4.')
+    paa('--dim-feedforward', type=int, default=1028, help='dim of feedforward. Default: 1028.')
+    paa('--transformer-drop', type=float, default=0.1, help='transformer-drop. Default: 0.1.')
+    paa('--position-encoder-drop', type=float, default=0.1, help='position-encoder-drop. Default: 0.1.')
 
     args = parser.parse_args(args=args)
     return args
@@ -168,28 +174,50 @@ def pre_training(
     checkpoint_path = MODEL_TMP_PATH.format(line_up_key_value(pid=args.pid, uid=uid))
     train = data_helper.train_dataloader
     valid = data_helper.valid_dataloader
+    #
     mask_percent = args.mask_percent
-    max_epoch = args.epoch
+    mask_mask_percent = args.mask_mask_percent
+    mask_nomask_percent = args.mask_nomask_percent
+    mask_random_percent = args.mask_random_percent
+    assert mask_mask_percent + mask_nomask_percent + mask_random_percent == 1
 
+    max_epoch = args.epoch
     mask_token_e, mask_token_r = args.mask_token_e, args.mask_token_r
+
+    def mask_function(_random, _value, _mask_token):
+        _mask_filter = _random < mask_percent
+        _mask_value, _mask_random_value = _value[_mask_filter], _random[_mask_filter]
+        _mask_value[_mask_value < mask_random_percent] = ""
+        _mask_value[_mask_value >= (mask_nomask_percent + mask_random_percent)] = _mask_token
+        return _mask_filter, _mask_value
 
     @force_gc_after_function
     def train_step(_, batch) -> dict:
         model.train()
         triple = batch
-        # triple.shape = (batch, max_len, 3)
+        batch_len = triple.shape[0]
+        # triple.shape = (batch_len, max_len, 3)
         opt.zero_grad()
         triple = triple.to(device)
         triple_ans = triple.detach().clone()
 
         batch_size = triple.shape[0]
-        mask_head = torch.where(torch.rand(batch_size, max_len) < mask_percent, True, False).to(device)
-        mask_relation = torch.where(torch.rand(batch_size, max_len) < mask_percent, True, False).to(device)
-        mask_tail = torch.where(torch.rand(batch_size, max_len) < mask_percent, True, False).to(device)
+        random_value = torch.rand((3, batch_size, max_len))
+
+        mask_filter = torch.full((batch_len, max_len), fill_value=mask_percent, device=device)
+
+        mask_head: torch.Tensor = torch.lt(random_value[0], mask_filter)
+        mask_relation = torch.lt(random_value[1], mask_filter)
+        mask_tail = torch.lt(random_value[2], mask_filter)
+
+        mask_head_value = triple[:, :, 0][mask_head]
+        mask_relation_va
 
         triple[:, :, 0][mask_head] = mask_token_e
         triple[:, :, 1][mask_relation] = mask_token_r
         triple[:, :, 2][mask_tail] = mask_token_e
+
+        random_value[0]
 
         rev = {
             STORY_ANS: triple_ans[:, :, 0][mask_head],
@@ -425,9 +453,17 @@ def main_function(args: Namespace, *, logger: Logger):
     assert np.count_nonzero(test_filter) + np.count_nonzero(valid_filter) == np.count_nonzero(valid_test_filter)
 
     # region debug area
+    logger.debug("----- show train(no bos and no remove valid) -----")
+    for i in range(30):
+        logger.debug(
+            f"example: {entities[triple_train[i][0]]}, {relations[triple_train[i][1]]}, {entities[triple_train[i][2]]}")
+    logger.debug("----- show train(no remove valid) -----")
+    for i in range(30):
+        logger.debug(f"example: {entities[triple[i][0]]}, {relations[triple[i][1]]}, {entities[triple[i][2]]}")
     logger.debug("----- show example -----")
-    for i in range(20):
-        logger.debug(f"{entities[triple_train[i][0]]}, {relations[triple_train[i][1]]}, {entities[triple_train[i][2]]}")
+    for i in range(30):
+        logger.debug(
+            f"example: {entities[triple_train[i][0]]}, {relations[triple_train[i][1]]}, {entities[triple_train[i][2]]}")
     logger.debug("----- show example -----")
     # endregion
 
@@ -450,8 +486,18 @@ def main_function(args: Namespace, *, logger: Logger):
     dataloader_test = DataLoader(dataset_test, shuffle=False, batch_size=batch_size // 4)
 
     data_helper.set_loaders(dataloader_train, None, dataloader_valid, dataloader_test)
+    tokens = SpecialTokens(
+        args.padding_token_e, args.padding_token_r,
+        args.cls_token_e, args.cls_token_r,
+        args.sep_token_e, args.sep_token_r,
+        args.mask_token_e, args.mask_token_r,
+        args.bos_token_e, args.bos_token_r
+    )
+    logger.debug('----- special token info -----')
+    logger.debug(tokens)
+    logger.debug('----- special token info -----')
 
-    model = KgStoryTransformer01(args, num_entities, num_relations, no_use_pe=args.no_use_pe)
+    model = KgStoryTransformer01(args, num_entities, num_relations, special_tokens=tokens)
 
     if args.pre_train:
         assert args.model_path is not None

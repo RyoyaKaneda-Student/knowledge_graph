@@ -175,7 +175,7 @@ class ConvE(KGE_ERTails):
         use_bias = args.use_bias
         hidden_size = args.hidden_size
 
-        padding_token = args.padding_token_e
+        padding_token = args.padding_token_h
 
         super(ConvE, self).__init__(embedding_dim, num_entities, num_relations, padding_token, None)
 
@@ -233,7 +233,7 @@ class TransformerVer2E(KGE_ERTails):
         transformer_drop = args.transformer_drop
         dim_feedforward = args.dim_feedforward
         num_layers = args.num_layers
-        padding_token = args.padding_token_e
+        padding_token = args.padding_token_h
         cls_token = args.cls_token_e
 
         assert padding_token is not None
@@ -336,7 +336,7 @@ class TransformerVer2E_ERE(KGE_ERE):
         nhead = args.nhead
         transformer_drop = args.transformer_drop
         num_layers = args.num_layers
-        padding_token = args.padding_token_e
+        padding_token = args.padding_token_h
         cls_token = args.cls_token_e
 
         assert padding_token is not None
@@ -425,7 +425,7 @@ class TransformerVer3E(KGE_ERTails):
         transformer_drop = args.transformer_drop
         num_layers = args.num_layers
 
-        padding_token_e = args.padding_token_e
+        padding_token_e = args.padding_token_h
         cls_token_e = args.cls_token_e
         mask_token_e = args.mask_token_e
         padding_token_r = args.padding_token_r
