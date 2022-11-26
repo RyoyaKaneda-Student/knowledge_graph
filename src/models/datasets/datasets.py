@@ -1,4 +1,5 @@
 # coding: UTF-8
+import itertools
 import os
 import sys
 from pathlib import Path
@@ -45,6 +46,21 @@ def _del_non_target(label_sparse: torch.sparse.Tensor, target_num):
     )
 
     return rev
+
+
+def mask_function(random_all, tensor_, mask_token, weights, mask_percent,
+                  mask_mask_percent, mask_random_percent, mask_nomask_percent) -> tuple[torch.Tensor, torch.Tensor]:
+    assert mask_percent == (mask_mask_percent + mask_random_percent + mask_nomask_percent)
+    mask_filter = torch.lt(random_all, mask_percent)
+    mask_value = tensor_[mask_filter].clone()
+    random_value = random_all[mask_filter]
+
+    mask_value[random_value >= (mask_nomask_percent + mask_random_percent)] = mask_token  # change to <mask>
+
+    tmp = torch.lt(random_value, mask_random_percent)  # <, change to <random>
+    mask_value[tmp] = torch.multinomial(weights, torch.count_nonzero(tmp).item(), replacement=True)
+
+    return mask_filter, mask_value
 
 
 @dataclasses.dataclass(init=False)
@@ -169,32 +185,35 @@ class StoryTriple(Dataset):
                  padding_h, padding_r, padding_t,
                  sep_h, sep_r, sep_t,
                  ):
+
         self.padding_tensor = torch.tensor([padding_h, padding_r, padding_t])
         self.sep_tensor = torch.tensor([sep_h, sep_r, sep_t])
-        self.triple = torch.from_numpy(triple)
-        self.bos_indices = torch.from_numpy(bos_indices)
+        self.triple = torch.from_numpy(triple).clone()
+        self.bos_indices = torch.from_numpy(bos_indices).clone()
         self.max_len = max_len
 
-    def shuffle_in_1story(self):
-        triple = self.triple
-        len_triple = len(self.triple)
+    def shuffle_per_1scene(self, device=None, non_blocking=False):
+        triple = self.triple.to(device, non_blocking=non_blocking)
         bos_index = self.bos_indices[0]
-        for bos_index_new in self.bos_indices[1:]:
-            triple[bos_index+1: bos_index_new] = \
-                triple[bos_index+1: bos_index_new-1][torch.randperm(bos_index_new-(bos_index+1))]
+        for bos_index_new in itertools.chain(self.bos_indices[1:], [len(triple)]):
+            assert len(torch.randperm(bos_index_new - (bos_index + 1))) == len(triple[bos_index + 1: bos_index_new])
+            triple[bos_index + 1: bos_index_new] = \
+                triple[bos_index + 1: bos_index_new][torch.randperm(bos_index_new - (bos_index + 1), device=device)]
             bos_index = bos_index_new
-        triple[bos_index+1: len(triple)] = \
-            triple[bos_index+1: len(triple)-1][torch.randperm(len(triple) - (bos_index+1))]
-        assert len_triple == len(triple)
-        self.triple = triple
+        assert len(self.triple) == len(triple)
+        self.triple = triple.to('cpu', non_blocking=non_blocking)
+
+    def getitem_by_bos_indices(self, bos_index, tensor_all):
+        item = tensor_all[bos_index:]
+        len_ = len(item)
+        if len_ > self.max_len:
+            return item[:self.max_len]
+        else:
+            return torch.cat((item, tensor_all[0:self.max_len-len_]))
 
     def __getitem__(self, index: int):
-        index_ = self.bos_indices[index]
-        stories = self.triple[index_:]
-        if len(stories) > self.max_len:
-            return stories[:self.max_len]
-        else:
-            return torch.cat((stories, self.triple[0:self.max_len - len(stories)]))
+        bos_index = self.bos_indices[index]
+        return self.getitem_by_bos_indices(bos_index, self.triple)
 
     def __len__(self) -> int:
         return len(self.bos_indices)
@@ -216,15 +235,9 @@ class StoryTripleForValid(StoryTriple):
         self.valid_filter = torch.from_numpy(valid_filter)
 
     def __getitem__(self, index: int):
-        triple = super(StoryTripleForValid, self).__getitem__(index)
-        index_ = self.bos_indices[index]
-        valid_filter = self.valid_filter[index_:]
-        max_len = self.max_len
-        if len(valid_filter) > max_len:
-            rev = valid_filter[:max_len]
-        else:
-            rev = torch.cat((valid_filter, self.valid_filter[0:max_len - len(valid_filter)]))
-        return triple, rev
+        bos_index = self.bos_indices[index]
+        func = self.getitem_by_bos_indices
+        return func(bos_index, self.triple), func(bos_index, self.valid_filter)
 
 
 def main():

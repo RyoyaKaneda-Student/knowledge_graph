@@ -418,8 +418,10 @@ def write2_write_triples(fw_info, fw_train, entity_list, relation_list, is_rev_l
     fw_info.create_dataset(INFO_INDEX.ENTITIES, data=entity_list)
     fw_info.create_dataset(INFO_INDEX.RELATIONS, data=relation_list)
     fw_info.create_dataset(INFO_INDEX.IS_REV_RELATION, data=is_rev_list)
-    fw_info.create_dataset(INFO_INDEX.ID2COUNT_ENTITY, data=np.bincount(triple[:, (0, 2)].flatten()))
-    fw_info.create_dataset(INFO_INDEX.ID2COUNT_RELATION, data=np.bincount(triple[:, 1]))
+    fw_info.create_dataset(INFO_INDEX.ID2COUNT_ENTITY,
+                           data=np.bincount(triple[:, (0, 2)].flatten(), minlength=len(entity_list)))
+    fw_info.create_dataset(INFO_INDEX.ID2COUNT_RELATION,
+                           data=np.bincount(triple[:, 1], minlength=len(relation_list)))
     # triple
     del_data_if_exist(fw_train, [INFO_INDEX.TRIPLE, f'{INFO_INDEX.TRIPLE}_raw'])
     fw_train.create_dataset(INFO_INDEX.TRIPLE, data=triple)
@@ -443,7 +445,10 @@ def write2_svo(title: str, read_group: Group):
     # add reverse
     relation_len_no_reverse = len(relation_list)
     relation_list = relation_list + [ConstName2.keyREVERSE(r) for r in relation_list]
-    is_rev_list = np.ones(relation_len_no_reverse, dtype=bool) + np.zeros(relation_len_no_reverse, dtype=bool)
+    is_rev_list = np.concatenate(
+        [np.zeros(relation_len_no_reverse, dtype=bool), np.ones(relation_len_no_reverse, dtype=bool)]
+    )
+    assert len(relation_list) == len(is_rev_list) and len(is_rev_list)==2*relation_len_no_reverse
     svo_triple_reverse = svo_triple[:, (2, 1, 0)]
     svo_triple_reverse[:, 1] += relation_len_no_reverse
     # concat
@@ -470,14 +475,17 @@ def write2_sro(title: str, read_group: Group, general_read_group: Group):
         for s, r, o in read_group[ConstName1.PO_TRIPLE][()]
     ])
     # add reverse
+    """
     relation_len_no_reverse = len(relation_list)
     relation_list = relation_list + [ConstName2.keyREVERSE(r) for r in relation_list]
-    is_rev_list = np.ones(relation_len_no_reverse, dtype=bool) + np.zeros(relation_len_no_reverse, dtype=bool)
+    is_rev_list = np.concatenate(
+        [np.zeros(relation_len_no_reverse, dtype=bool), np.ones(relation_len_no_reverse, dtype=bool)]
+    )
     sro_triple_reverse = sro_triple[:, (2, 1, 0)]
     sro_triple_reverse[:, 1] += relation_len_no_reverse
 
-    # sro_triple = np.concatenate([sro_triple, sro_triple_reverse])
-
+    sro_triple = np.concatenate([sro_triple, sro_triple_reverse])
+    """
     sro_triple_raw = [
         [entity_list[s], relation_list[r], entity_list[o]]
         for s, r, o in sro_triple
@@ -485,7 +493,8 @@ def write2_sro(title: str, read_group: Group, general_read_group: Group):
 
     with (h5py.File(f"{ConstName2.WRITE_FILE}/{title}/SRO/info.hdf5", 'a') as fw_info,
           h5py.File(f"{ConstName2.WRITE_FILE}/{title}/SRO/train.hdf5", 'a') as fw_train):
-        write2_write_triples(fw_info, fw_train, entity_list, relation_list, is_rev_list, sro_triple,
+        write2_write_triples(fw_info, fw_train, entity_list, relation_list,
+                             np.zeros(len(relation_list), dtype=bool), sro_triple,
                              str_list_for_hdf5(sro_triple_raw))
 
 

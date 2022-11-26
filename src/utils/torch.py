@@ -111,22 +111,32 @@ def force_cuda_empty_cache_per_loop(iterable: Iterable[_T]):
 
 
 class force_cpu(object):
-    def __init__(self, model: nn.Module, device: torch.device):
+    def __init__(self, model: nn.Module, device: torch.device, non_blocking=False):
         """
         Within with... , device is forced to be cpu.
         """
         self.model = model
         self.device = device
+        self.non_blocking = non_blocking
         if not isinstance(device, torch.device):
             assert "'device' type is not 'torch.device'. "
 
     def __enter__(self):
-        self.model.to('cpu')
+        self.model.to('cpu', non_blocking=self.non_blocking)
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.model.to(self.device)
         del self.model, self.device
+
+
+def force_cpu_decorator(model, device, non_blocking=False):
+    def _force_cpu_decorator(func):
+        def wrapper(*args, **kwargs):
+            with force_cpu(model, device, non_blocking=False):
+                func(*args, **kwargs)
+        return wrapper
+    return _force_cpu_decorator
 
 
 # endregion

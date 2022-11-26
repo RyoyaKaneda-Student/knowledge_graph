@@ -31,7 +31,6 @@ PROJECT_DIR = Path(__file__).resolve().parents[2]
 
 def add_bos(triple: np.ndarray,
             bos_token_h, bos_token_r, bos_token_t,
-            is_shuffle_in_same_head=False
             ):
     array_bos = np.array([[bos_token_h, bos_token_r, bos_token_t]])
     old_s = triple[0][0]
@@ -40,8 +39,6 @@ def add_bos(triple: np.ndarray,
     for i, (s, r, e) in enumerate(triple):
         if old_s != s:
             tmp = triple[before_i: i]
-            if is_shuffle_in_same_head:
-                np.random.shuffle(tmp)
             tmp_list.append(tmp)
             old_s, before_i = s, i
 
@@ -154,15 +151,13 @@ class KgStoryTransformer01(torch.nn.Module):
         x = self.tail_maskdlm_layer(x)
         x = self.tail_maskdlm_activation(x)
         x = self.tail_maskdlm_norm(x)
-        # x = torch.mm(x, self.emb_entity.weight.transpose(1, 0))
         return x  # F.softmax(x)  # x.shape = [semi_batch, (num_entities + some special entity num)]
 
     def get_embedding(self, head, relation, tail):
-        assert head.shape == relation.shape and relation.shape == tail.shape
-        assert head.shape.shape[2] == 3
-        emb_head = self.head_dense_activation(self.head_dense(self.emb_entity(head)))
-        emb_rel = self.emb_relation(relation)
-        emb_tail = self.emb_entity(tail)
+        assert all_same_shape(head, relation, tail)
+        emb_head: torch.Tensor = self.head_dense_activation(self.head_dense(self.emb_entity(head)))
+        emb_rel: torch.Tensor = self.emb_relation(relation)
+        emb_tail: torch.Tensor = self.emb_entity(tail)
         return emb_head, emb_rel, emb_tail
 
     def get_combined_head_relation_tail(self, emb_head, emb_rel, emb_tail):
@@ -170,27 +165,36 @@ class KgStoryTransformer01(torch.nn.Module):
         x = emb_head * self.weight_head + emb_rel * self.weight_relation + emb_tail * self.weight_tail
         return self.pe(x) if not self.no_use_pe else x
 
-    def forward(self, triple: torch.Tensor):
+    def _forward(self, triple: torch.Tensor):
         # batch, triple_len = triple.shape[0:2]  # for debugging
         # assert triple.shape == (batch, triple_len, 3)
         emb_head, emb_rel, emb_tail = self.get_embedding(triple[:, :, 0], triple[:, :, 1], triple[:, :, 2])
         # assert all_same_shape(emb_head) and emb_head.shape == (batch, triple_len, self.embedding_dim)
         x = self.get_combined_head_relation_tail(emb_head, emb_rel, emb_tail)
         # assert x.shape == (batch, triple_len, self.embedding_dim)
-        x = self.transformer(x)
-        x = self.norm_after_transformer(x)
+        x = self.norm_after_transformer(self.transformer(x))
         # assert x.shape == (batch, triple_len, self.embedding_dim)
         return x
 
-    def pre_train_forward(self, triple: torch.Tensor,
-                          mask_head: torch.Tensor, mask_relation: torch.Tensor, mask_tail: torch.Tensor):
+    def forward(self, triple, mask_head_filter, mask_relation_filter, mask_tail_filter):
+        """
+
+        Args:
+            triple(torch.Tensor):
+            mask_head_filter(torch.Tensor):
+            mask_relation_filter(torch.Tensor):
+            mask_tail_filter(torch.Tensor):
+
+        Returns:
+
+        """
         # get item
-        x = self.forward(triple)
+        x = self._forward(triple)
         # entity mask
         x = x.reshape(-1, self.embedding_dim)
-        head_pred = self.get_head_pred(x[mask_head.reshape(-1)])
-        relation_pred = self.get_relation_pred(x[mask_relation.reshape(-1)])
-        tail_pred = self.get_tail_pred(x[mask_tail.reshape(-1)])
+        head_pred = self.get_head_pred(x[mask_head_filter.reshape(-1)])
+        relation_pred = self.get_relation_pred(x[mask_relation_filter.reshape(-1)])
+        tail_pred = self.get_tail_pred(x[mask_tail_filter.reshape(-1)])
         # get mm
         entity_embeddings = self.emb_entity.weight.transpose(1, 0)
         relation_embeddings = self.emb_relation.weight.transpose(1, 0)

@@ -28,9 +28,8 @@ from utils.hdf5 import read_one_item
 from utils.setup import easy_logger
 from utils.typing import ConstValueClass
 from utils.utils import (
-    version_check, EternalGenerator, true_count, get_true_position_items_using_getter
+    version_check, true_count, get_true_position_items_using_getter
 )
-from utils.numpy import negative_sampling
 
 # endregion
 
@@ -119,12 +118,35 @@ class MyRawData:
     loaded_all_tail: bool
     loaded_all_relation: bool
 
-    def __init__(self,
-                 info_path: str,
-                 all_tail_path: str,
-                 all_relation_path: str,
-                 train_path: str, valid_path: str, test_path: str,
-                 *, logger=None):
+    def __init__(
+            self, info_path, all_tail_path, all_relation_path, train_path, valid_path, test_path, *, logger=None):
+        """
+
+        Args:
+            info_path(str): path for "info.hdf5"
+            all_tail_path(str):
+            all_relation_path(str):
+            train_path(str):
+            valid_path(str):
+            test_path(str):
+            logger(Logger):
+        """
+        # error or warning
+        if info_path is None:
+            raise "info_path must not None."
+            pass
+        else:
+            if all_tail_path is None and logger is not None:
+                logger.debug("no all_tail_path")
+            if all_relation_path is None and logger is not None:
+                logger.debug("no all_relation_path")
+            if train_path is None and logger is not None:
+                logger.warning("no train_path")
+            if valid_path is None and logger is not None:
+                logger.debug("no valid_path")
+            if test_path is None and logger is not None:
+                logger.debug("no test_path")
+        # load info.hdf5
         with h5py.File(info_path, 'r') as f:
             self.entity_length = f[INFO_INDEX.E_LEN][()]
             self.relation_length = f[INFO_INDEX.R_LEN][()]
@@ -134,9 +156,10 @@ class MyRawData:
             self.relations = [r.decode() for r in f[INFO_INDEX.RELATIONS][:]]
             self.is_reverse_relation = f[INFO_INDEX.IS_REV_RELATION][:]
             self.id2count_relation = f[INFO_INDEX.ID2COUNT_RELATION][:]
-
+        # setting paths
         self.all_tail_path = all_tail_path
         self.all_relation_path = all_relation_path
+
         self.train_path = train_path
         self.valid_path = valid_path
         self.test_path = test_path
@@ -192,7 +215,8 @@ class MyRawData:
         elif item in ['er_length', 'ers', 'id2all_tail_row', 'id2all_tail_entity', 'id2all_tail_mode']:
             self.init_all_tail()
         elif item in [
-            'ee_length', 'ees', 'id2all_relation_row', 'id2all_relation_relation', 'id2all_relation_mode_mode']:
+            'ee_length', 'ees', 'id2all_relation_row', 'id2all_relation_relation', 'id2all_relation_mode_mode'
+        ]:
             self.init_all_relation()
         else:
             raise "not item in Data."
@@ -266,8 +290,8 @@ class MyDataHelper:
         return len(self._special_entity_list), len(self._special_relation_list)
 
     def set_loaders(self,
-                    train_dataloader: DataLoader, train_valid_dataloader: DataLoader,
-                    valid_dataloader: DataLoader, test_dataloader: DataLoader):
+                    train_dataloader: DataLoader, train_valid_dataloader: Optional[DataLoader],
+                    valid_dataloader: Optional[DataLoader], test_dataloader: Optional[DataLoader]):
         self._train_dataloader = train_dataloader
         self._train_valid_dataloader = train_valid_dataloader
         self._valid_dataloader = valid_dataloader
@@ -319,7 +343,7 @@ class MyDataHelper:
         return self.data.relation_length + len(self._special_relation_list)
 
     @property
-    def processed_r_length_without_reverse(self) -> int:
+    def processed_relation_length_without_reverse(self) -> int:
         assert self.data.relation_length % 2 == 0
         return self.data.relation_length // 2 + len(self._special_relation_list)
 
@@ -402,6 +426,13 @@ class MyDataHelper:
         is_reverse_relation = np.concatenate([np.zeros(r_special_num, dtype=np.bool), is_reverse_relation])
         return is_reverse_relation
 
+    @property
+    def processed_relations_no_reverse(self):
+        relations = self.processed_relations
+        r_is_reverse = self.processed_r_is_reverse_list
+        assert len(relations) == len(r_is_reverse)
+        return [r for i, r in enumerate(relations) if r_is_reverse[i] == 0]
+
     def show(self, logger: Logger = None):
         if logger is not None:
             logger.info("==========Show DataHelper==========")
@@ -422,34 +453,6 @@ class MyDataHelper:
             f"MyDataHelper: {entity_length=}, {relation_length=}, {all_triple_length=}, "
             f"{e_special_num=}, {r_special_num=} "
         )
-
-
-def add_negative_to_triple(
-        triple_dataset: MyTripleDataset,
-        sparse_all_data: torch.Tensor,
-        count_per_item: Union[np.ndarray],
-        negative_count):
-    raise "aaa"
-    old_len_ = len(triple_dataset)
-
-    eg = EternalGenerator(
-        lambda: negative_sampling(np.arange(len(count_per_item)), count_per_item, size=100000)
-    )
-    negative_tail = [
-        eg.get_next(conditional=lambda x: (sparse_all_data[er_or_ee2id][x] == 0))
-        for _, _, _, _, _, er_or_ee2id in triple_dataset
-        for _ in range(negative_count)
-    ]
-
-    triple = triple_dataset.triple.repeat(old_len_ * (negative_count + 1), 1)  # n*3=> ((nc+1)*n)*3
-    triple[old_len_:, 2] = torch.from_numpy(np.stack(negative_tail))
-
-    return MyTripleDataset(
-        triple,
-        triple_dataset.r_is_reverse.repeat(old_len_ * (negative_count + 1)),
-        triple_dataset.index2er_or_ee_id.repeat(old_len_ * (negative_count + 1)),
-        triple_dataset.is_exist.repeat(old_len_ * (negative_count + 1)),
-    )
 
 
 def load_preprocess_data(kg_data: KGDATA_LITERAL, entity_special_num, relation_special_num, *, logger=None):
