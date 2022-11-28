@@ -1,7 +1,5 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-# noinspection PyUnresolvedReferences
-import os
 from argparse import Namespace
 # noinspection PyUnresolvedReferences
 from collections import namedtuple
@@ -18,6 +16,7 @@ import optuna
 import pandas as pd
 # torch
 import torch
+from torch.utils.data import Dataset
 from ignite.contrib.handlers.tqdm_logger import ProgressBar
 from ignite.engine import Engine, Events
 from ignite.handlers import Timer, Checkpoint, global_step_from_engine, DiskSaver
@@ -49,6 +48,7 @@ EVALUATOR: Final = 'evaluator'
 CHECKPOINTER: Final = 'checkpointer'
 CHECKPOINTER_GOOD_LOSS: Final = 'checkpointer_good_loss'
 CHECKPOINTER_LAST: Final = 'checkpointer_last'
+DATA_HELPER: Final = 'data_helper'
 
 PAD_E: Final = '<pad_e>'
 CLS_E: Final = '<cls_e>'
@@ -63,6 +63,7 @@ BOS_R: Final = '<bos_r>'
 
 ALL_TAIL = 'all_tail'
 TRIPLE = 'triple'
+DATASETS = 'datasets'
 
 LOSS: Final = 'loss'
 STORY_RELATION_ENTITY = ('story', 'relation', 'entity')
@@ -98,6 +99,26 @@ ABOUT_KILL_WORDS: Final = ['word.predicate:kill', 'word.predicate:notKill', 'wor
 SRO_ALL_INFO_FILE = "data/processed/KGCdata/All/SRO/info.hdf5"
 SRO_ALL_TRAIN_FILE = "data/processed/KGCdata/All/SRO/train.hdf5"
 
+SRO_AbbeyGrange075_TRAIN_FILE = "data/processed/KGCdata/All/SRO/train_AbbeyGrange_075.hdf5"
+SRO_ACaseOfIdentity075_TRAIN_FILE = "data/processed/KGCdata/All/SRO/train_ACaseOfIdentity_075.hdf5"
+SRO_CrookedMan075_TRAIN_FILE = "data/processed/KGCdata/All/SRO/train_CrookedMan_075.hdf5"
+SRO_DancingMen075_TRAIN_FILE = "data/processed/KGCdata/All/SRO/train_DancingMen_075.hdf5"
+SRO_DevilsFoot075_TRAIN_FILE = "data/processed/KGCdata/All/SRO/train_DevilsFoot_075.hdf5"
+SRO_ResidentPatient075_TRAIN_FILE = "data/processed/KGCdata/All/SRO/train_ResidentPatient_075.hdf5"
+SRO_SilverBlaze075_TRAIN_FILE = "data/processed/KGCdata/All/SRO/train_SilverBlaze_075.hdf5"
+SRO_SpeckledBand075_TRAIN_FILE = "data/processed/KGCdata/All/SRO/train_SpeckledBand_075.hdf5"
+
+TITLE2FILE075 = {
+    'ACaseOfIdentity': SRO_AbbeyGrange075_TRAIN_FILE,
+    'AbbeyGrange': SRO_ACaseOfIdentity075_TRAIN_FILE,
+    'CrookedMan': SRO_CrookedMan075_TRAIN_FILE,
+    'DancingMen': SRO_DancingMen075_TRAIN_FILE,
+    'DevilsFoot': SRO_DevilsFoot075_TRAIN_FILE,
+    'ResidentPatient': SRO_ResidentPatient075_TRAIN_FILE,
+    'SilverBlaze': SRO_SilverBlaze075_TRAIN_FILE,
+    'SpeckledBand': SRO_SpeckledBand075_TRAIN_FILE
+}
+
 CHECKPOINT_DIR: Final = 'saved_models/.tmp/check-point.{}'
 MOST_GOOD_CHECKPOINT_PATH: Final = '{}/most_good/'
 LATEST_CHECKPOINT_PATH: Final = '{}/most_good/'
@@ -132,6 +153,9 @@ def setup_parser(args: Namespace = None) -> Namespace:
     paa('--pre-train', help="Put on if you are doing pre-training", action='store_true')
     paa('--train-valid-test', help='', action='store_true')
     paa('--only-train', help='', action='store_true')
+    paa('--use-for-challenge100', help='', action='store_true')
+    paa('--use-for-challenge075', help='', action='store_true')
+    paa('--use-title', help=' or '.join(ALL_TITLE_LIST), type=str, choices=ALL_TITLE_LIST)
     # optuna setting
     paa('--do-optuna', help="do optuna", action='store_true')
     paa('--optuna-file', help='optuna file', type=str)
@@ -275,7 +299,7 @@ def pre_training(
         object_loss: torch.Tensor = loss_fn(entity_pred, mask_ans_object)
 
         loss: torch.Tensor = (
-                story_loss*loss_weight_story + relation_loss*loss_weight_relation + object_loss*loss_weight_entity)
+                story_loss * loss_weight_story + relation_loss * loss_weight_relation + object_loss * loss_weight_entity)
         loss.backward()
         opt.step()
 
@@ -456,7 +480,7 @@ def pre_training(
     )
 
     if args.resume_from_checkpoint and args.resume_from_last_point:
-        raise "resume-from-checkpoint or resume-from-last-point can be 'True', not both."
+        raise ValueError("resume-from-checkpoint or resume-from-last-point can be 'True', not both.")
         pass
     elif args.resume_from_checkpoint:
         load_path = args.resume_checkpoint_path
@@ -468,7 +492,9 @@ def pre_training(
         last_checkpoint.save_handler = DiskSaver(LATEST_CHECKPOINT_PATH.format(checkpoint_dir), require_empty=True)
     elif args.resume_from_last_point:
         load_path = args.resume_checkpoint_path
-        if load_path is None: raise "checkpoint_path must not None."
+        if load_path is None:
+            raise ValueError("--checkpoint-path must not None.")
+            pass
         to_load = {MODEL: model, OPTIMIZER: opt, TRAINER: trainer,
                    CHECKPOINTER_GOOD_LOSS: good_checkpoint, CHECKPOINTER: last_checkpoint}
         logger.info(f"----- resume from last. last_path: {load_path}")
@@ -494,39 +520,79 @@ def pre_training(
                    CHECKPOINTER_GOOD_LOSS: good_checkpoint, CHECKPOINTER_LAST: last_checkpoint}
 
 
-def main_function(args: Namespace, *, logger: Logger):
-    summary_writer = SummaryWriter(log_dir=args.tensorboard_dir) if args.tensorboard_dir is not None else None
-    entity_special_num: int = args.entity_special_num
-    relation_special_num: int = args.relation_special_num
-    batch_size, lr = args.batch_size, args.lr
-    max_len = args.max_len
-
+def get_all_tokens(args):
     pad_token_e, pad_token_r = args.padding_token_e, args.padding_token_r
     cls_token_e, cls_token_r = args.cls_token_e, args.cls_token_r
     mask_token_e, mask_token_r = args.mask_token_e, args.mask_token_r
     sep_token_e, sep_token_r = args.sep_token_e, args.sep_token_r
     bos_token_e, bos_token_r = args.bos_token_e, args.bos_token_r
+    return (
+        (pad_token_e, pad_token_r), (cls_token_e, cls_token_r), (mask_token_e, mask_token_r),
+        (sep_token_e, sep_token_r), (bos_token_e, bos_token_r)
+    )
 
-    data_helper = MyDataHelper(SRO_ALL_INFO_FILE, None, SRO_ALL_TRAIN_FILE, None, None, logger=logger,
+
+def make_data_helper(args, *, logger: Logger):
+    """
+
+    Args:
+        args:
+        logger:
+
+    Returns:
+
+    """
+    entity_special_num, relation_special_num = args.entity_special_num, args.relation_special_num
+    ((pad_token_e, pad_token_r), (cls_token_e, cls_token_r), (mask_token_e, mask_token_r),
+     (sep_token_e, sep_token_r), (bos_token_e, bos_token_r)) = get_all_tokens(args)
+    if args.use_for_challenge075:
+        if not args.only_train: raise ValueError("If use for challenge, --only-train must True")
+        if args.use_title is None: raise ValueError("--use-title must not None.")
+        train_file = TITLE2FILE075[args.use_title]
+    else:
+        train_file = SRO_ALL_TRAIN_FILE
+        pass
+    data_helper = MyDataHelper(SRO_ALL_INFO_FILE, None, train_file, None, None, logger=logger,
                                entity_special_num=entity_special_num, relation_special_num=relation_special_num)
     data_helper.set_special_names(
         {pad_token_e: PAD_E, cls_token_e: CLS_E, mask_token_e: MASK_E, sep_token_e: SEP_E, bos_token_e: BOS_E},
         {pad_token_r: PAD_R, cls_token_r: CLS_R, mask_token_r: MASK_R, sep_token_r: SEP_R, bos_token_r: BOS_R},
     )
+    return data_helper
 
+
+def make_datasets(args, *, data_helper: MyDataHelper, logger: Logger):
+    """
+    
+    Args:
+        args: 
+        data_helper: 
+        logger: 
+
+    Returns:
+
+    """
+    # get from args
+    ((pad_token_e, pad_token_r), _, _, (sep_token_e, sep_token_r), (bos_token_e, bos_token_r)) = get_all_tokens(args)
+    entity_special_num = args.entity_special_num
+    max_len = args.max_len
+    train_valid_test, only_train = args.train_valid_test, args.only_train
+    # get from data_helper
     entities, relations = data_helper.processed_entities, data_helper.processed_relations
-    num_entities, num_relations = len(entities), len(relations)
     triple = data_helper.processed_train_triple
+    logger.debug("----- make_datasets start -----")
     # Check the number of data before including special tokens, as you will need them when creating the validation data.
     len_of_default_triple = len(triple)
     # add bos token in triples
     triple = add_bos(triple, bos_token_e, bos_token_r, bos_token_e)
-    if args.train_valid_test:
+    dataset_train, dataset_valid, dataset_test = None, None, None
+    if train_valid_test:
         # These words cannot be left out in the search for the criminal.
         kill_entity, notKill_entity, beKilled_entity = [entities.index(_entity) for _entity in ABOUT_KILL_WORDS]
         # Filters to detect words essential for training.
-        cannot_valid_filter: np.ndarray = (triple[:, 0] < entity_special_num) | (triple[:, 2] == kill_entity) | \
-                                          (triple[:, 2] == notKill_entity) | (triple[:, 2] == beKilled_entity)
+        cannot_valid_filter = (triple[:, 0] < entity_special_num) | (triple[:, 2] == kill_entity) | \
+                              (triple[:, 2] == notKill_entity) | (triple[:, 2] == beKilled_entity)
+        cannot_valid_filter = cast(np.ndarray, cannot_valid_filter)
         # Filters to detect words essential for training.
         prob = (~cannot_valid_filter).astype(float)
         valid_test_indices = np.sort(
@@ -575,49 +641,94 @@ def main_function(args: Namespace, *, logger: Logger):
                                            np.where(triple_test[:, 0] == bos_token_e)[0], test_filter, max_len,
                                            pad_token_e, pad_token_r, pad_token_e,
                                            sep_token_e, sep_token_r, sep_token_e)
-
-        dataloader_train = DataLoader(dataset_train, shuffle=True, batch_size=batch_size, num_workers=2,
-                                      pin_memory=True)
-        dataloader_valid = DataLoader(dataset_valid, shuffle=False, batch_size=batch_size // 4, num_workers=2,
-                                      pin_memory=True)
-        dataloader_test = DataLoader(dataset_test, shuffle=False, batch_size=batch_size // 4, num_workers=2,
-                                     pin_memory=True)
-        data_helper.set_loaders(dataloader_train, None, dataloader_valid, dataloader_test)
-    elif args.only_train:
+    elif only_train:
         dataset_train = StoryTriple(triple, np.where(triple[:, 0] == bos_token_e)[0], max_len,
                                     pad_token_e, pad_token_r, pad_token_e,
                                     sep_token_e, sep_token_r, sep_token_e)
-        dataloader_train = DataLoader(dataset_train, shuffle=True, batch_size=batch_size)
-        data_helper.set_loaders(dataloader_train, None, None, None)
-        valid_filter = None
     else:
-        raise "Either --train-valid-test or --only-train is required."
+        raise ValueError("Either --train-valid-test or --only-train is required.")
         pass
 
-    tokens = SpecialTokens(
-        args.padding_token_e, args.padding_token_r,
-        args.cls_token_e, args.cls_token_r,
-        args.sep_token_e, args.sep_token_r,
-        args.mask_token_e, args.mask_token_r,
-        args.bos_token_e, args.bos_token_r
-    )
-    logger.debug('----- special token info -----')
-    logger.debug(tokens)
-    logger.debug('----- special token info -----')
+    return dataset_train, dataset_valid, dataset_test
 
-    model = KgStoryTransformer01(args, num_entities, num_relations, special_tokens=tokens)
+
+def make_model(args, *, data_helper: MyDataHelper, logger: Logger):
+    """
+
+    Args:
+        args:
+        data_helper:
+        logger:
+
+    Returns:
+
+    """
+    # get from args
+    all_tokens = [_t for _tt in get_all_tokens(args) for _t in _tt]
+    # get from data_helper
+    num_entities, num_relations = len(data_helper.processed_entities), len(data_helper.processed_relations)
+    logger.debug("----- make_model start -----")
+    model = KgStoryTransformer01(args, num_entities, num_relations, special_tokens=SpecialTokens(*all_tokens))
+    return model
+
+
+def make_set_dataloader(args, *, datasets: tuple[Dataset, Dataset, Dataset], data_helper: MyDataHelper, logger: Logger):
+    batch_size = args.batch_size
+    dataset_train, dataset_valid, dataset_test = datasets
+    dataloader_train = DataLoader(
+        dataset_train, shuffle=True, batch_size=batch_size, num_workers=2, pin_memory=True)
+    dataloader_valid = None if dataset_valid is None else DataLoader(
+        dataset_valid, shuffle=False, batch_size=batch_size // 4, num_workers=2, pin_memory=True)
+    dataloader_test = None if dataset_test is None else DataLoader(
+        dataset_test, shuffle=False, batch_size=batch_size // 4, num_workers=2, pin_memory=True)
+    data_helper.set_loaders(dataloader_train, None, dataloader_valid, dataloader_test)
+
+
+def main_function(args: Namespace, *, logger: Logger):
+    logger.info('----- make datahelper start. -----')
+    data_helper = make_data_helper(args, logger=logger)
+    logger.info('----- make datahelper complete. -----')
+    datasets = make_datasets(args, data_helper=data_helper, logger=logger)
+
+    logger.info('----- make and set dataloader start. -----')
+    make_set_dataloader(args, datasets=datasets, data_helper=data_helper, logger=logger)
+    logger.info('----- make and set dataloader complete. -----')
+
+    logger.info('----- make model start -----')
+    model = make_model(args, data_helper=data_helper, logger=logger)
+    logger.info('----- make model complete. -----')
+
+    summary_writer = SummaryWriter(log_dir=args.tensorboard_dir) if args.tensorboard_dir is not None else None
 
     if args.pre_train:
-        assert args.model_path is not None
-        model, info_dict = pre_training(args, data_helper=data_helper, model=model, lr=lr,
-                                        summary_writer=summary_writer, logger=logger, )
+        # setting hyper parameter
+        lr = args.lr
+        loss_weight_story = args.loss_weight_story
+        loss_weight_relation = args.loss_weight_relation
+        loss_weight_entity = args.loss_weight_story
+        # setting path
+        model_path = args.model_path
+        assert model_path is not None
+
+        model, info_dict = pre_training(
+            args, data_helper=data_helper, model=model, lr=lr,
+            loss_weight_story=loss_weight_story,
+            loss_weight_relation=loss_weight_relation,
+            loss_weight_entity=loss_weight_entity,
+            summary_writer=summary_writer, logger=logger,
+        )
         good_checkpoint: Checkpoint = info_dict[CHECKPOINTER_GOOD_LOSS]
+        last_checkpoint: Checkpoint = info_dict[CHECKPOINTER_LAST]
         logger.info(f"goog model path: {good_checkpoint.last_checkpoint}")
-        Checkpoint.load_objects(to_load={MODEL: model}, checkpoint=good_checkpoint.last_checkpoint)
+        logger.info(f"last model path: {last_checkpoint.last_checkpoint}")
+        if args.only_train:
+            Checkpoint.load_objects(to_load={MODEL: model}, checkpoint=last_checkpoint.last_checkpoint)
+        else:
+            Checkpoint.load_objects(to_load={MODEL: model}, checkpoint=good_checkpoint.last_checkpoint)
         save_model(model, args.model_path, device=args.device)
         logger.info(f"save model path: {args.model_path}")
 
-    return model, {'data_helper': data_helper, 'triple': triple, 'valid_filter': valid_filter}
+    return model, {DATA_HELPER: data_helper, DATASETS: datasets}
 
 
 def main(args=None):

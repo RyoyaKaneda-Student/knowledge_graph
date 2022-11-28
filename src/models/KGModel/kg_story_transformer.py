@@ -67,10 +67,10 @@ class SpecialTokens01(SpecialTokens):
     padding_token_r: int
     cls_token_e: int
     cls_token_r: int
-    sep_token_e: int
-    sep_token_r: int
     mask_token_e: int
     mask_token_r: int
+    sep_token_e: int
+    sep_token_r: int
     bos_token_e: int
     bos_token_r: int
 

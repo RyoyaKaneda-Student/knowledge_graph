@@ -1,0 +1,621 @@
+[tasks.update_Makefile]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+scp ./Makefile.toml thxserv:~/M1Study/knowledge_graph/
+scp ./Makefile.toml merciserv:~/M1Study/knowledge_graph/
+'''
+]
+description = ""
+
+[tasks.update_src]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+scp -r ./src thxserv:~/M1Study/knowledge_graph/
+scp -r ./src merciserv:~/M1Study/knowledge_graph/
+'''
+]
+description = ""
+
+[tasks.update_data]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+scp -r ./data thxserv:~/M1Study/knowledge_graph/
+scp -r ./data merciserv:~/M1Study/knowledge_graph/
+'''
+]
+description = ""
+
+[tasks.transformer_1025_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+python3 src/models/run.py \
+--device cuda --function do_1train --eco-memory --console-level info --train-type all_tail \
+--logfile saved_models/1025/01/log.log --param-file saved_models/1025/01/param.pkl --model-path saved_models/1025/01/model.pth \
+--model transformere2 --KGdata WN18RR \
+--entity-special-num 2 --relation-special-num 0 --padding-token-e 0 --cls-token-e 1 \
+--epoch 1000 --batch-size 256 --valid-interval 40 \
+--lr 1e-5 --do-train-valid-test
+'''
+]
+description = "transformerの実験"
+
+[tasks.conve_1025_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1025/02"
+Model="conve"
+Lr="3e-3"
+
+python3 src/models/run.py \
+	--device cuda --function do_1train --eco-memory --console-level info --train-type all_tail \
+	--logfile ${Logfile}/log.log --param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--model ${Model} --KGdata WN18RR \
+	--entity-special-num 0 --relation-special-num 0 \
+	--epoch 1000 --batch-size 256 --valid-interval 40 \
+	--lr ${Lr} --do-train-valid-test \
+	--input-drop 0.2 --hidden-drop 0.3 --feat-drop 0.1
+'''
+]
+description = "conveの実験"
+
+[tasks.mlpmixer_1026_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1026/01"
+Model="mlpmixere"
+Lr="1e-5"
+
+python3 src/models/run.py \
+	--device cuda --function do_1train --eco-memory --console-level info --train-type all_tail \
+        --logfile ${Logfile}/log.log --param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+        --model ${Model} --KGdata WN18RR \
+        --entity-special-num 2 --relation-special-num 0 \
+	--padding-token-e 0 --cls-token-e 1 \
+        --epoch 1000 --batch-size 256 --valid-interval 20 \
+        --lr ${Lr} --do-train-valid-test \
+        --input-drop 0.2 --hidden-drop 0.3 --feat-drop 0.1 \
+
+'''
+]
+description = "conveの実験"
+
+[tasks.conve_1101_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1101/01"
+Model="conve"
+Lr="3e-3"
+
+python3 src/run.py \
+	--device cuda --function do_1train --console-level info --train-type all_tail \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard --param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+        --model ${Model} --KGdata WN18RR \
+        --entity-special-num 0 --relation-special-num 0 \
+        --epoch 1000 --batch-size 256 --valid-interval 40 \
+        --lr ${Lr} --do-train-valid-test \
+        --input-drop 0.2 --hidden-drop 0.3 --feat-drop 0.1
+'''
+]
+
+[tasks.transformere_1102_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1102/01"
+Model="transformere2"
+
+python3 src/run.py \
+        --device cuda --function do_optuna --console-level info --train-type all_tail \
+        --optuna-file saved_models/optuna/optuna_study.db --study-name transformere_1102 --n-trials 20 \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard --param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+        --model ${Model} --KGdata WN18RR \
+        --entity-special-num 2 --relation-special-num 0 \
+        --epoch 5000 --batch-size 256 --valid-interval 40 \
+        --padding-token-e 0 --cls-token-e 1 \
+	--do-train-valid-test \
+        --input-drop 0.1 --hidden-drop 0.1 --feat-drop 0.1
+'''
+]
+description = ""
+
+[tasks.transformere_1105_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1105/01"
+Model="transformere2_ere"
+Lr="1e-3"
+
+python3 src/run.py \
+      	--device cuda --function do_1train --console-level info --train-type triple \
+        --logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard --param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+        --model ${Model} --KGdata WN18RR \
+        --entity-special-num 2 --relation-special-num 0 \
+	--padding-token-e 0 --cls-token-e 1 \
+        --epoch 1000 --batch-size 256 --valid-interval 40 \
+        --lr ${Lr} --do-train-valid-test \
+        --input-drop 0.2 --hidden-drop 0.3 --feat-drop 0.1
+'''
+]
+description = "transfoerm ere model 01"
+
+[tasks.conve_1109_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1109/01"
+Model="conve"
+Lr="3e-3"
+
+python3 src/run.py \
+        --device cuda --function do_1train --console-level info --train-type all_tail \
+        --logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard --param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+        --model ${Model} --KGdata KGC-ALL \
+        --entity-special-num 0 --relation-special-num 0 \
+        --epoch 1000 --batch-size 256 --valid-interval 40 \
+        --lr ${Lr} --do-train \
+        --input-drop 0.2 --hidden-drop 0.3 --feat-drop 0.1
+'''
+]
+description = "kgc data conve kimeuti"
+
+[tasks.conve_1113_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1113/01"
+Model="conve"
+Lr="3e-3"
+
+python3 src/run.py \
+        --device cuda --function do_1train --console-level info --train-type all_tail \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard --param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--model ${Model} --KGdata KGC-ALL-SVO  \
+	--entity-special-num 0 --relation-special-num 0 \
+	--epoch 1000 --batch-size 256 --valid-interval 40 \
+	--lr ${Lr} --do-train \
+	--input-drop 0.2 --hidden-drop 0.3 --feat-drop 0.1
+'''
+]
+description = "kgc data conve kimeuti"
+
+[tasks.kgc_1116_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1116/01"
+Lr="1e-6"
+
+python3 src/run_for_KGC.py   \
+        --device cuda --console-level info --pre-train \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--epoch 20000 --batch-size 256 --mask-percent 0.65 \
+	--lr ${Lr}
+'''
+]
+description = "kgc data"
+
+[tasks.kgc_1118_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1118/01"
+Lr="1e-5"
+
+python3 src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+        --param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+        --epoch 10000 --batch-size 256 --mask-percent 0.50 \
+        --lr ${Lr}
+'''
+]
+description = "kgc data"
+
+[tasks.kgc_1119_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1119/01"
+Lr="5e-4"
+
+python3 src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--epoch 20000 --batch-size 256 --mask-percent 0.30 \
+	--lr ${Lr} --valid-interval 40 
+'''
+]
+description = "kgc data"
+
+[tasks.kgc_1120_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1120/01"
+Lr="5e-6"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--max-len 512 --embedding-dim 128 \
+	--epoch 10000 --batch-size 256 --mask-percent 0.15 \
+	--lr ${Lr} --valid-interval 20
+'''
+]
+description = "kgc data"
+
+[tasks.kgc_1120_02]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1120/02"
+Lr="5e-6"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--max-len 512 --embedding-dim 128 \
+	--epoch 10000 --batch-size 32 --mask-percent 0.15 \
+	--lr ${Lr} --valid-interval 20 --no-use-pe
+'''                                                                                                                                                    ]
+description = "kgc data (no-use-pe) "
+
+[tasks.kgc_1123_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1123/01"
+Lr="5e-6"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--max-len 512 --embedding-dim 128 \
+	--epoch 5000 --batch-size 256 \
+	--lr ${Lr} --valid-interval 50
+'''
+]
+description = "kgc data"
+
+[tasks.kgc_1124_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1124/01"
+Lr="1e-5"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--max-len 512 --embedding-dim 128 \
+	--epoch 5000 --batch-size 256 \
+	--lr ${Lr} --valid-interval 50
+'''
+]
+description = "kgc data"
+
+[tasks.kgc_1125_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1125/01"
+Lr="5e-5"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --train-valid-test \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--max-len 512 --embedding-dim 128 \
+	--epoch 2500 --batch-size 256 \
+	--lr ${Lr} --valid-interval 50
+'''
+]
+description = "kgc data"
+
+[tasks.kgc_1126_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1126/01"
+Lr="5e-5"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --train-valid-test \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 --embedding-dim 128 \
+	--epoch 5000 --batch-size 256 \
+	--lr ${Lr} --valid-interval 50 ${@:2} 
+'''
+]
+description = "kgc data"
+
+[tasks.kgc_1126_02]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1126/02"
+Lr="1e-4"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --train-valid-test \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 --embedding-dim 128 \
+	--epoch 5000 --batch-size 256 \
+	--lr ${Lr} --valid-interval 50 ${@:2}
+
+'''
+]
+description = "kgc data"
+
+[tasks.kgc_1127_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1127/01"
+Lr="5e-5"
+Epoch="1500"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --only-train \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 --embedding-dim 128 \
+	--epoch ${Epoch} --batch-size 256 \
+	--lr ${Lr} --valid-interval 10000 ${@:2}
+	'''
+	]
+description = "kgc data use for challenge"
+
+[tasks.kgc_1127_02]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1127/02"
+Lr="5e-5"
+Epoch="5000"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --train-valid-test \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 --embedding-dim 128 \
+	--epoch ${Epoch} --batch-size 256 \
+	--loss-weight-story 3.0 --loss-weight-relation 0.5 --loss-weight-entity 1.0 \
+	--lr ${Lr} --valid-interval 50 ${@:2}
+	'''
+	]
+
+description = "kgc data loss-weight model"
+
+[tasks.kgc_1127_03]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1127/03"
+Lr="5e-5"
+Epoch="5000"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --train-valid-test \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 --embedding-dim 128 \
+	--epoch ${Epoch} --batch-size 256 \
+	--loss-weight-story 8.0 --loss-weight-relation 1.0 --loss-weight-entity 2.0 \
+	--lr ${Lr} --valid-interval 50 ${@:2}
+	'''
+	]
+
+[tasks.kgc_AbbeyGrange075_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/kgc/AbbeyGrange075/01"
+Lr="5e-5"
+Epoch="1500"
+Title="AbbeyGrange"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --only-train \
+	--use-for-challenge075 --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 --embedding-dim 128 \
+	--epoch ${Epoch} --batch-size 256 \
+	--loss-weight-story 1.0 --loss-weight-relation 1.0 --loss-weight-entity 1.0 \
+	--lr ${Lr} --valid-interval 50 ${@:2}
+	'''
+]
+
+[tasks.kgc_ACaseOfIdentity075_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/kgc/ACaseOfIdentity075/01"
+Lr="5e-5"
+Epoch="1500"
+Title="ACaseOfIdentity"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --only-train \
+	--use-for-challenge075 --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 --embedding-dim 128 \
+	--epoch ${Epoch} --batch-size 256 \
+	--loss-weight-story 1.0 --loss-weight-relation 1.0 --loss-weight-entity 1.0 \
+	--lr ${Lr} --valid-interval 50 ${@:2}
+	'''
+]
+
+[tasks.kgc_CrookedMan075_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/kgc/CrookedMan075/01"
+Lr="5e-5"
+Epoch="1500"
+Title="CrookedMan"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --only-train \
+	--use-for-challenge075 --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 --embedding-dim 128 \
+	--epoch ${Epoch} --batch-size 256 \
+	--loss-weight-story 1.0 --loss-weight-relation 1.0 --loss-weight-entity 1.0 \
+	--lr ${Lr} --valid-interval 50 ${@:2}
+	'''
+]
+
+[tasks.kgc_DevilsFoot075_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/kgc/DevilsFoot075/01"
+Lr="5e-5"
+Epoch="1500"
+Title="DevilsFoot"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --only-train \
+	--use-for-challenge075 --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 --embedding-dim 128 \
+	--epoch ${Epoch} --batch-size 256 \
+	--loss-weight-story 1.0 --loss-weight-relation 1.0 --loss-weight-entity 1.0 \
+	--lr ${Lr} --valid-interval 50 ${@:2}
+	'''
+]
+
+[tasks.kgc_ResidentPatient075_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/kgc/ResidentPatient075/01"
+Lr="5e-5"
+Epoch="1500"
+Title="ResidentPatient"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --only-train \
+	--use-for-challenge075 --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 --embedding-dim 128 \
+	--epoch ${Epoch} --batch-size 256 \
+	--loss-weight-story 1.0 --loss-weight-relation 1.0 --loss-weight-entity 1.0 \
+	--lr ${Lr} --valid-interval 50 ${@:2}
+	'''
+]
+
+[tasks.kgc_SilverBlaze075_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/kgc/SilverBlaze075/01"
+Lr="5e-5"
+Epoch="1500"
+Title="SilverBlaze"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --only-train \
+	--use-for-challenge075 --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 --embedding-dim 128 \
+	--epoch ${Epoch} --batch-size 256 \
+	--loss-weight-story 1.0 --loss-weight-relation 1.0 --loss-weight-entity 1.0 \
+	--lr ${Lr} --valid-interval 50 ${@:2}
+	'''
+]
+
+[tasks.kgc_SpeckledBand075_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/kgc/SpeckledBand075/01"
+Lr="5e-5"
+Epoch="1500"
+Title="SpeckledBand"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --only-train \
+	--use-for-challenge075 --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 --embedding-dim 128 \
+	--epoch ${Epoch} --batch-size 256 \
+	--loss-weight-story 1.0 --loss-weight-relation 1.0 --loss-weight-entity 1.0 \
+	--lr ${Lr} --valid-interval 50 ${@:2}
+	'''
+]
+
+[tasks.kgc1127_012]
+description = "Test hoge"
+script = ['''
+#!/usr/bin/env bash
+echo OK.
+''']
+dependencies = ["kgc_AbbeyGrange075_01", "kgc_ACaseOfIdentity075_01"]

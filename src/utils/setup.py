@@ -96,7 +96,7 @@ def save_param(args: Namespace):
         os.makedirs(os.path.dirname(param_file), exist_ok=True)
         with open(param_file, "wb") as bf:
             pickle.dump(args, bf)
-        args['logger'].info("save params")
+        args['logger'].info("save params") if 'logger' in args else None
 
 
 def load_param(param_file_path: str):

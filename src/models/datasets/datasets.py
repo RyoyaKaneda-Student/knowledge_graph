@@ -3,13 +3,8 @@ import itertools
 import os
 import sys
 from pathlib import Path
-
 # ========== My Utils ==========
 from utils.utils import version_check, is_same_len_in_list
-
-PROJECT_DIR = Path(__file__).resolve().parents[2]
-sys.path.append(os.path.join(PROJECT_DIR, 'src'))
-
 # ========== python ==========
 from logging import Logger
 # noinspection PyUnresolvedReferences
