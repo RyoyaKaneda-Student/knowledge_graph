@@ -14,6 +14,7 @@ import abc
 
 import numpy as np
 import torch
+from torch import flatten, mm
 from torch.nn import functional as F, Parameter
 from torch.nn.functional import gelu
 
@@ -76,13 +77,20 @@ class SpecialTokens01(SpecialTokens):
 
 
 class KgStoryTransformer01(torch.nn.Module):
-    def __init__(self, args,
-                 num_entity: int, num_relations: int,
-                 special_tokens: SpecialTokens, **kwargs):
+    def __init__(self, args, num_entity, num_relations, special_tokens, **kwargs):
+        """
+
+        Args:
+            args:
+            num_entity(int):
+            num_relations(int):
+            special_tokens(SpecialTokens):
+            **kwargs:
+        """
         super().__init__()
         # get from args
         embedding_dim, max_len = args.embedding_dim, args.max_len
-        nhead, num_layers, dim_feedforward = args.nhead, args.num_layers, args.dim_feedforward  # 適当 4, 4, 1028
+        nhead, num_layers, dim_feedforward = args.nhead, args.num_layers, args.dim_feedforward
         position_encoder_drop, transformer_drop = args.position_encoder_drop, args.transformer_drop
         padding_token_e, padding_token_r = special_tokens.padding_token_e, special_tokens.padding_token_r
         # set default value
@@ -101,61 +109,48 @@ class KgStoryTransformer01(torch.nn.Module):
         self.emb_entity = torch.nn.Embedding(num_entity, embedding_dim, padding_idx=padding_token_e)
         self.emb_relation = torch.nn.Embedding(num_relations, embedding_dim, padding_idx=padding_token_r)
         # head dense
-        self.head_dense = torch.nn.Linear(embedding_dim, embedding_dim)
-        self.head_dense_activation = torch.nn.GELU()
-        self.head_dense_norm = torch.nn.LayerNorm([embedding_dim])
+        self.head_dense = torch.nn.Sequential(OrderedDict([
+            ('dense1', torch.nn.Linear(embedding_dim, embedding_dim)),
+            ('activation', torch.nn.GELU()),
+            ('dense2', torch.nn.Linear(embedding_dim, embedding_dim)), ]))
 
         self.weight_head = torch.nn.Parameter(torch.tensor(1.0))
         self.weight_relation = torch.nn.Parameter(torch.tensor(1.0))
         self.weight_tail = torch.nn.Parameter(torch.tensor(1.0))
 
         self.pe = PositionalEncoding(embedding_dim, dropout=position_encoder_drop, max_len=self.max_len)
-        self.transformer = TransformerEncoder(
-            encoder_layer=TransformerEncoderLayer(
-                d_model=embedding_dim, nhead=nhead, dropout=transformer_drop,
-                batch_first=True, dim_feedforward=dim_feedforward,
-                activation=transformer_activation, norm_first=transformer_norm_first
-            ),
-            num_layers=num_layers
-        )
+        self.transformer = TransformerEncoder(TransformerEncoderLayer(
+            d_model=embedding_dim, nhead=nhead, dropout=transformer_drop,
+            batch_first=True, dim_feedforward=dim_feedforward,
+            activation=transformer_activation, norm_first=transformer_norm_first
+        ), num_layers=num_layers)
         self.norm_after_transformer = torch.nn.LayerNorm([embedding_dim])  # it is because of norm first
-        # maskdlm for head
-        self.head_maskdlm_layer = torch.nn.Linear(embedding_dim, embedding_dim)
-        self.head_maskdlm_activation = torch.nn.GELU()
-        self.head_maskdlm_norm = torch.nn.LayerNorm([embedding_dim])
-        # maskdlm for relation
-        self.relation_maskdlm_layer = torch.nn.Linear(embedding_dim, embedding_dim)
-        self.relation_maskdlm_activation = torch.nn.GELU()
-        self.relation_maskdlm_norm = torch.nn.LayerNorm([embedding_dim])
-        # maskdlm for tail
-        self.tail_maskdlm_layer = torch.nn.Linear(embedding_dim, embedding_dim)
-        self.tail_maskdlm_activation = torch.nn.GELU()
-        self.tail_maskdlm_norm = torch.nn.LayerNorm([embedding_dim])
+        maskdlm_maker = lambda: OrderedDict(
+            [('linear', torch.nn.Linear(embedding_dim, embedding_dim)), ('activation', torch.nn.Tanh())])
+        # maskdlm for head, relation, tail
+        self.head_maskdlm = torch.nn.Sequential(maskdlm_maker())
+        self.relation_maskdlm = torch.nn.Sequential(maskdlm_maker())
+        self.tail_maskdlm = torch.nn.Sequential(maskdlm_maker())
+        del maskdlm_maker
 
     def get_head_pred(self, x: torch.Tensor):
         # x.shape = [semi_batch, embedding_dim]
-        x = self.head_maskdlm_layer(x)
-        x = self.head_maskdlm_activation(x)
-        x = self.head_maskdlm_norm(x)
-        return x  # F.softmax(x, dim=)  # x.shape = [semi_batch, (num_story + some special entity num)]
+        x = self.head_maskdlm(x)
+        return x
 
     def get_relation_pred(self, x: torch.Tensor):
         # x.shape = [semi_batch, embedding_dim]
-        x = self.relation_maskdlm_layer(x)
-        x = self.relation_maskdlm_activation(x)
-        x = self.relation_maskdlm_norm(x)
+        x = self.relation_maskdlm(x)
         return x  # x.shape = [semi_batch, (num_relation + some special entity num)]
 
     def get_tail_pred(self, x: torch.Tensor):
         # x.shape = [semi_batch, embedding_dim]
-        x = self.tail_maskdlm_layer(x)
-        x = self.tail_maskdlm_activation(x)
-        x = self.tail_maskdlm_norm(x)
+        x = self.tail_maskdlm(x)
         return x  # F.softmax(x)  # x.shape = [semi_batch, (num_entities + some special entity num)]
 
     def get_embedding(self, head, relation, tail):
         assert all_same_shape(head, relation, tail)
-        emb_head: torch.Tensor = self.head_dense_activation(self.head_dense(self.emb_entity(head)))
+        emb_head: torch.Tensor = self.head_dense(self.emb_entity(tail))
         emb_rel: torch.Tensor = self.emb_relation(relation)
         emb_tail: torch.Tensor = self.emb_entity(tail)
         return emb_head, emb_rel, emb_tail
@@ -192,18 +187,14 @@ class KgStoryTransformer01(torch.nn.Module):
         x = self._forward(triple)
         # entity mask
         x = x.reshape(-1, self.embedding_dim)
-        head_pred = self.get_head_pred(x[mask_head_filter.reshape(-1)])
-        relation_pred = self.get_relation_pred(x[mask_relation_filter.reshape(-1)])
-        tail_pred = self.get_tail_pred(x[mask_tail_filter.reshape(-1)])
+        head_pred = self.get_head_pred(x[flatten(mask_head_filter)])
+        relation_pred = self.get_relation_pred(x[flatten(mask_relation_filter)])
+        tail_pred = self.get_tail_pred(x[flatten(mask_tail_filter.reshape(-1))])
         # get mm
         entity_embeddings = self.emb_entity.weight.transpose(1, 0)
         relation_embeddings = self.emb_relation.weight.transpose(1, 0)
-        return (
-            x,
-            torch.mm(head_pred, entity_embeddings),
-            torch.mm(relation_pred, relation_embeddings),
-            torch.mm(tail_pred, entity_embeddings),
-        )
+        return (x, mm(head_pred, entity_embeddings),
+                mm(relation_pred, relation_embeddings), mm(tail_pred, entity_embeddings),)
 
 
 @dataclasses.dataclass
