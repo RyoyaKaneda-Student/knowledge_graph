@@ -146,6 +146,7 @@ def setup_parser(args: Namespace = None) -> Namespace:
     paa('--model-path', type=str, help='model path')
     paa('--resume-from-checkpoint', help='if use checkpoint, use this argument.', action='store_true')
     paa('--resume-from-last-point', help='if use checkpoint, use this argument.', action='store_true')
+    paa('--only-load-trainer-evaluator', help='', action='store_true')
     paa('--resume-checkpoint-path', help='if use checkpoint, use this argument.', type=str)
     paa('--console-level', help='log level on console', type=str, default='debug', choices=['info', 'debug'])
     paa('--device-name', help=DeviceName.ALL_INFO, type=str, default=DeviceName.CPU, choices=DeviceName.ALL_LIST)
@@ -489,6 +490,10 @@ def pre_training(
         logger.debug("----- epoch: {:>5} iter {:>6} complete. total time: {:>7} -----".format(
             epoch, engine.state.iteration, elapsed_time_str(total_timer.value())))
         logger.debug(f"loss={output[LOSS].item()}")
+
+    if args.only_load_trainer_evaluator:
+        logger.info("load trainer and evaluator. then end")
+        return model, {TRAINER: trainer, EVALUATOR: evaluator}
 
     # about checkpoint
     to_save = {MODEL: model, OPTIMIZER: opt, TRAINER: trainer}
