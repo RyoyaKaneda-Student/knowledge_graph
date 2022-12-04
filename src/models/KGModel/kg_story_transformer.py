@@ -2,32 +2,18 @@
 # -*- coding: utf-8 -*-
 import dataclasses
 import itertools
-import os
-import sys
-from pathlib import Path
-
+from collections import OrderedDict
 # noinspection PyUnresolvedReferences
 from typing import List, Dict, Tuple, Optional, Union, Callable
-from collections import OrderedDict
-
-import abc
 
 import numpy as np
 import torch
 from torch import flatten, mm
-from torch.nn import functional as F, Parameter
-from torch.nn.functional import gelu
-
-from torch.nn.init import xavier_normal_
 # from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
-from torch.nn import TransformerEncoderLayer, TransformerEncoder, Softmax
-
-from utils.torch import MM, all_same_shape
+from torch.nn import TransformerEncoderLayer, TransformerEncoder
 
 from models.utilModules.tranformer import PositionalEncoding
-from models.utilModules.mlp_mixer import MlpMixer, MlpMixerLayer
-
-PROJECT_DIR = Path(__file__).resolve().parents[2]
+from utils.torch import all_same_shape
 
 
 def add_bos(triple: np.ndarray,
@@ -181,20 +167,26 @@ class KgStoryTransformer01(torch.nn.Module):
             mask_tail_filter(torch.Tensor):
 
         Returns:
-
+            tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         """
+
         # get item
         x = self._forward(triple)
         # entity mask
         x = x.reshape(-1, self.embedding_dim)
-        head_pred = self.get_head_pred(x[flatten(mask_head_filter)])
-        relation_pred = self.get_relation_pred(x[flatten(mask_relation_filter)])
-        tail_pred = self.get_tail_pred(x[flatten(mask_tail_filter.reshape(-1))])
-        # get mm
         entity_embeddings = self.emb_entity.weight.transpose(1, 0)
         relation_embeddings = self.emb_relation.weight.transpose(1, 0)
-        return (x, mm(head_pred, entity_embeddings),
-                mm(relation_pred, relation_embeddings), mm(tail_pred, entity_embeddings),)
+        head_pred, relation_pred, tail_pred = None, None, None
+        if mask_head_filter is not None:
+            head_pred = self.get_head_pred(x[flatten(mask_head_filter)])
+            head_pred = mm(head_pred, entity_embeddings)
+        if mask_relation_filter is not None:
+            relation_pred = self.get_relation_pred(x[flatten(mask_relation_filter)])
+            relation_pred = mm(relation_pred, relation_embeddings)
+        if mask_tail_filter is not None:
+            tail_pred = self.get_head_pred(x[flatten(mask_tail_filter)])
+            tail_pred = mm(tail_pred, entity_embeddings)
+        return x, (head_pred, relation_pred, tail_pred)
 
 
 @dataclasses.dataclass

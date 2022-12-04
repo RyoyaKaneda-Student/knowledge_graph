@@ -16,11 +16,11 @@ import optuna
 import pandas as pd
 # torch
 import torch
-from torch.utils.data import Dataset
 from ignite.contrib.handlers.tqdm_logger import ProgressBar
 from ignite.engine import Engine, Events
 from ignite.handlers import Timer, Checkpoint, global_step_from_engine, DiskSaver
 from ignite.metrics import Average, Accuracy
+from torch.utils.data import Dataset
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
@@ -28,9 +28,8 @@ from torch.utils.tensorboard import SummaryWriter
 from models.KGModel.kg_story_transformer import KgStoryTransformer01, add_bos, SpecialTokens01 as SpecialTokens
 from models.datasets.data_helper import MyDataHelper
 from models.datasets.datasets import StoryTriple, StoryTripleForValid
-from utils.str_process import line_up_key_value
 from utils.torch import save_model, torch_fix_seed, DeviceName, force_cpu_decorator
-from utils.utils import force_gc_after_function, version_check, elapsed_time_str, true_count
+from utils.utils import force_gc_after_function, version_check, elapsed_time_str
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 
@@ -243,6 +242,7 @@ def pre_training(
     # checkpoint_dir = CHECKPOINT_DIR.format(line_up_key_value(pid=args.pid, uid=uid))
     train = data_helper.train_dataloader
     valid = data_helper.valid_dataloader if args.train_valid_test else None
+    train_triple = train.dataset.triple
     # mask percents
     mask_percent = args.mask_percent
     mask_mask_percent = mask_percent * args.mask_mask_percent
@@ -253,9 +253,18 @@ def pre_training(
 
     max_epoch = args.epoch
     mask_token_e, mask_token_r = args.mask_token_e, args.mask_token_r
-    index2count_entity = torch.from_numpy(data_helper.processed_id2count_entity).to(device, non_blocking=non_blocking)
-    index2count_relation = torch.from_numpy(data_helper.processed_id2count_relation).to(device,
-                                                                                        non_blocking=non_blocking)
+    entity_num, relation_num = len(data_helper.processed_entities), len(data_helper.processed_relations)
+    index2count_head = torch.bincount(train_triple[:, 0], minlength=entity_num).to(torch.float).to(device)
+    index2count_relation = torch.bincount(train_triple[:, 1], minlength=relation_num).to(torch.float).to(device)
+    index2count_tail = torch.bincount(train_triple[:, 2], minlength=entity_num).to(torch.float).to(device)
+    # torch.from_numpy(data_helper.processed_id2count_entity).to(device, non_blocking=non_blocking)
+    # torch.from_numpy(data_helper.processed_id2count_relation).to(device, non_blocking=non_blocking)
+
+    def to_cpu(_tensor: torch.Tensor):
+        return _tensor.to(CPU, non_blocking=non_blocking)
+
+    def cpu_deep_copy_or_none(_tensor: Optional[torch.Tensor]):
+        return _tensor.to(CPU, non_blocking=non_blocking).detach().clone() if _tensor is not None else None
 
     def mask_function(_random_all, _value, _mask_token, weights) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         _mask_filter = torch.lt(_random_all, mask_percent)
@@ -281,40 +290,46 @@ def pre_training(
         triple: torch.Tensor = triple.to(device, non_blocking=non_blocking)
 
         mask_filter_story, mask_ans_story, mask_value_story = mask_function(
-            torch.rand((batch_size, max_len)), triple[:, :, 0], mask_token_e, index2count_entity)
+            torch.rand((batch_size, max_len)), triple[:, :, 0], mask_token_e, index2count_head)
         mask_filter_relation, mask_ans_relation, mask_value_relation = mask_function(
             torch.rand((batch_size, max_len)), triple[:, :, 1], mask_token_r, index2count_relation)
         mask_filter_object, mask_ans_object, mask_value_object = mask_function(
-            torch.rand((batch_size, max_len)), triple[:, :, 2], mask_token_e, index2count_entity)
+            torch.rand((batch_size, max_len)), triple[:, :, 2], mask_token_e, index2count_tail)
 
         triple[:, :, 0][mask_filter_story] = mask_value_story
         triple[:, :, 1][mask_filter_relation] = mask_value_relation
         triple[:, :, 2][mask_filter_object] = mask_value_object
 
-        _, story_pred, relation_pred, entity_pred = \
+        _, (story_pred, relation_pred, entity_pred) = \
             model(triple, mask_filter_story, mask_filter_relation, mask_filter_object)
 
-        story_loss: torch.Tensor = loss_fn(story_pred, mask_ans_story)
-        relation_loss: torch.Tensor = loss_fn(relation_pred, mask_ans_relation)
-        object_loss: torch.Tensor = loss_fn(entity_pred, mask_ans_object)
+        loss: torch.Tensor = torch.tensor(0, dtype=torch.float).to(device)
+        story_loss, relation_loss, object_loss = None, None, None
+        if len(mask_ans_story) > 0:
+            story_loss = loss_fn(story_pred, mask_ans_story)
+            loss += story_loss * loss_weight_story
+        if len(mask_ans_relation) > 0:
+            relation_loss = loss_fn(relation_pred, mask_ans_relation)
+            loss += relation_loss * loss_weight_relation
+        if len(mask_ans_object) > 0:
+            object_loss = loss_fn(entity_pred, mask_ans_object)
+            loss += object_loss * loss_weight_entity
 
-        loss: torch.Tensor = (
-                story_loss * loss_weight_story + relation_loss * loss_weight_relation + object_loss * loss_weight_entity)
         loss.backward()
         opt.step()
 
         # return values
         return_dict = {
-            STORY_ANS: mask_ans_story.to(CPU, non_blocking=non_blocking),
-            RELATION_ANS: mask_ans_relation.to(CPU, non_blocking=non_blocking),
-            OBJECT_ANS: mask_ans_object.to(CPU, non_blocking=non_blocking),
-            STORY_PRED: story_pred.to(CPU, non_blocking=non_blocking).detach().clone(),
-            RELATION_PRED: relation_pred.to(CPU, non_blocking=non_blocking).detach().clone(),
-            ENTITY_PRED: entity_pred.to(CPU, non_blocking=non_blocking).detach().clone(),
-            STORY_LOSS: story_loss.to(CPU, non_blocking=non_blocking).detach().clone(),
-            RELATION_LOSS: relation_loss.to(CPU, non_blocking=non_blocking).detach().clone(),
-            OBJECT_LOSS: object_loss.to(CPU, non_blocking=non_blocking).detach().clone(),
-            LOSS: loss.to(CPU, non_blocking=non_blocking).detach().clone(),
+            STORY_ANS: to_cpu(mask_ans_story),
+            RELATION_ANS: to_cpu(mask_ans_relation),
+            OBJECT_ANS: to_cpu(mask_ans_object),
+            STORY_PRED: cpu_deep_copy_or_none(story_pred),
+            RELATION_PRED: cpu_deep_copy_or_none(relation_pred),
+            ENTITY_PRED: cpu_deep_copy_or_none(entity_pred),
+            STORY_LOSS: cpu_deep_copy_or_none(story_loss),
+            RELATION_LOSS:  cpu_deep_copy_or_none(relation_loss),
+            OBJECT_LOSS: cpu_deep_copy_or_none(object_loss),
+            LOSS: cpu_deep_copy_or_none(loss),
         }
         return return_dict
 
@@ -324,47 +339,56 @@ def pre_training(
         model.eval()
         triple: torch.Tensor = batch[0].to(device, non_blocking=non_blocking)
         valid_filter: torch.Tensor = batch[1].to(device, non_blocking=non_blocking)
-        return_dict = {}
-        # triple.shape = (batch, max_len, 3)
-        # valid_filter.shape = (batch, max_len)
-        triple_ans: torch.Tensor = triple.clone()
+        # triple.shape == (batch, max_len, 3)
+        # valid_filter.shape == (batch, max_len)
 
-        valid_ans_story = triple_ans[:, :, 0][valid_filter]
-        valid_ans_relation = triple_ans[:, :, 1][valid_filter]
-        valid_ans_object = triple_ans[:, :, 2][valid_filter]
+        valid_ans_story = triple[:, :, 0][valid_filter]
+        valid_ans_relation = triple[:, :, 1][valid_filter]
+        valid_ans_object = triple[:, :, 2][valid_filter]
 
-        triple_check_s: torch.Tensor = triple.clone()
-        triple_check_r: torch.Tensor = triple.clone()
-        triple_check_o: torch.Tensor = triple.clone()
+        triple_for_valid = triple.clone()
+        triple_for_valid[:, :, 0][valid_filter] = mask_token_e
+        _, (story_pred, _, _) = model(triple_for_valid, valid_filter, None, None)
+        del triple_for_valid
+        torch.cuda.empty_cache()
 
-        triple_check_s[:, :, 0][valid_filter] = mask_token_e
-        triple_check_r[:, :, 1][valid_filter] = mask_token_r
-        triple_check_o[:, :, 2][valid_filter] = mask_token_e
+        triple_for_valid = triple.clone()
+        triple_for_valid[:, :, 1][valid_filter] = mask_token_r
+        _, (_, relation_pred, _) = model(triple_for_valid, None, valid_filter, None)
+        del triple_for_valid
+        torch.cuda.empty_cache()
 
-        triple3 = torch.cat([triple_check_s, triple_check_r, triple_check_o])
+        triple_for_valid: torch.Tensor = triple.clone()
+        triple_for_valid[:, :, 2][valid_filter] = mask_token_e
+        _, (_, _, entity_pred) = model(triple_for_valid, None, None, valid_filter)
+        del triple_for_valid
+        torch.cuda.empty_cache()
 
-        tmp = torch.zeros_like(valid_filter)
-        valid_filter_s = torch.cat([valid_filter, tmp, tmp])
-        valid_filter_r = torch.cat([tmp, valid_filter, tmp])
-        valid_filter_e = torch.cat([tmp, tmp, valid_filter])
+        loss: torch.Tensor = torch.tensor(0, dtype=torch.float).to(device)
+        story_loss, relation_loss, object_loss = None, None, None
+        if len(valid_ans_story) > 0:
+            story_loss = loss_fn(story_pred, valid_ans_story)
+            loss += story_loss  # * valid_ans_story
+        if len(valid_ans_relation) > 0:
+            relation_loss = loss_fn(relation_pred, valid_ans_relation)
+            loss += relation_loss  # * valid_ans_relation
+        if len(valid_ans_object) > 0:
+            object_loss = loss_fn(entity_pred, valid_ans_object)
+            loss += object_loss  # * valid_ans_object
 
-        _, story_pred, relation_pred, entity_pred = model(triple3, valid_filter_s, valid_filter_r, valid_filter_e)
-        # check loss
-        story_loss: torch.Tensor = loss_fn(story_pred, valid_ans_story)
-        relation_loss: torch.Tensor = loss_fn(relation_pred, valid_ans_relation)
-        object_loss: torch.Tensor = loss_fn(entity_pred, valid_ans_object)
-        loss: torch.Tensor = story_loss + relation_loss + object_loss
         # return dict
-        return_dict = {STORY_ANS: valid_ans_story.to(CPU, non_blocking=non_blocking),
-                       RELATION_ANS: valid_ans_relation.to(CPU, non_blocking=non_blocking),
-                       OBJECT_ANS: valid_ans_object.to(CPU, non_blocking=non_blocking),
-                       STORY_PRED: story_pred.to(CPU, non_blocking=non_blocking),
-                       RELATION_PRED: relation_pred.to(CPU, non_blocking=non_blocking),
-                       ENTITY_PRED: entity_pred.to(CPU, non_blocking=non_blocking),
-                       LOSS: loss.to(CPU, non_blocking=non_blocking),
-                       STORY_LOSS: story_loss.to(CPU, non_blocking=non_blocking),
-                       RELATION_LOSS: relation_loss.to(CPU, non_blocking=non_blocking),
-                       OBJECT_LOSS: object_loss.to(CPU, non_blocking=non_blocking)}
+        return_dict = {
+            STORY_ANS: to_cpu(valid_ans_story),
+            RELATION_ANS: to_cpu(valid_ans_relation),
+            OBJECT_ANS: to_cpu(valid_ans_object),
+            STORY_PRED: to_cpu(story_pred),
+            RELATION_PRED: to_cpu(relation_pred),
+            ENTITY_PRED: to_cpu(entity_pred),
+            LOSS: to_cpu(loss),
+            STORY_LOSS: to_cpu(story_loss),
+            RELATION_LOSS: to_cpu(relation_loss),
+            OBJECT_LOSS: to_cpu(object_loss),
+        }
 
         return return_dict
 
@@ -499,10 +523,9 @@ def pre_training(
                    CHECKPOINTER_GOOD_LOSS: good_checkpoint, CHECKPOINTER: last_checkpoint}
         logger.info(f"----- resume from last. last_path: {load_path}")
         checkpoint = torch.load(load_path)
-        tmp = {key: value for key, value in to_load.items() if key in checkpoint.keys()}
-        Checkpoint.load_objects(to_load=tmp, checkpoint=checkpoint)
-        logger.info(f"----- load objects keys: {tmp.keys()}")
-        del tmp
+        to_load = {key: value for key, value in to_load.items() if key in checkpoint.keys()}
+        Checkpoint.load_objects(to_load=to_load, checkpoint=checkpoint)
+        logger.info(f"----- load objects keys: {to_load.keys()}")
         good_checkpoint.save_handler = DiskSaver(MOST_GOOD_CHECKPOINT_PATH.format(checkpoint_dir), require_empty=False)
         last_checkpoint.save_handler = DiskSaver(LATEST_CHECKPOINT_PATH.format(checkpoint_dir), require_empty=False)
     else:
@@ -673,14 +696,15 @@ def make_model(args, *, data_helper: MyDataHelper, logger: Logger):
 
 
 def make_set_dataloader(args, *, datasets: tuple[Dataset, Dataset, Dataset], data_helper: MyDataHelper, logger: Logger):
+    logger.debug("----- make_set_dataloader -----")
     batch_size = args.batch_size
     dataset_train, dataset_valid, dataset_test = datasets
     dataloader_train = DataLoader(
         dataset_train, shuffle=True, batch_size=batch_size, num_workers=2, pin_memory=True)
     dataloader_valid = None if dataset_valid is None else DataLoader(
-        dataset_valid, shuffle=False, batch_size=batch_size // 4, num_workers=2, pin_memory=True)
+        dataset_valid, shuffle=False, batch_size=batch_size, num_workers=2, pin_memory=True)
     dataloader_test = None if dataset_test is None else DataLoader(
-        dataset_test, shuffle=False, batch_size=batch_size // 4, num_workers=2, pin_memory=True)
+        dataset_test, shuffle=False, batch_size=batch_size, num_workers=2, pin_memory=True)
     data_helper.set_loaders(dataloader_train, None, dataloader_valid, dataloader_test)
 
 
