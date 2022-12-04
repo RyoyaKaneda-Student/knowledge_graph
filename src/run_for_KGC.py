@@ -351,7 +351,7 @@ def pre_training(
         triple_for_valid[:, :, 1][valid_filter] = mask_token_r
         _, (_, relation_pred, _) = model(triple_for_valid, None, valid_filter, None)
 
-        triple_for_valid: torch.Tensor = triple.clone()
+        triple_for_valid = triple.clone()
         triple_for_valid[:, :, 2][valid_filter] = mask_token_e
         _, (_, _, entity_pred) = model(triple_for_valid, None, None, valid_filter)
 
@@ -360,10 +360,8 @@ def pre_training(
         if len(valid_ans_story) > 0:
             story_loss = loss_fn(story_pred, valid_ans_story)
             loss += story_loss  # * valid_ans_story
-        if len(valid_ans_relation) > 0:
             relation_loss = loss_fn(relation_pred, valid_ans_relation)
             loss += relation_loss  # * valid_ans_relation
-        if len(valid_ans_object) > 0:
             object_loss = loss_fn(entity_pred, valid_ans_object)
             loss += object_loss  # * valid_ans_object
 

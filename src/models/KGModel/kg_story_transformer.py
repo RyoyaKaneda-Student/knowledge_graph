@@ -111,13 +111,13 @@ class KgStoryTransformer01(torch.nn.Module):
             activation=transformer_activation, norm_first=transformer_norm_first
         ), num_layers=num_layers)
         self.norm_after_transformer = torch.nn.LayerNorm([embedding_dim])  # it is because of norm first
-        maskdlm_maker = lambda: OrderedDict(
-            [('linear', torch.nn.Linear(embedding_dim, embedding_dim)), ('activation', torch.nn.Tanh())])
         # maskdlm for head, relation, tail
-        self.head_maskdlm = torch.nn.Sequential(maskdlm_maker())
-        self.relation_maskdlm = torch.nn.Sequential(maskdlm_maker())
-        self.tail_maskdlm = torch.nn.Sequential(maskdlm_maker())
-        del maskdlm_maker
+        self.head_maskdlm = torch.nn.Sequential(OrderedDict(
+            [('linear', torch.nn.Linear(embedding_dim, embedding_dim)), ('activation', torch.nn.Tanh())]))
+        self.relation_maskdlm = torch.nn.Sequential(OrderedDict(
+            [('linear', torch.nn.Linear(embedding_dim, embedding_dim)), ('activation', torch.nn.Tanh())]))
+        self.tail_maskdlm = torch.nn.Sequential(OrderedDict(
+            [('linear', torch.nn.Linear(embedding_dim, embedding_dim)), ('activation', torch.nn.Tanh())]))
 
     def get_head_pred(self, x: torch.Tensor):
         # x.shape = [semi_batch, embedding_dim]
