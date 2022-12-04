@@ -653,3 +653,25 @@ python3 -O src/run_for_KGC.py   \
 	--lr ${Lr} --valid-interval 10000 ${@:2}
 	'''
 	]
+
+[tasks.kgc_1205_02]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1205/02"
+Lr="5e-5"
+Epoch="5000"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --train-valid-test \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 --embedding-dim 128 \
+	--epoch ${Epoch} --batch-size 256 \
+	--loss-weight-story 1.0 --loss-weight-relation 1.0 --loss-weight-entity 1.0 \
+	--lr ${Lr} --valid-interval 50 ${@:2}
+	'''
+	]
+description = "kgc data. model chenge."

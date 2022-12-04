@@ -6,6 +6,7 @@ from collections import namedtuple
 # ========== python ==========
 from logging import Logger
 from pathlib import Path
+import gc
 # noinspection PyUnresolvedReferences
 from typing import List, Dict, Tuple, Optional, Union, Callable, Final, Literal, get_args, cast
 
@@ -234,7 +235,7 @@ def pre_training(
     """
     device: torch.device = args.device
     non_blocking = True
-    model.to(device, non_blocking=non_blocking)
+    model.to(device)
     max_len = args.max_len
 
     opt = torch.optim.Adam(model.parameters(), lr=lr)
@@ -261,9 +262,6 @@ def pre_training(
     # torch.from_numpy(data_helper.processed_id2count_entity).to(device, non_blocking=non_blocking)
     # torch.from_numpy(data_helper.processed_id2count_relation).to(device, non_blocking=non_blocking)
 
-    def to_cpu(_tensor: torch.Tensor):
-        return _tensor.to(CPU, non_blocking=non_blocking)
-
     def cpu_deep_copy_or_none(_tensor: Optional[torch.Tensor]):
         return _tensor.to(CPU, non_blocking=non_blocking).detach().clone() if _tensor is not None else None
 
@@ -280,7 +278,6 @@ def pre_training(
         _mask_value[_mask_mask_filter] = _mask_token
         return _mask_filter, _mask_ans, _mask_value
 
-    @force_gc_after_function
     def train_step(_, batch) -> dict:
         model.train()
         triple = batch
@@ -321,9 +318,9 @@ def pre_training(
 
         # return values
         return_dict = {
-            STORY_ANS: to_cpu(mask_ans_story),
-            RELATION_ANS: to_cpu(mask_ans_relation),
-            OBJECT_ANS: to_cpu(mask_ans_object),
+            STORY_ANS: cpu_deep_copy_or_none(mask_ans_story),
+            RELATION_ANS: cpu_deep_copy_or_none(mask_ans_relation),
+            OBJECT_ANS: cpu_deep_copy_or_none(mask_ans_object),
             STORY_PRED: cpu_deep_copy_or_none(story_pred),
             RELATION_PRED: cpu_deep_copy_or_none(relation_pred),
             ENTITY_PRED: cpu_deep_copy_or_none(entity_pred),
@@ -335,7 +332,6 @@ def pre_training(
         return return_dict
 
     @torch.no_grad()
-    @force_gc_after_function
     def valid_step(_, batch) -> dict:
         model.eval()
         triple: torch.Tensor = batch[0].to(device, non_blocking=non_blocking)
@@ -350,20 +346,14 @@ def pre_training(
         triple_for_valid = triple.clone()
         triple_for_valid[:, :, 0][valid_filter] = mask_token_e
         _, (story_pred, _, _) = model(triple_for_valid, valid_filter, None, None)
-        del triple_for_valid
-        torch.cuda.empty_cache()
 
         triple_for_valid = triple.clone()
         triple_for_valid[:, :, 1][valid_filter] = mask_token_r
         _, (_, relation_pred, _) = model(triple_for_valid, None, valid_filter, None)
-        del triple_for_valid
-        torch.cuda.empty_cache()
 
         triple_for_valid: torch.Tensor = triple.clone()
         triple_for_valid[:, :, 2][valid_filter] = mask_token_e
         _, (_, _, entity_pred) = model(triple_for_valid, None, None, valid_filter)
-        del triple_for_valid
-        torch.cuda.empty_cache()
 
         loss: torch.Tensor = torch.tensor(0, dtype=torch.float).to(device)
         story_loss, relation_loss, object_loss = None, None, None
@@ -379,18 +369,17 @@ def pre_training(
 
         # return dict
         return_dict = {
-            STORY_ANS: to_cpu(valid_ans_story),
-            RELATION_ANS: to_cpu(valid_ans_relation),
-            OBJECT_ANS: to_cpu(valid_ans_object),
-            STORY_PRED: to_cpu(story_pred),
-            RELATION_PRED: to_cpu(relation_pred),
-            ENTITY_PRED: to_cpu(entity_pred),
-            LOSS: to_cpu(loss),
-            STORY_LOSS: to_cpu(story_loss),
-            RELATION_LOSS: to_cpu(relation_loss),
-            OBJECT_LOSS: to_cpu(object_loss),
+            STORY_ANS: cpu_deep_copy_or_none(valid_ans_story),
+            RELATION_ANS: cpu_deep_copy_or_none(valid_ans_relation),
+            OBJECT_ANS: cpu_deep_copy_or_none(valid_ans_object),
+            STORY_PRED: cpu_deep_copy_or_none(story_pred),
+            RELATION_PRED: cpu_deep_copy_or_none(relation_pred),
+            ENTITY_PRED: cpu_deep_copy_or_none(entity_pred),
+            LOSS: cpu_deep_copy_or_none(loss),
+            STORY_LOSS: cpu_deep_copy_or_none(story_loss),
+            RELATION_LOSS: cpu_deep_copy_or_none(relation_loss),
+            OBJECT_LOSS: cpu_deep_copy_or_none(object_loss),
         }
-
         return return_dict
 
     trainer, evaluator = Engine(train_step), Engine(valid_step)
@@ -432,7 +421,7 @@ def pre_training(
     def start_epoch_func(engine: Engine):
         epoch = engine.state.epoch
         logger.debug("----- epoch: {:>5} start -----".format(epoch))
-        train.dataset.shuffle_per_1scene(device, non_blocking)
+        train.dataset.shuffle_per_1scene()
 
     @trainer.on(Events.EPOCH_COMPLETED)
     def end_epoch_func(engine: Engine):
@@ -707,9 +696,9 @@ def make_set_dataloader(args, *, datasets: tuple[Dataset, Dataset, Dataset], dat
     dataloader_train = DataLoader(
         dataset_train, shuffle=True, batch_size=batch_size, num_workers=2, pin_memory=True)
     dataloader_valid = None if dataset_valid is None else DataLoader(
-        dataset_valid, shuffle=False, batch_size=batch_size, num_workers=2, pin_memory=True)
+        dataset_valid, shuffle=False, batch_size=batch_size*2, num_workers=2, pin_memory=True)
     dataloader_test = None if dataset_test is None else DataLoader(
-        dataset_test, shuffle=False, batch_size=batch_size, num_workers=2, pin_memory=True)
+        dataset_test, shuffle=False, batch_size=batch_size*2, num_workers=2, pin_memory=True)
     data_helper.set_loaders(dataloader_train, None, dataloader_valid, dataloader_test)
 
 

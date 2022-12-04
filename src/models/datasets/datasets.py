@@ -187,16 +187,16 @@ class StoryTriple(Dataset):
         self.bos_indices = torch.from_numpy(bos_indices).clone()
         self.max_len = max_len
 
-    def shuffle_per_1scene(self, device=None, non_blocking=False):
-        triple = self.triple.to(device, non_blocking=non_blocking)
+    def shuffle_per_1scene(self):
+        triple = self.triple
         bos_index = self.bos_indices[0]
         for bos_index_new in itertools.chain(self.bos_indices[1:], [len(triple)]):
             assert len(torch.randperm(bos_index_new - (bos_index + 1))) == len(triple[bos_index + 1: bos_index_new])
             triple[bos_index + 1: bos_index_new] = \
-                triple[bos_index + 1: bos_index_new][torch.randperm(bos_index_new - (bos_index + 1), device=device)]
+                triple[bos_index + 1: bos_index_new][torch.randperm(bos_index_new - (bos_index + 1))]
             bos_index = bos_index_new
         assert len(self.triple) == len(triple)
-        self.triple = triple.to('cpu', non_blocking=non_blocking)
+        self.triple = triple
 
     def getitem_by_bos_indices(self, bos_index, tensor_all):
         item = tensor_all[bos_index:]
