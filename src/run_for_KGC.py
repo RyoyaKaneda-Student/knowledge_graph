@@ -723,6 +723,7 @@ def main_function(args: Namespace, *, logger: Logger):
     logger.info('----- make model complete. -----')
 
     summary_writer = SummaryWriter(log_dir=args.tensorboard_dir) if args.tensorboard_dir is not None else None
+    check_points = None
 
     if args.pre_train:
         # setting hyper parameter
@@ -751,8 +752,9 @@ def main_function(args: Namespace, *, logger: Logger):
             Checkpoint.load_objects(to_load={MODEL: model}, checkpoint=good_checkpoint.last_checkpoint)
         save_model(model, args.model_path, device=args.device)
         logger.info(f"save model path: {args.model_path}")
+        check_points = {CHECKPOINTER_GOOD_LOSS: good_checkpoint, CHECKPOINTER_LAST: last_checkpoint}
 
-    return model, {DATA_HELPER: data_helper, DATASETS: datasets}
+    return model, {DATA_HELPER: data_helper, DATASETS: datasets, CHECKPOINTER: check_points}
 
 
 def main(args=None):
