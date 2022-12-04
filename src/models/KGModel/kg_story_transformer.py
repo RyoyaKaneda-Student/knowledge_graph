@@ -136,7 +136,7 @@ class KgStoryTransformer01(torch.nn.Module):
 
     def get_embedding(self, head, relation, tail):
         assert all_same_shape(head, relation, tail)
-        emb_head: torch.Tensor = self.head_dense(self.emb_entity(tail))
+        emb_head: torch.Tensor = self.head_dense(self.emb_entity(head))
         emb_rel: torch.Tensor = self.emb_relation(relation)
         emb_tail: torch.Tensor = self.emb_entity(tail)
         return emb_head, emb_rel, emb_tail
