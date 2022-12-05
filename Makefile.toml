@@ -676,12 +676,12 @@ python3 -O src/run_for_KGC.py   \
 	]
 description = "kgc data. model chenge."
 
-[tasks.kgc_all100_02]
+[tasks.kgc_all100_01]
 workspace = false
 script = [
 '''
 #!/usr/bin/env bash
-Logfile="saved_models/kgc/all100/02"
+Logfile="saved_models/kgc/all100/01"
 Lr="5e-5"
 Epoch="1500"
 
