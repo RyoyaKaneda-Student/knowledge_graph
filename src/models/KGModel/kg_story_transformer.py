@@ -17,8 +17,7 @@ from utils.torch import all_same_shape
 
 
 def add_bos(triple: np.ndarray,
-            bos_token_h, bos_token_r, bos_token_t,
-            ):
+            bos_token_h, bos_token_r, bos_token_t,):
     array_bos = np.array([[bos_token_h, bos_token_r, bos_token_t]])
     old_s = triple[0][0]
     before_i = 0
@@ -118,23 +117,24 @@ class KgStoryTransformer01(torch.nn.Module):
             [('linear', torch.nn.Linear(embedding_dim, embedding_dim)), ('activation', torch.nn.Tanh())]))
         self.tail_maskdlm = torch.nn.Sequential(OrderedDict(
             [('linear', torch.nn.Linear(embedding_dim, embedding_dim)), ('activation', torch.nn.Tanh())]))
+        # LayerNorm(d_model, eps=layer_norm_eps, **factory_kwargs)
 
     def get_head_pred(self, x: torch.Tensor):
-        # x.shape = [semi_batch, embedding_dim]
-        x = self.head_maskdlm(x)
+        entity_embeddings = self.emb_entity.weight.transpose(1, 0)
+        x = mm(self.head_maskdlm(x), entity_embeddings)
         return x
 
     def get_relation_pred(self, x: torch.Tensor):
-        # x.shape = [semi_batch, embedding_dim]
-        x = self.relation_maskdlm(x)
+        relation_embeddings = self.emb_relation.weight.transpose(1, 0)
+        x = mm(self.relation_maskdlm(x), relation_embeddings)
         return x  # x.shape = [semi_batch, (num_relation + some special entity num)]
 
     def get_tail_pred(self, x: torch.Tensor):
-        # x.shape = [semi_batch, embedding_dim]
-        x = self.tail_maskdlm(x)
+        entity_embeddings = self.emb_entity.weight.transpose(1, 0)
+        x = mm(self.tail_maskdlm(x), entity_embeddings)
         return x  # F.softmax(x)  # x.shape = [semi_batch, (num_entities + some special entity num)]
 
-    def get_embedding(self, head, relation, tail):
+    def get_embedding(self, head, relation, tail) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         assert all_same_shape(head, relation, tail)
         emb_head: torch.Tensor = self.head_dense(self.emb_entity(head))
         emb_rel: torch.Tensor = self.emb_relation(relation)
@@ -169,73 +169,61 @@ class KgStoryTransformer01(torch.nn.Module):
         Returns:
             tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         """
-
         # get item
         x = self._forward(triple)
         # entity mask
         x = x.reshape(-1, self.embedding_dim)
-        entity_embeddings = self.emb_entity.weight.transpose(1, 0)
-        relation_embeddings = self.emb_relation.weight.transpose(1, 0)
         head_pred, relation_pred, tail_pred = None, None, None
         if mask_head_filter is not None:
             head_pred = self.get_head_pred(x[flatten(mask_head_filter)])
-            head_pred = mm(head_pred, entity_embeddings)
+            pass
         if mask_relation_filter is not None:
             relation_pred = self.get_relation_pred(x[flatten(mask_relation_filter)])
-            relation_pred = mm(relation_pred, relation_embeddings)
+            pass
         if mask_tail_filter is not None:
-            tail_pred = self.get_head_pred(x[flatten(mask_tail_filter)])
-            tail_pred = mm(tail_pred, entity_embeddings)
+            tail_pred = self.get_tail_pred(x[flatten(mask_tail_filter)])
+            pass
         return x, (head_pred, relation_pred, tail_pred)
 
 
-@dataclasses.dataclass
-class SpecialTokens01Ver2(SpecialTokens):
-    padding_token_h: int
-    padding_token_r: int
-    padding_token_t: int
-    cls_token_e: int
-    cls_token_r: int
-    sep_token_e: int
-    sep_token_r: int
-    mask_token_e: int
-    mask_token_r: int
-    bos_token_e: int
-    bos_token_r: int
+class KgStoryTransformer02(KgStoryTransformer01):
+    def __init__(self, args, num_entity, num_relations, special_tokens, **kwargs):
+        super(KgStoryTransformer02, self).__init__(args, num_entity, num_relations, special_tokens, **kwargs)
+        embedding_dim = args.embedding_dim
+        del args
+        del self.head_dense, self.head_maskdlm, self.relation_maskdlm, self.tail_maskdlm
+        self.head_dense = torch.nn.Sequential(OrderedDict([
+            ('dense1', torch.nn.Linear(embedding_dim, embedding_dim)),
+            ('layer_norm', torch.nn.LayerNorm([embedding_dim])),
+            ('activation', torch.nn.GELU()),
+            ('dense2', torch.nn.Linear(embedding_dim, embedding_dim)), ]))
+        self.head_maskdlm = torch.nn.Sequential(OrderedDict([
+            ('linear1', torch.nn.Linear(embedding_dim, embedding_dim)),
+            ('layer_norm', torch.nn.LayerNorm([embedding_dim])),
+            ('activation', torch.nn.GELU()),
+            ('linear2', torch.nn.Linear(embedding_dim, num_entity)), ]))
+        self.relation_maskdlm = torch.nn.Sequential(OrderedDict([
+            ('linear1', torch.nn.Linear(embedding_dim, embedding_dim)),
+            ('layer_norm', torch.nn.LayerNorm([embedding_dim])),
+            ('activation', torch.nn.GELU()),
+            ('linear2', torch.nn.Linear(embedding_dim, num_relations)), ]))
+        self.tail_maskdlm = torch.nn.Sequential(OrderedDict([
+            ('linear1', torch.nn.Linear(embedding_dim, embedding_dim)),
+            ('layer_norm', torch.nn.LayerNorm([embedding_dim])),
+            ('activation', torch.nn.GELU()),
+            ('linear2', torch.nn.Linear(embedding_dim, num_entity)), ]))
 
+    def get_head_pred(self, x: torch.Tensor):
+        x = self.head_maskdlm(x)
+        return x
 
-class KgStoryTransformer01Ver2(KgStoryTransformer01):
-    """
-    This is almost same as KgStoryTransformer01.
-    However,
-    """
+    def get_relation_pred(self, x: torch.Tensor):
+        x = self.relation_maskdlm(x)
+        return x
 
-    def __init__(self, args,
-                 num_head: int, num_relations: int, num_tail: int,
-                 special_tokens: SpecialTokens01Ver2, **kwargs):
-        super(KgStoryTransformer01Ver2, self).__init__(
-            args, 1, 1, FakeSpecialTokens(), **kwargs
-        )
-        del self.emb_entity, self.emb_relation
-        del self.head_dense, self.head_dense_activation, self.head_dense_norm
-        embedding_dim = self.embedding_dim
-        padding_token_h, padding_token_r, padding_token_t = \
-            special_tokens.padding_token_h, special_tokens.padding_token_r, special_tokens.padding_token_t
-
-        self.special_tokens = special_tokens
-        self.emb_head = torch.nn.Embedding(num_head, self.embedding_dim, padding_idx=padding_token_h)
-        self.emb_relation = torch.nn.Embedding(num_relations, embedding_dim, padding_idx=padding_token_r)
-        self.emb_tail = torch.nn.Embedding(num_tail, embedding_dim, padding_idx=padding_token_t)
-
-        assert (not hasattr(self, 'emb_entity'))
-
-    def get_embedding(self, head, relation, tail):
-        assert head.shape == relation.shape and relation.shape == tail.shape
-        assert head.shape.shape[2] == 3
-        emb_head = self.emb_head(head)
-        emb_rel = self.emb_relation(relation)
-        emb_tail = self.emb_tail(tail)
-        return emb_head, emb_rel, emb_tail
+    def get_tail_pred(self, x: torch.Tensor):
+        x = self.tail_maskdlm(x)
+        return x
 
 
 if __name__ == '__main__':

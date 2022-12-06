@@ -695,3 +695,87 @@ python3 -O src/run_for_KGC.py   \
 	--lr ${Lr} --valid-interval 10000 ${@:2}
 	'''
 	]
+
+[tasks.kgc_1206_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1206/01"
+Lr="5e-5"
+Epoch="1500"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --only-train --model-version 02\
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 --embedding-dim 128 \
+	--epoch ${Epoch} --batch-size 192 \
+	--lr ${Lr} --valid-interval 10000 ${@:2}
+	'''
+	]
+description = "kgc model ver 02"
+
+[tasks.kgc_1206_02]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1206/02"
+Lr="5e-5"
+Epoch="5000"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 02 \
+	--train-valid-test --epoch ${Epoch} --batch-size 192 \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 --embedding-dim 128 \
+	--lr ${Lr} --valid-interval 50 ${@:2}
+	'''
+	]
+description = "kgc model ver 02"
+
+[tasks.kgc_1207_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1207/01"
+Lr="5e-5"
+Epoch="5000"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 02 \
+	--train-valid-test --epoch ${Epoch} --batch-size 192 \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 --embedding-dim 128 \
+	--lr ${Lr} --valid-interval 50 ${@:2}
+	'''
+	]
+description = "kgc model ver 02"
+
+[tasks.kgc_all100_02]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/kgc/all100/02"
+Lr="5e-5"
+Epoch="1500"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --only-train \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 --embedding-dim 128 \
+	--epoch ${Epoch} --batch-size 256 \
+	--lr ${Lr} --valid-interval 10000 ${@:2}
+	'''
+	]
+description = "kgc model after fixed"

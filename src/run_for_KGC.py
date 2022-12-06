@@ -26,7 +26,8 @@ from torch.utils.data.dataloader import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 # Made by myself
-from models.KGModel.kg_story_transformer import KgStoryTransformer01, add_bos, SpecialTokens01 as SpecialTokens
+from models.KGModel.kg_story_transformer import (
+    KgStoryTransformer01, KgStoryTransformer02, add_bos, SpecialTokens01 as SpecialTokens)
 from models.datasets.data_helper import MyDataHelper
 from models.datasets.datasets import StoryTriple, StoryTripleForValid
 from utils.torch import save_model, torch_fix_seed, DeviceName, force_cpu_decorator
@@ -145,6 +146,7 @@ def setup_parser(args: Namespace = None) -> Namespace:
     paa('--tensorboard-dir', help='tensorboard direction', type=str, default='log/tensorboard/')
     paa('--checkpoint-dir', help='tensorboard direction', type=str, default='log/checkpoint/')
     paa('--model-path', type=str, help='model path')
+    paa('--model-version', type=str, help='model version.')
     paa('--resume-from-checkpoint', help='if use checkpoint, use this argument.', action='store_true')
     paa('--resume-from-last-point', help='if use checkpoint, use this argument.', action='store_true')
     paa('--only-load-trainer-evaluator', help='', action='store_true')
@@ -238,8 +240,14 @@ def pre_training(
     model.to(device)
     max_len = args.max_len
 
+    entity_num, relation_num = len(data_helper.processed_entities), len(data_helper.processed_relations)
+    max_epoch = args.epoch
+    mask_token_e, mask_token_r = args.mask_token_e, args.mask_token_r
+    logger.debug(f"{entity_num=}, {relation_num=}")
+
     opt = torch.optim.Adam(model.parameters(), lr=lr)
-    loss_fn = torch.nn.CrossEntropyLoss()
+    loss_fn_entity = torch.nn.CrossEntropyLoss(weight=torch.ones(entity_num).to(device))
+    loss_fn_relation = torch.nn.CrossEntropyLoss(weight=torch.ones(relation_num).to(device))
     checkpoint_dir = args.checkpoint_dir
     # checkpoint_dir = CHECKPOINT_DIR.format(line_up_key_value(pid=args.pid, uid=uid))
     train = data_helper.train_dataloader
@@ -253,12 +261,10 @@ def pre_training(
     logger.debug(f"{mask_percent=}, {mask_mask_percent=}, {mask_nomask_percent=}, {mask_random_percent=}")
     assert mask_mask_percent + mask_nomask_percent + mask_random_percent + (1 - mask_percent) == 1.
 
-    max_epoch = args.epoch
-    mask_token_e, mask_token_r = args.mask_token_e, args.mask_token_r
-    entity_num, relation_num = len(data_helper.processed_entities), len(data_helper.processed_relations)
     index2count_head = torch.bincount(train_triple[:, 0], minlength=entity_num).to(torch.float).to(device)
     index2count_relation = torch.bincount(train_triple[:, 1], minlength=relation_num).to(torch.float).to(device)
     index2count_tail = torch.bincount(train_triple[:, 2], minlength=entity_num).to(torch.float).to(device)
+
     # torch.from_numpy(data_helper.processed_id2count_entity).to(device, non_blocking=non_blocking)
     # torch.from_numpy(data_helper.processed_id2count_relation).to(device, non_blocking=non_blocking)
 
@@ -304,13 +310,13 @@ def pre_training(
         loss: torch.Tensor = torch.tensor(0, dtype=torch.float).to(device)
         story_loss, relation_loss, object_loss = None, None, None
         if len(mask_ans_story) > 0:
-            story_loss = loss_fn(story_pred, mask_ans_story)
+            story_loss = loss_fn_entity(story_pred, mask_ans_story)
             loss += story_loss * loss_weight_story
         if len(mask_ans_relation) > 0:
-            relation_loss = loss_fn(relation_pred, mask_ans_relation)
+            relation_loss = loss_fn_relation(relation_pred, mask_ans_relation)
             loss += relation_loss * loss_weight_relation
         if len(mask_ans_object) > 0:
-            object_loss = loss_fn(entity_pred, mask_ans_object)
+            object_loss = loss_fn_entity(entity_pred, mask_ans_object)
             loss += object_loss * loss_weight_entity
 
         loss.backward()
@@ -325,7 +331,7 @@ def pre_training(
             RELATION_PRED: cpu_deep_copy_or_none(relation_pred),
             ENTITY_PRED: cpu_deep_copy_or_none(entity_pred),
             STORY_LOSS: cpu_deep_copy_or_none(story_loss),
-            RELATION_LOSS:  cpu_deep_copy_or_none(relation_loss),
+            RELATION_LOSS: cpu_deep_copy_or_none(relation_loss),
             OBJECT_LOSS: cpu_deep_copy_or_none(object_loss),
             LOSS: cpu_deep_copy_or_none(loss),
         }
@@ -358,11 +364,12 @@ def pre_training(
         loss: torch.Tensor = torch.tensor(0, dtype=torch.float).to(device)
         story_loss, relation_loss, object_loss = None, None, None
         if len(valid_ans_story) > 0:
-            story_loss = loss_fn(story_pred, valid_ans_story)
+            story_loss = loss_fn_entity(story_pred, valid_ans_story)
             loss += story_loss  # * valid_ans_story
-            relation_loss = loss_fn(relation_pred, valid_ans_relation)
+            relation_loss = loss_fn_relation(relation_pred, valid_ans_relation)
             loss += relation_loss  # * valid_ans_relation
-            object_loss = loss_fn(entity_pred, valid_ans_object)
+            object_loss = loss_fn_entity(entity_pred, valid_ans_object)
+            if object_loss < 0: raise ValueError("error")
             loss += object_loss  # * valid_ans_object
 
         # return dict
@@ -683,7 +690,19 @@ def make_model(args, *, data_helper: MyDataHelper, logger: Logger):
     # get from data_helper
     num_entities, num_relations = len(data_helper.processed_entities), len(data_helper.processed_relations)
     logger.debug("----- make_model start -----")
-    model = KgStoryTransformer01(args, num_entities, num_relations, special_tokens=SpecialTokens(*all_tokens))
+    if 'model_version' not in args or args.model_version is None:
+        raise ValueError("")
+        pass
+    elif args.model_version == '01':
+        model = KgStoryTransformer01(args, num_entities, num_relations, special_tokens=SpecialTokens(*all_tokens))
+        pass
+    elif args.model_version == '02':
+        model = KgStoryTransformer02(args, num_entities, num_relations, special_tokens=SpecialTokens(*all_tokens))
+        pass
+    else:
+        raise ValueError("aaa")
+        pass
+
     return model
 
 
@@ -694,9 +713,9 @@ def make_set_dataloader(args, *, datasets: tuple[Dataset, Dataset, Dataset], dat
     dataloader_train = DataLoader(
         dataset_train, shuffle=True, batch_size=batch_size, num_workers=2, pin_memory=True)
     dataloader_valid = None if dataset_valid is None else DataLoader(
-        dataset_valid, shuffle=False, batch_size=batch_size*2, num_workers=2, pin_memory=True)
+        dataset_valid, shuffle=False, batch_size=batch_size * 2, num_workers=2, pin_memory=True)
     dataloader_test = None if dataset_test is None else DataLoader(
-        dataset_test, shuffle=False, batch_size=batch_size*2, num_workers=2, pin_memory=True)
+        dataset_test, shuffle=False, batch_size=batch_size * 2, num_workers=2, pin_memory=True)
     data_helper.set_loaders(dataloader_train, None, dataloader_valid, dataloader_test)
 
 
