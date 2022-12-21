@@ -27,7 +27,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 # Made by myself
 from models.KGModel.kg_story_transformer import (
-    KgStoryTransformer01, KgStoryTransformer02, add_bos, SpecialTokens01 as SpecialTokens)
+    KgStoryTransformer01, KgStoryTransformer02, add_bos, SpecialTokens01 as SpecialTokens, KgStoryTransformer03)
 from models.datasets.data_helper import MyDataHelper
 from models.datasets.datasets import StoryTriple, StoryTripleForValid
 from utils.torch import save_model, torch_fix_seed, DeviceName, force_cpu_decorator
@@ -187,7 +187,9 @@ def setup_parser(args: Namespace = None) -> Namespace:
     paa('--sep-token-s', help='sep', type=int, default=3)
     paa('--bos-token-s', help='bos', type=int, default=4)
     # model
-    paa('--embedding-dim', type=int, default=128, help='The embedding dimension (1D). Default: 128')
+    paa('--embedding-dim', type=int, default=128, help='The embedding dimension. Default: 128')
+    paa('--entity-embedding-dim', type=int, default=128, help='The embedding dimension. Default: 128')
+    paa('--relation-embedding-dim', type=int, default=128, help='The embedding dimension. Default: 128')
     paa('--separate-head-and-tail', action='store_true', default=False,
         help='If True, it head Embedding and tail Embedding are different.')
     paa('--batch-size', help='batch size', type=int, default=4)
@@ -699,9 +701,13 @@ def make_model(args, *, data_helper: MyDataHelper, logger: Logger):
     elif args.model_version == '02':
         model = KgStoryTransformer02(args, num_entities, num_relations, special_tokens=SpecialTokens(*all_tokens))
         pass
+    elif args.model_version == '03':
+        model = KgStoryTransformer03(args, num_entities, num_relations, special_tokens=SpecialTokens(*all_tokens))
+        pass
     else:
         raise ValueError("aaa")
         pass
+    model.assert_check()
 
     return model
 

@@ -61,7 +61,7 @@ class SpecialTokens01(SpecialTokens):
     bos_token_r: int
 
 
-class KgStoryTransformer01(torch.nn.Module):
+class KgStoryTransformer00(torch.nn.Module):
     def __init__(self, args, num_entity, num_relations, special_tokens, **kwargs):
         """
 
@@ -74,7 +74,10 @@ class KgStoryTransformer01(torch.nn.Module):
         """
         super().__init__()
         # get from args
-        embedding_dim, max_len = args.embedding_dim, args.max_len
+        max_len = args.max_len
+        embedding_dim = args.embedding_dim
+        entity_embedding_dim = args.entity_embedding_dim
+        relation_embedding_dim = args.relation_embedding_dim
         nhead, num_layers, dim_feedforward = args.nhead, args.num_layers, args.dim_feedforward
         position_encoder_drop, transformer_drop = args.position_encoder_drop, args.transformer_drop
         padding_token_e, padding_token_r = special_tokens.padding_token_e, special_tokens.padding_token_r
@@ -86,18 +89,15 @@ class KgStoryTransformer01(torch.nn.Module):
 
         # define some model params
         self.embedding_dim = embedding_dim
+        self.entity_embedding_dim = entity_embedding_dim
+        self.relation_embedding_dim = relation_embedding_dim
         self.max_len = max_len
         self.special_tokens = special_tokens
         self.is_separate_head_and_tail = is_separate_head_and_tail
         self.no_use_pe = no_use_pe
 
-        self.emb_entity = torch.nn.Embedding(num_entity, embedding_dim, padding_idx=padding_token_e)
-        self.emb_relation = torch.nn.Embedding(num_relations, embedding_dim, padding_idx=padding_token_r)
-        # head dense
-        self.head_dense = torch.nn.Sequential(OrderedDict([
-            ('dense1', torch.nn.Linear(embedding_dim, embedding_dim)),
-            ('activation', torch.nn.GELU()),
-            ('dense2', torch.nn.Linear(embedding_dim, embedding_dim)), ]))
+        self.emb_entity = torch.nn.Embedding(num_entity, entity_embedding_dim, padding_idx=padding_token_e)
+        self.emb_relation = torch.nn.Embedding(num_relations, relation_embedding_dim, padding_idx=padding_token_r)
 
         self.weight_head = torch.nn.Parameter(torch.tensor(1.0))
         self.weight_relation = torch.nn.Parameter(torch.tensor(1.0))
@@ -119,6 +119,9 @@ class KgStoryTransformer01(torch.nn.Module):
             [('linear', torch.nn.Linear(embedding_dim, embedding_dim)), ('activation', torch.nn.Tanh())]))
         # LayerNorm(d_model, eps=layer_norm_eps, **factory_kwargs)
 
+    def assert_check(self):
+        pass
+
     def get_head_pred(self, x: torch.Tensor):
         entity_embeddings = self.emb_entity.weight.transpose(1, 0)
         x = mm(self.head_maskdlm(x), entity_embeddings)
@@ -136,10 +139,7 @@ class KgStoryTransformer01(torch.nn.Module):
 
     def get_embedding(self, head, relation, tail) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         assert all_same_shape(head, relation, tail)
-        emb_head: torch.Tensor = self.head_dense(self.emb_entity(head))
-        emb_rel: torch.Tensor = self.emb_relation(relation)
-        emb_tail: torch.Tensor = self.emb_entity(tail)
-        return emb_head, emb_rel, emb_tail
+        return self.emb_entity(head), self.emb_relation(relation), self.emb_entity(tail)
 
     def get_combined_head_relation_tail(self, emb_head, emb_rel, emb_tail):
         assert emb_head.shape == emb_rel.shape and emb_rel.shape == emb_tail.shape
@@ -186,17 +186,42 @@ class KgStoryTransformer01(torch.nn.Module):
         return x, (head_pred, relation_pred, tail_pred)
 
 
-class KgStoryTransformer02(KgStoryTransformer01):
+class KgStoryTransformer01(KgStoryTransformer00):
+    def __init__(self, args, num_entity, num_relations, special_tokens, **kwargs):
+        super(KgStoryTransformer01, self).__init__(args, num_entity, num_relations, special_tokens, **kwargs)
+        entity_embedding_dim = args.entity_embedding_dim
+        del args
+        self.head_dense = torch.nn.Sequential(OrderedDict([
+            ('dense1', torch.nn.Linear(entity_embedding_dim, entity_embedding_dim)),
+            ('activation', torch.nn.GELU()),
+            ('dense2', torch.nn.Linear(entity_embedding_dim, entity_embedding_dim)), ]))
+
+    def assert_check(self):
+        assert self.embedding_dim == self.entity_embedding_dim and \
+               self.embedding_dim == self.entity_embedding_dim
+        pass
+
+    def get_combined_head_relation_tail(self, emb_head, emb_rel, emb_tail):
+        assert emb_head.shape == emb_rel.shape and emb_rel.shape == emb_tail.shape
+        x = emb_head * self.weight_head + emb_rel * self.weight_relation + emb_tail * self.weight_tail
+        return self.pe(x) if not self.no_use_pe else x
+
+
+class KgStoryTransformer02(KgStoryTransformer00):
+    """
+    推定をベクトル距離ではない方式にしたパターン.
+    """
     def __init__(self, args, num_entity, num_relations, special_tokens, **kwargs):
         super(KgStoryTransformer02, self).__init__(args, num_entity, num_relations, special_tokens, **kwargs)
         embedding_dim = args.embedding_dim
+        entity_embedding_dim = args.entity_embedding_dim
         del args
-        del self.head_dense, self.head_maskdlm, self.relation_maskdlm, self.tail_maskdlm
+        del self.head_maskdlm, self.relation_maskdlm, self.tail_maskdlm
         self.head_dense = torch.nn.Sequential(OrderedDict([
-            ('dense1', torch.nn.Linear(embedding_dim, embedding_dim)),
-            ('layer_norm', torch.nn.LayerNorm([embedding_dim])),
+            ('dense1', torch.nn.Linear(entity_embedding_dim, entity_embedding_dim)),
+            ('layer_norm', torch.nn.LayerNorm([entity_embedding_dim])),
             ('activation', torch.nn.GELU()),
-            ('dense2', torch.nn.Linear(embedding_dim, embedding_dim)), ]))
+            ('dense2', torch.nn.Linear(entity_embedding_dim, entity_embedding_dim)), ]))
         self.head_maskdlm = torch.nn.Sequential(OrderedDict([
             ('linear1', torch.nn.Linear(embedding_dim, embedding_dim)),
             ('layer_norm', torch.nn.LayerNorm([embedding_dim])),
@@ -213,6 +238,11 @@ class KgStoryTransformer02(KgStoryTransformer01):
             ('activation', torch.nn.GELU()),
             ('linear2', torch.nn.Linear(embedding_dim, num_entity)), ]))
 
+    def assert_check(self):
+        assert self.embedding_dim == self.entity_embedding_dim and \
+               self.embedding_dim == self.entity_embedding_dim
+        pass
+
     def get_head_pred(self, x: torch.Tensor):
         x = self.head_maskdlm(x)
         return x
@@ -225,6 +255,37 @@ class KgStoryTransformer02(KgStoryTransformer01):
         x = self.tail_maskdlm(x)
         return x
 
+    def get_combined_head_relation_tail(self, emb_head, emb_rel, emb_tail):
+        assert emb_head.shape == emb_rel.shape and emb_rel.shape == emb_tail.shape
+        x = emb_head * self.weight_head + emb_rel * self.weight_relation + emb_tail * self.weight_tail
+        return self.pe(x) if not self.no_use_pe else x
+
+
+class KgStoryTransformer03(KgStoryTransformer02):
+    """
+    triple の全てを MLP にいれるタイプ.
+    その他は KgStoryTransformer02 と同じ.
+    """
+    def __init__(self, args, num_entity, num_relations, special_tokens, **kwargs):
+        super(KgStoryTransformer03, self).__init__(args, num_entity, num_relations, special_tokens, **kwargs)
+        embedding_dim = args.embedding_dim
+        entity_embedding_dim = args.entity_embedding_dim
+        relation_embedding_dim = args.relation_embedding_dim
+        del args
+        del self.head_dense, self.weight_head, self.weight_relation, self.weight_tail
+        self.input_dense = torch.nn.Sequential(OrderedDict([
+            ('dense1', torch.nn.Linear(2*entity_embedding_dim+relation_embedding_dim, embedding_dim)),
+            ('layer_norm', torch.nn.LayerNorm([embedding_dim])),
+            ('activation', torch.nn.GELU()),
+            ('dense2', torch.nn.Linear(embedding_dim, embedding_dim)), ]))
+
+    def get_combined_head_relation_tail(self, emb_head, emb_rel, emb_tail):
+        assert emb_head.shape == emb_tail.shape
+        x = torch.cat([emb_head, emb_rel, emb_tail], dim=2)
+        x = self.input_dense(x)
+        return self.pe(x) if not self.no_use_pe else x
+
 
 if __name__ == '__main__':
+    raise ValueError()
     pass
