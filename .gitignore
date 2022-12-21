@@ -102,3 +102,4 @@ log/
 /poetry.lock
 docker-compose.yml
 pyproject.toml
+runs/*
