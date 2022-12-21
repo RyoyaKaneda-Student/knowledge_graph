@@ -92,5 +92,13 @@ target/
 /saved_models/
 /github_sankou/
 
+# docker
+docker/
+.dockerignore
+
+
 log/
+/tensorboard/
 /poetry.lock
+docker-compose.yml
+pyproject.toml
