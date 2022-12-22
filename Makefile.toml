@@ -800,4 +800,4 @@ python3 -O src/run_for_KGC.py   \
 	--lr ${Lr} --valid-interval 50 ${@:2}
 	'''
 	]
-description = "kgc model ver 02"
+description = "kgc model ver 03"
