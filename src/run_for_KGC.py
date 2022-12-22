@@ -439,7 +439,7 @@ def pre_training(
             logger.debug(f"----- train metrics[{_name}]={_value} -----")
             if summary_writer is not None:
                 summary_writer.add_scalar(f"pre_train/{_name}", _value, global_step=epoch)
-        if summary_writer is not None:
+        if summary_writer is not None and hasattr(model, 'weight_head'):
             summary_writer.add_scalar(f"pre_train/model_weight/story", model.weight_head.data, global_step=epoch)
             summary_writer.add_scalar(f"pre_train/model_weight/relation", model.weight_relation.data, global_step=epoch)
             summary_writer.add_scalar(f"pre_train/model_weight/entity", model.weight_tail.data, global_step=epoch)
