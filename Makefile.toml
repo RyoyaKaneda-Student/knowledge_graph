@@ -802,12 +802,21 @@ python3 -O src/run_for_KGC.py   \
 	]
 description = "kgc model ver 03"
 
+<<<<<<< Updated upstream
 [tasks.kgc_1226_01]
+=======
+
+[tasks.kgc_1222_01]
+>>>>>>> Stashed changes
 workspace = false
 script = [
 '''
 #!/usr/bin/env bash
+<<<<<<< Updated upstream
 Logfile="saved_models/1226/01"
+=======
+Logfile="saved_models/1222/01"
+>>>>>>> Stashed changes
 Lr="5e-5"
 Epoch="5000"
 

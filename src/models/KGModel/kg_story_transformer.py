@@ -148,7 +148,7 @@ class KgStoryTransformer00(KgStoryTransformer, ABC):
             special_tokens(SpecialTokens):
             **kwargs:
         """
-        super(KgStoryTransformer00).__init__(args, num_entity, num_relations, special_tokens)
+        super(KgStoryTransformer00, self).__init__(args, num_entity, num_relations, special_tokens)
         # set default value
         transformer_activation, transformer_norm_first, nhead = torch.nn.GELU(), True, 4
         dim_feedforward = args.dim_feedforward
