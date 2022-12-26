@@ -288,7 +288,7 @@ class KgStoryTransformer03(KgStoryTransformer02):
         relation_embedding_dim = args.relation_embedding_dim
         del args, self.head_maskdlm, self.relation_maskdlm, self.tail_maskdlm
         del self.weight_head, self.weight_relation, self.weight_tail
-        self.input_activate = Feedforward(entity_embedding_dim+relation_embedding_dim, embedding_dim)
+        self.input_activate = Feedforward(2*entity_embedding_dim+relation_embedding_dim, embedding_dim)
         self.head_maskdlm = Feedforward(embedding_dim, num_entity)
         self.relation_maskdlm = Feedforward(embedding_dim, num_relations)
         self.tail_maskdlm = Feedforward(embedding_dim, num_entity)
