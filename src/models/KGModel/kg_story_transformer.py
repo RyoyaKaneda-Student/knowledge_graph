@@ -43,7 +43,7 @@ class Feedforward(torch.nn.Module):
     def __init__(self, d_model_in, d_model_out, dim_feedforward=None, activation=torch.nn.GELU(), add_norm=True):
         super().__init__()
         dim_feedforward = dim_feedforward or d_model_out
-        self.linear1 = Linear(d_model_in, dim_feedforward)
+        self.linear1 = Linear(d_model_in, dim_feedforward, bias=(not add_norm))
         self.norm = torch.nn.LayerNorm([dim_feedforward]) if add_norm else torch.nn.Identity()
         self.activation = activation
         self.linear2 = Linear(dim_feedforward, d_model_out)
@@ -250,9 +250,9 @@ class KgStoryTransformer02(KgStoryTransformer00):
         super(KgStoryTransformer02, self).__init__(args, num_entity, num_relations, special_tokens, **kwargs)
         embedding_dim = args.embedding_dim
         del self.head_maskdlm, self.relation_maskdlm, self.tail_maskdlm
-        self.head_maskdlm = Feedforward(embedding_dim, num_entity, dim_feedforward=embedding_dim)
-        self.relation_maskdlm = Feedforward(embedding_dim, num_relations, dim_feedforward=embedding_dim)
-        self.tail_maskdlm = Feedforward(embedding_dim, num_entity, dim_feedforward=embedding_dim)
+        self.head_maskdlm = Feedforward(embedding_dim, num_entity, dim_feedforward=embedding_dim, add_norm=False)
+        self.relation_maskdlm = Feedforward(embedding_dim, num_relations, dim_feedforward=embedding_dim, add_norm=False)
+        self.tail_maskdlm = Feedforward(embedding_dim, num_entity, dim_feedforward=embedding_dim, add_norm=False)
 
     def get_head_pred(self, x: torch.Tensor):
         return self.head_maskdlm(x)
@@ -281,12 +281,8 @@ class KgStoryTransformer03(KgStoryTransformer02):
         embedding_dim = args.embedding_dim
         entity_embedding_dim = args.entity_embedding_dim
         relation_embedding_dim = args.relation_embedding_dim
-        del args, self.head_maskdlm, self.relation_maskdlm, self.tail_maskdlm
-        del self.weight_head, self.weight_relation, self.weight_tail
+        del args, self.weight_head, self.weight_relation, self.weight_tail
         self.input_activate = Feedforward(2*entity_embedding_dim+relation_embedding_dim, embedding_dim)
-        self.head_maskdlm = Feedforward(embedding_dim, num_entity, add_norm=False)
-        self.relation_maskdlm = Feedforward(embedding_dim, num_relations, add_norm=False)
-        self.tail_maskdlm = Feedforward(embedding_dim, num_entity, add_norm=False)
 
     def get_triple_embedding(self, head, relation, tail):
         emb_head, emb_rel, emb_tail = self.get_emb_head(head), self.get_emb_relation(relation), self.get_emb_tail(tail)
