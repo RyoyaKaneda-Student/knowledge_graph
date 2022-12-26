@@ -129,7 +129,7 @@ class KgStoryTransformer(nn.Module, metaclass=abc.ABCMeta):
         raise NotImplementedError()
 
     def _forward(self, triple: torch.Tensor):
-        x, _ = self.get_triple_embedding(triple[:, :, 0], triple[:, :, 1], triple[:, :, 2])
+        x = self.get_triple_embedding(triple[:, :, 0], triple[:, :, 1], triple[:, :, 2])
         x = self.norm_after_transformer(self.transformer(x))
         return x
 
@@ -150,13 +150,12 @@ class KgStoryTransformer00(KgStoryTransformer, ABC):
         """
         super(KgStoryTransformer00, self).__init__(args, num_entity, num_relations, special_tokens)
         # set default value
-        transformer_activation, transformer_norm_first, nhead = torch.nn.GELU(), True, 4
-        dim_feedforward = args.dim_feedforward
+        transformer_activation, transformer_norm_first = torch.nn.GELU(), True,
+        nhead = args.nhead
         num_layers = args.num_layers
+        dim_feedforward = args.dim_feedforward
         position_encoder_drop, transformer_drop = args.position_encoder_drop, args.transformer_drop
-        del args
-        #
-        embedding_dim = self.embedding_dim
+        embedding_dim = args.embedding_dim
         # get embedding_dim and position_encoder_drop
 
         self.weight_head = torch.nn.Parameter(torch.tensor(1.0))
@@ -291,7 +290,8 @@ class KgStoryTransformer03(KgStoryTransformer02):
         self.relation_maskdlm = Feedforward(embedding_dim, num_relations)
         self.tail_maskdlm = Feedforward(embedding_dim, num_entity)
 
-    def get_triple_embedding(self, emb_head, emb_rel, emb_tail):
+    def get_triple_embedding(self, head, relation, tail):
+        emb_head, emb_rel, emb_tail = self.emb_head(head), self.emb_relation(relation), self.emb_tail(tail)
         x = self.input_activate(torch.cat([emb_head, emb_rel, emb_tail], dim=2))
         return self.pe(x)
 
