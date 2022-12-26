@@ -284,9 +284,9 @@ class KgStoryTransformer03(KgStoryTransformer02):
         del args, self.head_maskdlm, self.relation_maskdlm, self.tail_maskdlm
         del self.weight_head, self.weight_relation, self.weight_tail
         self.input_activate = Feedforward(2*entity_embedding_dim+relation_embedding_dim, embedding_dim)
-        self.head_maskdlm = Feedforward(embedding_dim, num_entity)
-        self.relation_maskdlm = Feedforward(embedding_dim, num_relations)
-        self.tail_maskdlm = Feedforward(embedding_dim, num_entity)
+        self.head_maskdlm = Feedforward(embedding_dim, num_entity, add_norm=False)
+        self.relation_maskdlm = Feedforward(embedding_dim, num_relations, add_norm=False)
+        self.tail_maskdlm = Feedforward(embedding_dim, num_entity, add_norm=False)
 
     def get_triple_embedding(self, head, relation, tail):
         emb_head, emb_rel, emb_tail = self.get_emb_head(head), self.get_emb_relation(relation), self.get_emb_tail(tail)
