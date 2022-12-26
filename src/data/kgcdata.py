@@ -136,14 +136,14 @@ HOLMES_TITLE_NAME: Final = lambda title: f'{title}:Holmes'
 WATSON_TITLE_NAME: Final = lambda title: f'{title}:Watson'
 
 title_len_dict: Final = {
-    "僧坊荘園": ("AbbeyGrange", 414, 372, 331),
-    "花婿失踪事件": ("ACaseOfIdentity", 580, 522, 464),
-    "背中の曲がった男": ("CrookedMan", 373, 335, 298),
-    "踊る人形": ("DancingMen", 231, 207, 184),
-    "悪魔の足": ("DevilsFoot", 489, 440, 391),
-    "入院患者": ("ResidentPatient", 324, 291, 259),
-    "白銀号事件": ("SilverBlaze", 397, 367, 317),
-    "マダラのひも": ("SpeckledBand", 401, 360, 320)
+    "僧坊荘園": ("AbbeyGrange", 414, 372, 331, 310),
+    "花婿失踪事件": ("ACaseOfIdentity", 580, 522, 464, 435),
+    "背中の曲がった男": ("CrookedMan", 373, 335, 298, 279),
+    "踊る人形": ("DancingMen", 231, 207, 184, 173),
+    "悪魔の足": ("DevilsFoot", 489, 440, 391, 366),
+    "入院患者": ("ResidentPatient", 324, 291, 259, 243),
+    "白銀号事件": ("SilverBlaze", 397, 367, 317, 297),
+    "マダラのひも": ("SpeckledBand", 401, 360, 320, 300)
 }
 
 OBJECT_SET = {
@@ -164,7 +164,7 @@ StorySPO = tuple[StoryList, URIRefList, URIRefList, URIRefList, URIRefList]
 StoryPO = tuple[StoryList, URIRefList, URIRefList]
 
 
-def get_type_match_people(graph_: Graph, type_set: set[URIRef]) -> URIRefList:
+def get_type_match_items(graph_: Graph, type_set: set[URIRef]) -> URIRefList:
     match_list = remove_duplicate_order_save(
         [s for s, _, o in graph_.triples((None, None, None)) if o in type_set])
     for type_ in type_set:
@@ -204,7 +204,7 @@ def get_svos_triples(graph_: Graph, namespace_dict: NamespaceDict, title: str, s
 
     """
     kgc_p_list: list[URIRef] = [
-        KGC.subject, KGC.hasPredicate, KGC.hasProperty, KGC.what, KGC.whom, KGC.to, KGC.where,
+        KGC.subject, KGC.hasPredicate, KGC.hasProperty, KGC.what, KGC.whom, KGC.to, KGC.where, KGC.infoSource,
         KGC.on, KGC.from_(), KGC.when, KGC.time, KGC.why
     ]
 
@@ -213,9 +213,7 @@ def get_svos_triples(graph_: Graph, namespace_dict: NamespaceDict, title: str, s
 
     for iiis in story_list:
         story_ = prefix_title[iiis]
-        triple_dict[iiis] = {
-            p: list(graph_.objects(story_, p)) for p in kgc_p_list
-        }
+        triple_dict[iiis] = {p: list(graph_.objects(story_, p)) for p in kgc_p_list}
         if len(triple_dict[iiis][KGC.subject]) != 1:
             logger.debug(f"{title}, {iiis}, {[x.n3(graph_.namespace_manager) for x in triple_dict[iiis][KGC.subject]]}")
     # logger.info([triple_dict[iiis][p] for iiis in story_list for p in kgc_p_list[:]])
@@ -243,9 +241,10 @@ def get_svos_triples(graph_: Graph, namespace_dict: NamespaceDict, title: str, s
 
 class ConstName1:
     FILE_NAME: Final = f"{DATA_FOLDER_PATH}/../data/story_list.hdf5"
-    LENGTH_10: Final = 'length_10'
-    LENGTH_09: Final = 'length_09'
-    LENGTH_08: Final = 'length_08'
+    LENGTH_100: Final = 'length_100'
+    LENGTH_090: Final = 'length_090'
+    LENGTH_080: Final = 'length_080'
+    LENGTH_075: Final = 'length_075'
     STORIES_IIIS: Final = 'stories_iiis'
     STORIES: Final = 'stories'
     OBJECTS: Final = 'objects'
@@ -258,7 +257,7 @@ class ConstName1:
 
     @classmethod
     def all_list(cls):
-        return [cls.LENGTH_10, cls.LENGTH_09, cls.LENGTH_08, cls.STORIES, cls.STORIES_IIIS,
+        return [cls.LENGTH_100, cls.LENGTH_090, cls.LENGTH_080, cls.LENGTH_075, cls.STORIES, cls.STORIES_IIIS,
                 cls.OBJECTS, cls.ACTIONS, cls.PEOPLE, cls.SPO_TRIPLE, cls.PO_TRIPLE]
 
 
@@ -278,7 +277,7 @@ def replace_holmes_and_watson(list_, title):
     ))
 
 
-def write_one_title(f, title_ja, title, l10, l09, l08):
+def write_one_title(f, title_ja, title, l100, l090, l080, l075):
     logger.debug(f"{title_ja=}")
     data_file_path = f"{DATA_FOLDER_PATH}/{title}.ttl"
     title_group = f.require_group(title)
@@ -286,11 +285,11 @@ def write_one_title(f, title_ja, title, l10, l09, l08):
     graph_, namespace_dict = make_graph(title, data_file_path)
     namespace_manager = graph_.namespace_manager
 
-    story_iiis_list = get_story_list(graph_, namespace_dict, title, l10)
+    story_iiis_list = get_story_list(graph_, namespace_dict, title, l100)
     story_name_list = [f'{title}:{iiis}' for iiis in story_iiis_list]
-    objects_node_list = get_type_match_people(graph_, OBJECT_SET)
-    actions_node_list = get_type_match_people(graph_, ACTION_SET)
-    people_node_list = get_type_match_people(graph_, {KGC.Person})
+    objects_node_list = get_type_match_items(graph_, OBJECT_SET)
+    actions_node_list = get_type_match_items(graph_, ACTION_SET)
+    people_node_list = get_type_match_items(graph_, {KGC.Person})
     # ofobj_set = get_type_match_people(graph_, {KGC.OFobj})
 
     triple_dict, svo_items, story_po_items = get_svos_triples(graph_, namespace_dict, title, story_iiis_list)
@@ -322,14 +321,15 @@ def write_one_title(f, title_ja, title, l10, l09, l08):
         if (o not in people_list) and (o not in people_list) and (o not in actions_list) and (o not in story_name_list)
     ]
 
-    spo_array: np.ndarray = str_list_for_hdf5(spo_list).T
-    po_array: np.ndarray = str_list_for_hdf5(po_list).T
+    spo_array = str_list_for_hdf5(spo_list).T
+    po_array = str_list_for_hdf5(po_list).T
 
     del_data_if_exist(title_group, ConstName1.all_list())
     [title_group.create_dataset(name, data=value) for name, value in (
-        (ConstName1.LENGTH_10, l10),
-        (ConstName1.LENGTH_09, l09),
-        (ConstName1.LENGTH_08, l08),
+        (ConstName1.LENGTH_100, l100),
+        (ConstName1.LENGTH_090, l090),
+        (ConstName1.LENGTH_080, l080),
+        (ConstName1.LENGTH_075, l075),
         (ConstName1.STORIES_IIIS, str_list_for_hdf5(story_iiis_list)),
         (ConstName1.STORIES, str_list_for_hdf5(story_name_list)),
         (ConstName1.OBJECTS, str_list_for_hdf5(objects_list)),
@@ -354,9 +354,9 @@ def write_():
         spo_all_array = np.array([[0, 0, 0, 0, 0]])  # dammy
         po_all_array = np.array([[0, 0, 0]])  # dammy
 
-        for title_ja, (title, l10, l09, l08) in title_len_dict.items():
+        for title_ja, (title, l100, l090, l080, l075) in title_len_dict.items():
             objects_list, actions_list, people_list, story_name_list, spo_array, po_array = (
-                write_one_title(f, title_ja, title, l10, l09, l08))
+                write_one_title(f, title_ja, title, l100, l090, l080, l075))
             objects_all_set |= set(objects_list)
             objects_all_set_split_title |= {o.replace(f'{title}:', '') for o in objects_list}
             actions_all_set |= set(actions_list)
@@ -400,7 +400,7 @@ def write_():
 
 def read_():
     with h5py.File(ConstName1.FILE_NAME, 'r') as f:
-        for title_ja, (title, l10, l09, l08) in title_len_dict.items():
+        for title_ja, (title, l100, l090, l080, l075) in title_len_dict.items():
             title_group = f.require_group(title)
             [logger.debug(title_group[name][()]) for name in ConstName1.all_list()]
 
@@ -501,7 +501,7 @@ def write2_sro(title: str, read_group: Group, general_read_group: Group):
 def write2_():
     with (h5py.File(ConstName1.FILE_NAME, 'r') as fr, ):
         general_read_group = fr[GENERAL]
-        for title_ja, (title, _, _, _) in title_len_dict.items():
+        for title_ja, (title, _, _, _, _) in title_len_dict.items():
             # read
             read_group = fr[title]
             # svo
@@ -537,7 +537,7 @@ def write3_write_title(fr_train, fw_all_tail):
 
 
 def write3_():
-    for title_ja, (title, l10, l09, l08) in title_len_dict.items():
+    for title_ja, (title, l100, l090, l080, l075) in title_len_dict.items():
         with (h5py.File(f"{ConstName2.WRITE_FILE}/{title}/SVO/train.hdf5", 'r') as fr_train,
               h5py.File(f"{ConstName2.WRITE_FILE}/{title}/SVO/all_tail.hdf5", 'a') as fw_all_tail, ):
             write3_write_title(fr_train, fw_all_tail)
