@@ -49,8 +49,11 @@ class Feedforward(torch.nn.Module):
         self.activation = activation
         self.linear2 = Linear(dim_feedforward, d_model_out)
 
-    def forward(self, x):
-        x = self.linear2(self.activation(self.norm(self.linear1(x))))
+    def forward(self, x: torch.Tensor):
+        x = self.linear1(x)
+        x = self.norm(x)
+        x = self.activation(x)
+        x = self.linear2(x)
         return x
 
 
