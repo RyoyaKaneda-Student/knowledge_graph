@@ -708,6 +708,7 @@ def make_model(args, *, data_helper: MyDataHelper, logger: Logger):
         raise ValueError("aaa")
         pass
     model.assert_check()
+    logger.info(model)
 
     return model
 
