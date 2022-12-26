@@ -291,7 +291,7 @@ class KgStoryTransformer03(KgStoryTransformer02):
         self.tail_maskdlm = Feedforward(embedding_dim, num_entity)
 
     def get_triple_embedding(self, head, relation, tail):
-        emb_head, emb_rel, emb_tail = self.emb_head(head), self.emb_relation(relation), self.emb_tail(tail)
+        emb_head, emb_rel, emb_tail = self.get_emb_head(head), self.get_emb_relation(relation), self.get_emb_tail(tail)
         x = self.input_activate(torch.cat([emb_head, emb_rel, emb_tail], dim=2))
         return self.pe(x)
 
