@@ -238,8 +238,8 @@ class KgStoryTransformer00(KgStoryTransformer, ABC):
 class KgStoryTransformer01(KgStoryTransformer00):
     def __init__(self, args, num_entity, num_relations, special_tokens, **kwargs):
         super(KgStoryTransformer01, self).__init__(args, num_entity, num_relations, special_tokens, **kwargs)
-        entity_embedding_dim = args.entity_embedding_dim
-        self.head_activate = Feedforward(entity_embedding_dim, entity_embedding_dim)
+        embedding_dim = args.embedding_dim
+        self.head_activate = Feedforward(embedding_dim, embedding_dim)
 
     def get_emb_head(self, x: torch.Tensor):
         return self.head_activate(self.entity_embeddings(x))
@@ -252,10 +252,10 @@ class KgStoryTransformer02(KgStoryTransformer00):
     def __init__(self, args, num_entity, num_relations, special_tokens, **kwargs):
         super(KgStoryTransformer02, self).__init__(args, num_entity, num_relations, special_tokens, **kwargs)
         embedding_dim = args.embedding_dim
-        del args, self.head_maskdlm, self.relation_maskdlm, self.tail_maskdlm
-        self.head_maskdlm = Feedforward(embedding_dim, num_entity)
-        self.relation_maskdlm = Feedforward(embedding_dim, num_relations)
-        self.tail_maskdlm = Feedforward(embedding_dim, num_entity)
+        del self.head_maskdlm, self.relation_maskdlm, self.tail_maskdlm
+        self.head_maskdlm = Feedforward(embedding_dim, num_entity, dim_feedforward=embedding_dim)
+        self.relation_maskdlm = Feedforward(embedding_dim, num_relations, dim_feedforward=embedding_dim)
+        self.tail_maskdlm = Feedforward(embedding_dim, num_entity, dim_feedforward=embedding_dim)
 
     def get_head_pred(self, x: torch.Tensor):
         return self.head_maskdlm(x)
@@ -265,6 +265,13 @@ class KgStoryTransformer02(KgStoryTransformer00):
 
     def get_tail_pred(self, x: torch.Tensor):
         return self.tail_maskdlm(x)
+
+
+class KgStoryTransformer0102(KgStoryTransformer01, KgStoryTransformer02):
+    """
+    """
+    def __init__(self, args, num_entity, num_relations, special_tokens, **kwargs):
+        super(KgStoryTransformer0102, self).__init__(args, num_entity, num_relations, special_tokens, **kwargs)
 
 
 class KgStoryTransformer03(KgStoryTransformer02):
@@ -277,11 +284,12 @@ class KgStoryTransformer03(KgStoryTransformer02):
         embedding_dim = args.embedding_dim
         entity_embedding_dim = args.entity_embedding_dim
         relation_embedding_dim = args.relation_embedding_dim
-        del args, self.head_activate, self.weight_head, self.weight_relation, self.weight_tail
+        del args, self.head_maskdlm, self.relation_maskdlm, self.tail_maskdlm
+        del self.weight_head, self.weight_relation, self.weight_tail
         self.input_activate = Feedforward(entity_embedding_dim+relation_embedding_dim, embedding_dim)
-
-    def get_emb_head(self, x: torch.Tensor):
-        return self.entity_embeddings(x)
+        self.head_maskdlm = Feedforward(embedding_dim, num_entity)
+        self.relation_maskdlm = Feedforward(embedding_dim, num_relations)
+        self.tail_maskdlm = Feedforward(embedding_dim, num_entity)
 
     def get_combined_head_relation_tail(self, emb_head, emb_rel, emb_tail):
         x = self.input_activate(torch.cat([emb_head, emb_rel, emb_tail], dim=2))
