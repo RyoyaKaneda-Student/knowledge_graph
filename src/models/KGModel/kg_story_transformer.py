@@ -22,8 +22,7 @@ LINEAR: Final = 'linear'
 ACTIVATION: Final = 'activation'
 
 
-def add_bos(triple: np.ndarray,
-            bos_token_h, bos_token_r, bos_token_t,):
+def add_bos(triple: np.ndarray, bos_token_h, bos_token_r, bos_token_t,):
     array_bos = np.array([[bos_token_h, bos_token_r, bos_token_t]])
     old_s = triple[0][0]
     before_i = 0
@@ -41,20 +40,16 @@ def add_bos(triple: np.ndarray,
 
 
 class Feedforward(torch.nn.Module):
-    def __init__(self, d_model_in, d_model_out, dim_feedforward=None, activation=torch.nn.GELU()):
+    def __init__(self, d_model_in, d_model_out, dim_feedforward=None, activation=torch.nn.GELU(), add_norm=True):
         super().__init__()
         dim_feedforward = dim_feedforward or d_model_out
-        self.linear1 = Linear(d_model_in, dim_feedforward, bias=False)
-        self.norm = torch.nn.LayerNorm([dim_feedforward])
+        self.linear1 = Linear(d_model_in, dim_feedforward)
+        self.norm = torch.nn.LayerNorm([dim_feedforward]) if add_norm else torch.nn.Identity()
         self.activation = activation
         self.linear2 = Linear(dim_feedforward, d_model_out)
 
     def forward(self, x: torch.Tensor):
-        x = self.linear1(x)
-        x = self.norm(x)
-        x = self.activation(x)
-        x = self.linear2(x)
-        return x
+        return self.linear2(self.activation(self.norm(self.linear1(x))))
 
 
 class SpecialTokens:
