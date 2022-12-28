@@ -64,6 +64,7 @@ torch-geometric = [
     { version = "^2.2.0", source = "pypi", extras = ["cuda120"], optional = true }
 ]
 # allennlp = { version = "^2.10.1", source = "pypi", extras = ["cuda120"], optional = true }
+rdflib = "^6.2.0"
 
 [tool.poetry.group.jupyter]
 optional = true
