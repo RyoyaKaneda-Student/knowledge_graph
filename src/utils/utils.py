@@ -127,7 +127,7 @@ def replace_list_value(list_: list[_T], before_after_list: Iterable[tuple[_T, _T
     return list_
 
 
-def remove_duplicate_order_save(list_):
+def remove_duplicate_as_same_order(list_):
     return sorted(set(list_), key=list_.index)
 
 

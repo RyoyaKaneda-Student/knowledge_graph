@@ -255,10 +255,10 @@ class MyDataHelper:
     _test_dataloader: Optional[DataLoader]
 
     def __init__(self, info_path, all_tail_path, train_path, valid_path, test_path, *,
-                 logger=None, entity_special_num, relation_special_num):
+                 logger: Logger = None, entity_special_num, relation_special_num):
         super().__init__()
         self._data: MyRawData = MyRawData(
-            info_path, all_tail_path, '', train_path, valid_path, test_path, logger=None)
+            info_path, all_tail_path, '', train_path, valid_path, test_path, logger=logger)
         self._special_entity_list: list = [f'special_e_{i}' for i in range(entity_special_num)]
         self._special_relation_list: list = [f'special_d_{i}' for i in range(relation_special_num)]
 

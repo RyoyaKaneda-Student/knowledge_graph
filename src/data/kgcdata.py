@@ -12,17 +12,18 @@ from datetime import datetime
 from typing import List, Dict, Tuple, Optional, Union, Callable, Final, Literal, Iterable, get_args, cast
 import h5py
 # noinspection PyUnresolvedReferences
+import rdflib
 from h5py import Group
 import numpy as np
 # noinspection PyUnresolvedReferences
-from rdflib import Graph, URIRef, Literal, Namespace, RDF, RDFS, BNode
+from rdflib import Graph, URIRef, Namespace, RDF, RDFS, BNode
 from rdflib.namespace import DefinedNamespace, NamespaceManager
 from rdflib.term import Node
 
 from models.datasets.data_helper import INFO_INDEX, ALL_TAIL_INDEX
 from utils.hdf5 import del_data_if_exist, str_list_for_hdf5
 from utils.setup import easy_logger
-from utils.utils import replace_list_value, remove_duplicate_order_save
+from utils.utils import replace_list_value, remove_duplicate_as_same_order
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 print(f"{PROJECT_DIR=}")
@@ -164,14 +165,18 @@ StorySPO = tuple[StoryList, URIRefList, URIRefList, URIRefList, URIRefList]
 StoryPO = tuple[StoryList, URIRefList, URIRefList]
 
 
+def get_pure_path(_path):
+    return Path(_path).resolve().as_posix()
+
+
 def get_type_match_items(graph_: Graph, type_set: set[URIRef]) -> URIRefList:
-    match_list = remove_duplicate_order_save(
+    match_list: URIRefList = remove_duplicate_as_same_order(
         [s for s, _, o in graph_.triples((None, None, None)) if o in type_set])
     for type_ in type_set:
         if type_ in match_list:
             del match_list[match_list.index(type_)]
             pass
-    return cast(URIRefList, match_list)
+    return match_list
 
 
 def make_graph(title: str, data_file_path: Union[str, Path]) -> tuple[Graph, dict[str, Namespace]]:
@@ -202,6 +207,14 @@ def get_svos_triples(graph_: Graph, namespace_dict: NamespaceDict, title: str, s
         -> tuple[TripleDict, StorySPO, StoryPO]:
     """
 
+    Args:
+        graph_:
+        namespace_dict:
+        title:
+        story_list:
+
+    Returns:
+
     """
     kgc_p_list: list[URIRef] = [
         KGC.subject, KGC.hasPredicate, KGC.hasProperty, KGC.what, KGC.whom, KGC.to, KGC.where, KGC.infoSource,
@@ -209,21 +222,18 @@ def get_svos_triples(graph_: Graph, namespace_dict: NamespaceDict, title: str, s
     ]
 
     prefix_title = namespace_dict[title]
-    triple_dict: dict[str, dict[URIRef, URIRefList]] = {iiis: {r: None for r in kgc_p_list} for iiis in story_list}
+    triple_dict: dict[str, dict[URIRef, URIRefList]] = dict()
 
     for iiis in story_list:
         story_ = prefix_title[iiis]
         triple_dict[iiis] = {p: list(graph_.objects(story_, p)) for p in kgc_p_list}
-        if len(triple_dict[iiis][KGC.subject]) != 1:
-            logger.debug(f"{title}, {iiis}, {[x.n3(graph_.namespace_manager) for x in triple_dict[iiis][KGC.subject]]}")
-    # logger.info([triple_dict[iiis][p] for iiis in story_list for p in kgc_p_list[:]])
+
     storynum_p_subject_predicate_o = [(iiis, p, subject, predicate, o)
                                       for iiis in story_list
                                       for subject in triple_dict[iiis][KGC.subject]
                                       for predicate in triple_dict[iiis][KGC.hasPredicate]
                                       for p in kgc_p_list[2:]  # delete
-                                      for o in triple_dict[iiis][p]
-                                      ]
+                                      for o in triple_dict[iiis][p]]
 
     # logger.info(f"{len(story_list)=}")
 
@@ -250,6 +260,9 @@ class ConstName1:
     OBJECTS: Final = 'objects'
     ACTIONS: Final = 'actions'
     PEOPLE: Final = 'people'
+    OBJECTS_LABEL: Final = 'objects_label'
+    ACTIONS_LABEL: Final = 'actions_label'
+    PEOPLE_LABEL: Final = 'people_label'
     SPO_TRIPLE: Final = 'story_property_subject_predicate_object'
     PO_TRIPLE: Final = 'story_property_object'
 
@@ -258,7 +271,8 @@ class ConstName1:
     @classmethod
     def all_list(cls):
         return [cls.LENGTH_100, cls.LENGTH_090, cls.LENGTH_080, cls.LENGTH_075, cls.STORIES, cls.STORIES_IIIS,
-                cls.OBJECTS, cls.ACTIONS, cls.PEOPLE, cls.SPO_TRIPLE, cls.PO_TRIPLE]
+                cls.OBJECTS, cls.ACTIONS, cls.PEOPLE, cls.OBJECTS_LABEL, cls.PEOPLE_LABEL, cls.ACTIONS_LABEL,
+                cls.SPO_TRIPLE, cls.PO_TRIPLE]
 
 
 def change_sentence(s: URIRef, namespace_manager: NamespaceManager):
@@ -277,54 +291,33 @@ def replace_holmes_and_watson(list_, title):
     ))
 
 
-def write_one_title(f, title_ja, title, l100, l090, l080, l075):
-    logger.debug(f"{title_ja=}")
-    data_file_path = f"{DATA_FOLDER_PATH}/{title}.ttl"
-    title_group = f.require_group(title)
+def save_info_list(
+        title_group, l100, l090, l080, l075,
+        story_iiis_list, story_name_list, objects_list, actions_list, people_list,
+        objects_label_list, actions_label_list, people_label_list, spo_array, po_array,
+):
+    """
 
-    graph_, namespace_dict = make_graph(title, data_file_path)
-    namespace_manager = graph_.namespace_manager
+    Args:
+        title_group:
+        l100:
+        l090:
+        l080:
+        l075:
+        story_iiis_list:
+        story_name_list:
+        objects_list:
+        actions_list:
+        people_list:
+        objects_label_list:
+        actions_label_list:
+        people_label_list:
+        spo_array:
+        po_array:
 
-    story_iiis_list = get_story_list(graph_, namespace_dict, title, l100)
-    story_name_list = [f'{title}:{iiis}' for iiis in story_iiis_list]
-    objects_node_list = get_type_match_items(graph_, OBJECT_SET)
-    actions_node_list = get_type_match_items(graph_, ACTION_SET)
-    people_node_list = get_type_match_items(graph_, {KGC.Person})
-    # ofobj_set = get_type_match_people(graph_, {KGC.OFobj})
+    Returns:
 
-    triple_dict, svo_items, story_po_items = get_svos_triples(graph_, namespace_dict, title, story_iiis_list)
-
-    def make_shape_list(_node_list: Iterable[URIRef], del_prefix=False):
-        _str_list = [change_sentence(p, namespace_manager) for p in _node_list]
-        _tuple_list = [tuple(p.split(':', 1)) for p in _str_list]
-        _item_list = [x[1] if del_prefix else ':'.join(x) for x in _tuple_list]
-        return _item_list
-
-    objects_list = make_shape_list(objects_node_list)
-    actions_list = make_shape_list(actions_node_list)
-    people_list = make_shape_list(people_node_list)
-
-    del people_list[people_list.index(HOLMES_TITLE_NAME(title))]
-    del people_list[people_list.index(WATSON_TITLE_NAME(title))]
-    # story_spo
-    spo_story_list = svo_items[0]
-    property_list, s_list, p_list, o_list = map(make_shape_list, svo_items[1:])
-    spo_list = [replace_holmes_and_watson(_list, title) for _list
-                in (spo_story_list, property_list, s_list, p_list, o_list)]
-    # story_po
-    po_story_list = [f"{title}:{iiis}" for iiis in story_po_items[0]]
-    p_list, o_list = map(make_shape_list, story_po_items[1:])
-    po_list = [replace_holmes_and_watson(_list, title) for _list
-               in (po_story_list, p_list, o_list)]
-    objects_list = [
-        o for o in remove_duplicate_order_save(objects_list + o_list)
-        if (o not in people_list) and (o not in people_list) and (o not in actions_list) and (o not in story_name_list)
-    ]
-
-    spo_array = str_list_for_hdf5(spo_list).T
-    po_array = str_list_for_hdf5(po_list).T
-
-    del_data_if_exist(title_group, ConstName1.all_list())
+    """
     [title_group.create_dataset(name, data=value) for name, value in (
         (ConstName1.LENGTH_100, l100),
         (ConstName1.LENGTH_090, l090),
@@ -335,14 +328,99 @@ def write_one_title(f, title_ja, title, l100, l090, l080, l075):
         (ConstName1.OBJECTS, str_list_for_hdf5(objects_list)),
         (ConstName1.ACTIONS, str_list_for_hdf5(actions_list)),
         (ConstName1.PEOPLE, str_list_for_hdf5(people_list)),
+        (ConstName1.OBJECTS_LABEL, str_list_for_hdf5(objects_label_list)),
+        (ConstName1.ACTIONS_LABEL, str_list_for_hdf5(actions_label_list)),
+        (ConstName1.PEOPLE_LABEL, str_list_for_hdf5(people_label_list)),
         (ConstName1.SPO_TRIPLE, spo_array),
         (ConstName1.PO_TRIPLE, po_array),
-    )]
+    ) if value is not None]
+
+
+def write_one_title(f, title_ja, title, l100, l090, l080, l075):
+    logger.debug(f"{title_ja=}")
+    data_file_path = f"{DATA_FOLDER_PATH}/{title}.ttl"
+    title_group = f.require_group(title)
+
+    graph_, namespace_dict = make_graph(title, data_file_path)
+    namespace_manager = graph_.namespace_manager
+
+    story_iiis_list = get_story_list(graph_, namespace_dict, title, l100)
+    story_name_list = [f'{title}:{iiis}' for iiis in story_iiis_list]
+    objects_node_list, actions_node_list, people_node_list = map(
+        get_type_match_items, [graph_]*3, [OBJECT_SET, ACTION_SET, {KGC.Person}])
+    # ofobj_set = get_type_match_people(graph_, {KGC.OFobj})
+
+    def make_label_list(_node_list: Iterable[URIRef]):
+        # noinspection PyTypeChecker
+        _label_list_list: list[list[rdflib.term.Literal]] = [
+            [o for _, _, o in graph_.triples((_n, RDFS.label, None)) if cast(rdflib.term.Literal, o).language == 'en']
+            for _n in _node_list
+        ]
+        _label_list = [labels[0].value if len(labels) > 0 else '' for labels in _label_list_list]
+        return _label_list
+
+    def make_shape_list(_node_list: Iterable[URIRef], del_prefix=False, leave_node=False):
+        _node_str_list = [(_n, change_sentence(_n, namespace_manager)) for _n in _node_list]
+        if del_prefix:
+            _node_str_list = [(_n, x.split(':', 1)[1]) for _n, x in _node_str_list]
+        _str_list = [x[1] for x in _node_str_list]
+        return _node_str_list if leave_node else _str_list
+
+    # story_spo
+    triple_dict, svo_items, story_po_items = get_svos_triples(graph_, namespace_dict, title, story_iiis_list)
+    spo_story_list = svo_items[0]
+    property_list, s_list, p_list, o_list = map(make_shape_list, svo_items[1:5])
+    spo_list = [replace_holmes_and_watson(_list, title) for _list
+                in (spo_story_list, property_list, s_list, p_list, o_list)]
+    # story_po
+    po_story_list = [f"{title}:{iiis}" for iiis in story_po_items[0]]
+    p_list, o_list = map(make_shape_list, story_po_items[1:3])
+    po_list = [replace_holmes_and_watson(_list, title) for _list in (po_story_list, p_list, o_list)]
+
+    objects_list, actions_list, people_list, o_list = map(
+        lambda x: make_shape_list(x, leave_node=True),
+        [objects_node_list, actions_node_list, people_node_list, story_po_items[2]])
+    objects_list = [
+        o for o in remove_duplicate_as_same_order(objects_list + o_list)
+        if (o not in people_list) and (o not in actions_list) and (o not in story_name_list)
+    ]
+
+    people_list = [x for x in people_list if x[1] not in [HOLMES_TITLE_NAME(title), WATSON_TITLE_NAME(title)]]
+    objects_label_list, actions_label_list, people_label_list = [
+        make_label_list([x[1] for x in _list]) for _list in (objects_list, actions_list, people_list)]
+    objects_list, actions_list, people_list = [
+        [x[1] for x in _list] for _list in (objects_list, actions_list, people_list)]
+
+    spo_array = str_list_for_hdf5(spo_list).T
+    po_array = str_list_for_hdf5(po_list).T
+
+    del_data_if_exist(title_group, ConstName1.all_list())
+    save_info_list(
+        title_group, l100,l090, l080, l075, story_iiis_list, story_name_list, objects_list, actions_list, people_list,
+
+    )
+    [title_group.create_dataset(name, data=value) for name, value in (
+        (ConstName1.LENGTH_100, l100),
+        (ConstName1.LENGTH_090, l090),
+        (ConstName1.LENGTH_080, l080),
+        (ConstName1.LENGTH_075, l075),
+        (ConstName1.STORIES_IIIS, str_list_for_hdf5(story_iiis_list)),
+        (ConstName1.STORIES, str_list_for_hdf5(story_name_list)),
+        (ConstName1.OBJECTS, str_list_for_hdf5(objects_list)),
+        (ConstName1.ACTIONS, str_list_for_hdf5(actions_list)),
+        (ConstName1.PEOPLE, str_list_for_hdf5(people_list)),
+        (ConstName1.OBJECTS_LABEL, str_list_for_hdf5(objects_label_list)),
+        (ConstName1.ACTIONS_LABEL, str_list_for_hdf5(actions_label_list)),
+        (ConstName1.PEOPLE_LABEL, str_list_for_hdf5(people_label_list)),
+        (ConstName1.SPO_TRIPLE, spo_array),
+        (ConstName1.PO_TRIPLE, po_array),
+    ) if value is not None]
     return objects_list, actions_list, people_list, story_name_list, spo_array, po_array
 
 
 def write_():
     # print(f"{DATA_FOLDER_PATH}/../data/story_list.hdf5")
+    print("save at: {}".format(get_pure_path(ConstName1.FILE_NAME)))
     with h5py.File(ConstName1.FILE_NAME, 'a') as f:
         objects_all_set = set()
         objects_all_set_split_title = set()
@@ -351,8 +429,8 @@ def write_():
         people_all_set = set()
         people_all_set_split_title = set()
         story_all_name_list = list()
-        spo_all_array = np.array([[0, 0, 0, 0, 0]])  # dammy
-        po_all_array = np.array([[0, 0, 0]])  # dammy
+        spo_all_array_list = []
+        po_all_array_list = []
 
         for title_ja, (title, l100, l090, l080, l075) in title_len_dict.items():
             objects_list, actions_list, people_list, story_name_list, spo_array, po_array = (
@@ -364,12 +442,12 @@ def write_():
             people_all_set |= set(people_list)
             people_all_set_split_title |= {p.replace(f'{title}:', '') for p in people_list}
             story_all_name_list = story_all_name_list + story_name_list
-            spo_all_array = np.concatenate((spo_all_array, spo_array))
-            po_all_array = np.concatenate((po_all_array, po_array))
+            spo_all_array_list.append(spo_array)
+            po_all_array_list.append(po_array)
             del objects_list, actions_list, people_list, story_name_list, spo_array, po_array
 
-        spo_all_array = spo_all_array[1:]
-        po_all_array = po_all_array[1:]
+        spo_all_array = np.concatenate(spo_all_array_list)
+        po_all_array = np.concatenate(po_all_array_list)
         # general
         title_group = f.require_group(GENERAL)
         del_data_if_exist(title_group, [ConstName1.PEOPLE, ConstName1.RELATION])
@@ -434,6 +512,11 @@ def write2_svo(title: str, read_group: Group):
         *(read_group[ConstName1.STORIES][()]),
         *(read_group[ConstName1.OBJECTS][()]),
     )]
+    entity_label_list = ['holmes', 'watson'] + [b.decode('utf-8') for b in (
+        *(read_group[ConstName1.PEOPLE_LABEL][()]),
+        *([b'' for _ in read_group[ConstName1.STORIES][()]]),
+        *(read_group[ConstName1.OBJECTS_LABEL][()]),
+    )]
     relation_list = [b.decode('utf-8') for b in read_group[ConstName1.ACTIONS][()]]
     entity_dict = {e: i for i, e in enumerate(entity_list)}
     relation_dict = {r: i for i, r in enumerate(relation_list)}
@@ -448,7 +531,7 @@ def write2_svo(title: str, read_group: Group):
     is_rev_list = np.concatenate(
         [np.zeros(relation_len_no_reverse, dtype=bool), np.ones(relation_len_no_reverse, dtype=bool)]
     )
-    assert len(relation_list) == len(is_rev_list) and len(is_rev_list)==2*relation_len_no_reverse
+    assert len(relation_list) == len(is_rev_list) and len(is_rev_list) == 2 * relation_len_no_reverse
     svo_triple_reverse = svo_triple[:, (2, 1, 0)]
     svo_triple_reverse[:, 1] += relation_len_no_reverse
     # concat
@@ -466,6 +549,12 @@ def write2_sro(title: str, read_group: Group, general_read_group: Group):
         *(read_group[ConstName1.STORIES][()]),
         *(read_group[ConstName1.ACTIONS][()]),
         *(read_group[ConstName1.OBJECTS][()]),
+    )]
+    entity_label_list = [HOLMES_ALT_NAME, WATSON_ALT_NAME] + [b.decode('utf-8') for b in (
+        *(read_group[ConstName1.PEOPLE_LABEL][()]),
+        *([b'' for _ in read_group[ConstName1.STORIES][()]]),
+        *(read_group[ConstName1.ACTIONS_LABEL][()]),
+        *(read_group[ConstName1.OBJECTS_LABEL][()]),
     )]
     entity_dict = {e: i for i, e in enumerate(entity_list)}
     relation_list = [b.decode('utf-8') for b in general_read_group[ConstName1.RELATION][()]]

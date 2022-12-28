@@ -202,6 +202,9 @@ def setup_parser(args: Namespace = None) -> Namespace:
     paa('--epoch', help='max epoch', type=int, default=2)
     # optimizer
     paa('--lr', type=float, default=0.003, help='learning rate (default: 0.003)')
+    paa('--lr-story', type=float, help='learning rate (default: same as --lr)')
+    paa('--lr-relation', type=float, help='learning rate (default: same as --lr)')
+    paa('--lr-entity', type=float, help='learning rate (default: same as --lr)')
     paa('--valid-interval', type=int, default=1, help='valid-interval', )
     paa('--loss-weight-story', type=float, default=1., help='loss-weight-story')
     paa('--loss-weight-relation', type=float, default=1., help='loss-weight-relation')
@@ -219,12 +222,16 @@ def setup_parser(args: Namespace = None) -> Namespace:
 
 def pre_training(
         args: Namespace, data_helper: MyDataHelper, model: KgStoryTransformer01,
-        lr, loss_weight_story, loss_weight_relation, loss_weight_entity,
+        lr, lr_story, lr_relation, lr_entity,
+        loss_weight_story, loss_weight_relation, loss_weight_entity,
         summary_writer: SummaryWriter, *, logger: Logger, ):
     """
 
     Args:
         lr(float):
+        lr_story(float):
+        lr_relation(float):
+        lr_entity(float):
         loss_weight_entity(float):
         loss_weight_relation(float):
         loss_weight_story(float):
@@ -246,8 +253,18 @@ def pre_training(
     max_epoch = args.epoch
     mask_token_e, mask_token_r = args.mask_token_e, args.mask_token_r
     logger.debug(f"{entity_num=}, {relation_num=}")
+    modules = {_name: _module for _name, _module in model.named_children()}
+    logger.debug("model modules: " + ', '.join(list(modules.keys())))
+    del modules['head_maskdlm'], modules['relation_maskdlm'], modules['tail_maskdlm']
+    optim_list = [
+        {'params': _module.parameters(), 'lr': lr} for _name, _module in modules.items()
+    ] + [
+        {'params': model.head_maskdlm.parameters(), 'lr': lr_story},
+        {'params': model.relation_maskdlm.parameters(), 'lr': lr_relation},
+        {'params': model.tail_maskdlm.parameters(), 'lr': lr_entity},
+    ]
 
-    opt = torch.optim.Adam(model.parameters(), lr=lr)
+    opt = torch.optim.Adam(optim_list)
     loss_fn_entity = torch.nn.CrossEntropyLoss(weight=torch.ones(entity_num).to(device))
     loss_fn_relation = torch.nn.CrossEntropyLoss(weight=torch.ones(relation_num).to(device))
     checkpoint_dir = args.checkpoint_dir
@@ -707,6 +724,7 @@ def make_model(args, *, data_helper: MyDataHelper, logger: Logger):
     else:
         raise ValueError("aaa")
         pass
+
     model.assert_check()
     logger.info(model)
 
@@ -746,6 +764,9 @@ def main_function(args: Namespace, *, logger: Logger):
     if args.pre_train:
         # setting hyper parameter
         lr = args.lr
+        lr_story = args.lr_story or args.lr
+        lr_relation = args.lr_relation or args.lr
+        lr_entity = args.lr_entity or args.lr
         loss_weight_story = args.loss_weight_story
         loss_weight_relation = args.loss_weight_relation
         loss_weight_entity = args.loss_weight_story
@@ -754,7 +775,8 @@ def main_function(args: Namespace, *, logger: Logger):
         assert model_path is not None
 
         model, info_dict = pre_training(
-            args, data_helper=data_helper, model=model, lr=lr,
+            args, data_helper=data_helper, model=model,
+            lr=lr, lr_story=lr_story, lr_relation=lr_relation, lr_entity=lr_entity,
             loss_weight_story=loss_weight_story,
             loss_weight_relation=loss_weight_relation,
             loss_weight_entity=loss_weight_entity,

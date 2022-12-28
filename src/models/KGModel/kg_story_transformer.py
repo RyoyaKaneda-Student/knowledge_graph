@@ -281,7 +281,7 @@ class KgStoryTransformer03(KgStoryTransformer02):
         embedding_dim = args.embedding_dim
         entity_embedding_dim = args.entity_embedding_dim
         relation_embedding_dim = args.relation_embedding_dim
-        del args, self.weight_head, self.weight_relation, self.weight_tail
+        del self.weight_head, self.weight_relation, self.weight_tail
         self.input_activate = Feedforward(2*entity_embedding_dim+relation_embedding_dim, embedding_dim)
 
     def get_triple_embedding(self, head, relation, tail):
