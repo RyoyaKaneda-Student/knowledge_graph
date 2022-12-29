@@ -23,7 +23,7 @@ from ignite.handlers import Timer, Checkpoint, global_step_from_engine, DiskSave
 from ignite.metrics import Average, Accuracy
 from torch.utils.data import Dataset
 from torch.utils.data.dataloader import DataLoader
-from torch.utils.tensorboard import SummaryWriter
+from torch.utils.tensorboard.writer import SummaryWriter
 
 # Made by myself
 from models.KGModel.kg_story_transformer import (

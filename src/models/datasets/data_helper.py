@@ -56,16 +56,18 @@ class INFO_INDEX(ConstValueClass):
     E_LEN: Final = 'entity_length'
     R_LEN: Final = 'relation_length'
     ENTITIES: Final = 'entities'
+    ENTITIES_LABEL: Final = 'entities_label'
     ID2COUNT_ENTITY: Final = 'id2count_entity'
     RELATIONS: Final = 'relations'
+    RELATIONS_LABEL: Final = 'relations_label'
     IS_REV_RELATION: Final = 'id2is_reverse_relation'
     ID2COUNT_RELATION: Final = 'id2count_relation'
 
     @classmethod
     def all_index(cls):
         return [
-            cls.TRIPLE, cls.E_LEN, cls.R_LEN, cls.E_LEN, cls.ENTITIES,
-            cls.ID2COUNT_ENTITY, cls.RELATIONS, cls.IS_REV_RELATION, cls.ID2COUNT_RELATION
+            cls.TRIPLE, cls.E_LEN, cls.R_LEN, cls.E_LEN, cls.ENTITIES, cls.ENTITIES_LABEL,
+            cls.ID2COUNT_ENTITY, cls.RELATIONS, cls.RELATIONS_LABEL, cls.IS_REV_RELATION, cls.ID2COUNT_RELATION
         ]
 
 

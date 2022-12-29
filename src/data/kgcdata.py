@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # ========== python ==========
 # noinspection PyUnresolvedReferences
-import os
+import collections
 from logging import Logger
 from pathlib import Path
 from urllib.parse import quote, unquote
@@ -23,7 +23,7 @@ from rdflib.term import Node
 from models.datasets.data_helper import INFO_INDEX, ALL_TAIL_INDEX
 from utils.hdf5 import del_data_if_exist, str_list_for_hdf5
 from utils.setup import easy_logger
-from utils.utils import replace_list_value, remove_duplicate_as_same_order
+from utils.utils import replace_list_value
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
 print(f"{PROJECT_DIR=}")
@@ -37,7 +37,7 @@ PREFIX_PREDICATE: Final = 'word.predicate'
 KGC_TYPE: Final = 'kgc:type'
 KGC_LABEL: Final = 'kgc:label'
 
-logger: Logger = easy_logger(console_level='info')
+logger: Logger = easy_logger(console_level='debug')
 
 
 class KGC(DefinedNamespace):
@@ -156,6 +156,14 @@ ACTION_SET = {
     KGC.Action, KGC.CanAction, KGC.CanNotAction, KGC.NotAction
 }
 
+PEOPLE_SET = {
+    KGC.Person,
+}
+
+SCENE_SET = {
+    KGC.Scene, KGC.Situation, KGC.Thought, KGC.Statement, KGC.Talk
+}
+
 NodeList = list[Node]
 URIRefList = list[URIRef]
 NamespaceDict = dict[str, Namespace]
@@ -170,12 +178,10 @@ def get_pure_path(_path):
 
 
 def get_type_match_items(graph_: Graph, type_set: set[URIRef]) -> URIRefList:
-    match_list: URIRefList = remove_duplicate_as_same_order(
-        [s for s, _, o in graph_.triples((None, None, None)) if o in type_set])
-    for type_ in type_set:
-        if type_ in match_list:
-            del match_list[match_list.index(type_)]
-            pass
+    # noinspection PyTypeChecker
+    match_list: URIRefList = list(dict.fromkeys(
+        [s for s, _, o in graph_.triples((None, None, None)) if o in type_set]))
+    match_list = [_l for _l in match_list if True not in [_l == type_ for type_ in type_set]]
     return match_list
 
 
@@ -203,7 +209,7 @@ def get_story_list(graph_, namespace_dict, title, story_length):
     return story_list
 
 
-def get_svos_triples(graph_: Graph, namespace_dict: NamespaceDict, title: str, story_list: StoryList) \
+def get_triples(graph_: Graph, namespace_dict: NamespaceDict, title: str, story_list: StoryList) \
         -> tuple[TripleDict, StorySPO, StoryPO]:
     """
 
@@ -228,7 +234,7 @@ def get_svos_triples(graph_: Graph, namespace_dict: NamespaceDict, title: str, s
         story_ = prefix_title[iiis]
         triple_dict[iiis] = {p: list(graph_.objects(story_, p)) for p in kgc_p_list}
 
-    storynum_p_subject_predicate_o = [(iiis, p, subject, predicate, o)
+    storynum_p_subject_predicate_o = [(URIRef(f'{title}:{iiis}'), p, subject, predicate, o)
                                       for iiis in story_list
                                       for subject in triple_dict[iiis][KGC.subject]
                                       for predicate in triple_dict[iiis][KGC.hasPredicate]
@@ -237,7 +243,7 @@ def get_svos_triples(graph_: Graph, namespace_dict: NamespaceDict, title: str, s
 
     # logger.info(f"{len(story_list)=}")
 
-    storynum_p_o = [(iiis, p, o)
+    storynum_p_o = [(URIRef(f'{title}:{iiis}'), p, o)
                     for iiis in story_list
                     for p in kgc_p_list
                     for o in triple_dict[iiis][p]
@@ -251,6 +257,8 @@ def get_svos_triples(graph_: Graph, namespace_dict: NamespaceDict, title: str, s
 
 class ConstName1:
     FILE_NAME: Final = f"{DATA_FOLDER_PATH}/../data/story_list.hdf5"
+    WRITE_FILE: Final = f"{PROJECT_DIR}/data/processed/KGCdata"
+
     LENGTH_100: Final = 'length_100'
     LENGTH_090: Final = 'length_090'
     LENGTH_080: Final = 'length_080'
@@ -258,47 +266,53 @@ class ConstName1:
     STORIES_IIIS: Final = 'stories_iiis'
     STORIES: Final = 'stories'
     OBJECTS: Final = 'objects'
-    ACTIONS: Final = 'actions'
+    PURE_OBJECTS: Final = 'pure_objects'
     PEOPLE: Final = 'people'
+    ACTIONS: Final = 'actions'
     OBJECTS_LABEL: Final = 'objects_label'
     ACTIONS_LABEL: Final = 'actions_label'
     PEOPLE_LABEL: Final = 'people_label'
+    PURE_OBJECTS_LABEL: Final = 'pure_objects_label'
+
     SPO_TRIPLE: Final = 'story_property_subject_predicate_object'
     PO_TRIPLE: Final = 'story_property_object'
 
+    ENTITY: Final = 'entity'
     RELATION: Final = 'relation'
+
+    keyREVERSE: Final = lambda key: f'{key}_REVERSE'
 
     @classmethod
     def all_list(cls):
         return [cls.LENGTH_100, cls.LENGTH_090, cls.LENGTH_080, cls.LENGTH_075, cls.STORIES, cls.STORIES_IIIS,
-                cls.OBJECTS, cls.ACTIONS, cls.PEOPLE, cls.OBJECTS_LABEL, cls.PEOPLE_LABEL, cls.ACTIONS_LABEL,
+                cls.OBJECTS, cls.PURE_OBJECTS, cls.ACTIONS, cls.PEOPLE,
+                cls.OBJECTS_LABEL, cls.PURE_OBJECTS_LABEL, cls.PEOPLE_LABEL, cls.ACTIONS_LABEL,
                 cls.SPO_TRIPLE, cls.PO_TRIPLE]
 
 
 def change_sentence(s: URIRef, namespace_manager: NamespaceManager):
     if type(s.toPython()) is str:
-        url_, value = str(s).rsplit('/', maxsplit=1)
-        rev = unquote(URIRef(url_ + '/' + quote(value, safe='#')).n3(namespace_manager))
+        x = str(s).rsplit('/', maxsplit=1)
+        if len(x) == 2:
+            url_, value = x
+            rev = unquote(URIRef(url_ + '/' + quote(value, safe='#')).n3(namespace_manager))
+        else:
+            rev = s.toPython()
     else:
         rev = "DateTime:{}".format(str(s))
     return rev
 
 
-def replace_holmes_and_watson(list_, title):
-    return replace_list_value(list_, (
-        (HOLMES_TITLE_NAME(title), HOLMES_ALT_NAME),
-        (WATSON_TITLE_NAME(title), WATSON_ALT_NAME),
-    ))
-
-
 def save_info_list(
         title_group, l100, l090, l080, l075,
-        story_iiis_list, story_name_list, objects_list, actions_list, people_list,
-        objects_label_list, actions_label_list, people_label_list, spo_array, po_array,
+        story_iiis_list, story_name_list, objects_list, pure_objects_list, people_list, actions_list,
+        objects_label_list, pure_objects_label_list, people_label_list, actions_label_list, spo_array, po_array,
 ):
     """
 
     Args:
+        pure_objects_label_list:
+        pure_objects_list:
         title_group:
         l100:
         l090:
@@ -318,19 +332,26 @@ def save_info_list(
     Returns:
 
     """
+
+    def change_to_np_array(_list):
+        if _list is None: return None
+        return str_list_for_hdf5(_list) if type(story_iiis_list) is not np.ndarray else _list
+
     [title_group.create_dataset(name, data=value) for name, value in (
         (ConstName1.LENGTH_100, l100),
         (ConstName1.LENGTH_090, l090),
         (ConstName1.LENGTH_080, l080),
         (ConstName1.LENGTH_075, l075),
-        (ConstName1.STORIES_IIIS, str_list_for_hdf5(story_iiis_list)),
-        (ConstName1.STORIES, str_list_for_hdf5(story_name_list)),
-        (ConstName1.OBJECTS, str_list_for_hdf5(objects_list)),
-        (ConstName1.ACTIONS, str_list_for_hdf5(actions_list)),
-        (ConstName1.PEOPLE, str_list_for_hdf5(people_list)),
-        (ConstName1.OBJECTS_LABEL, str_list_for_hdf5(objects_label_list)),
-        (ConstName1.ACTIONS_LABEL, str_list_for_hdf5(actions_label_list)),
-        (ConstName1.PEOPLE_LABEL, str_list_for_hdf5(people_label_list)),
+        (ConstName1.STORIES_IIIS, change_to_np_array(story_iiis_list)),
+        (ConstName1.STORIES, change_to_np_array(story_name_list)),
+        (ConstName1.OBJECTS, change_to_np_array(objects_list)),
+        (ConstName1.PURE_OBJECTS, change_to_np_array(pure_objects_list)),
+        (ConstName1.PEOPLE, change_to_np_array(people_list)),
+        (ConstName1.ACTIONS, change_to_np_array(actions_list)),
+        (ConstName1.OBJECTS_LABEL, change_to_np_array(objects_label_list)),
+        (ConstName1.PURE_OBJECTS_LABEL, change_to_np_array(pure_objects_label_list)),
+        (ConstName1.PEOPLE_LABEL, change_to_np_array(people_label_list)),
+        (ConstName1.ACTIONS_LABEL, change_to_np_array(actions_label_list)),
         (ConstName1.SPO_TRIPLE, spo_array),
         (ConstName1.PO_TRIPLE, po_array),
     ) if value is not None]
@@ -346,8 +367,7 @@ def write_one_title(f, title_ja, title, l100, l090, l080, l075):
 
     story_iiis_list = get_story_list(graph_, namespace_dict, title, l100)
     story_name_list = [f'{title}:{iiis}' for iiis in story_iiis_list]
-    objects_node_list, actions_node_list, people_node_list = map(
-        get_type_match_items, [graph_]*3, [OBJECT_SET, ACTION_SET, {KGC.Person}])
+
     # ofobj_set = get_type_match_people(graph_, {KGC.OFobj})
 
     def make_label_list(_node_list: Iterable[URIRef]):
@@ -359,95 +379,106 @@ def write_one_title(f, title_ja, title, l100, l090, l080, l075):
         _label_list = [labels[0].value if len(labels) > 0 else '' for labels in _label_list_list]
         return _label_list
 
-    def make_shape_list(_node_list: Iterable[URIRef], del_prefix=False, leave_node=False):
-        _node_str_list = [(_n, change_sentence(_n, namespace_manager)) for _n in _node_list]
-        if del_prefix:
-            _node_str_list = [(_n, x.split(':', 1)[1]) for _n, x in _node_str_list]
-        _str_list = [x[1] for x in _node_str_list]
-        return _node_str_list if leave_node else _str_list
+    def replace_holmes_and_watson(_list):
+        return replace_list_value(_list, (
+            (HOLMES_TITLE_NAME(title), HOLMES_ALT_NAME),
+            (WATSON_TITLE_NAME(title), WATSON_ALT_NAME),
+        ))
 
+    def make_shape_str(_node_list: Iterable[URIRef]):
+        _str_list = [change_sentence(_n, namespace_manager) for _n in _node_list]
+        return replace_holmes_and_watson(_str_list)
+
+    triple_dict, svo_items, story_po_items = get_triples(graph_, namespace_dict, title, story_iiis_list)
     # story_spo
-    triple_dict, svo_items, story_po_items = get_svos_triples(graph_, namespace_dict, title, story_iiis_list)
-    spo_story_list = svo_items[0]
-    property_list, s_list, p_list, o_list = map(make_shape_list, svo_items[1:5])
-    spo_list = [replace_holmes_and_watson(_list, title) for _list
-                in (spo_story_list, property_list, s_list, p_list, o_list)]
+    svo_items_shaped = [make_shape_str(item) for item in svo_items]
     # story_po
-    po_story_list = [f"{title}:{iiis}" for iiis in story_po_items[0]]
-    p_list, o_list = map(make_shape_list, story_po_items[1:3])
-    po_list = [replace_holmes_and_watson(_list, title) for _list in (po_story_list, p_list, o_list)]
+    story_po_items_shaped = [make_shape_str(item) for item in story_po_items]
 
-    objects_list, actions_list, people_list, o_list = map(
-        lambda x: make_shape_list(x, leave_node=True),
-        [objects_node_list, actions_node_list, people_node_list, story_po_items[2]])
-    objects_list = [
-        o for o in remove_duplicate_as_same_order(objects_list + o_list)
-        if (o not in people_list) and (o not in actions_list) and (o not in story_name_list)
-    ]
+    def make_str_label_list(_list: list[URIRef]):
+        _node_list = _list
+        _str_list = make_shape_str(_list)
+        _label_list = make_label_list(_list)
+        return _list, _str_list, _label_list
 
-    people_list = [x for x in people_list if x[1] not in [HOLMES_TITLE_NAME(title), WATSON_TITLE_NAME(title)]]
-    objects_label_list, actions_label_list, people_label_list = [
-        make_label_list([x[1] for x in _list]) for _list in (objects_list, actions_list, people_list)]
-    objects_list, actions_list, people_list = [
-        [x[1] for x in _list] for _list in (objects_list, actions_list, people_list)]
+    objects_node_list = get_type_match_items(graph_, OBJECT_SET)
+    people_node_list = get_type_match_items(graph_, PEOPLE_SET)
+    actions_node_list = get_type_match_items(graph_, ACTION_SET)
 
-    spo_array = str_list_for_hdf5(spo_list).T
-    po_array = str_list_for_hdf5(po_list).T
+    scene_set = get_type_match_items(graph_, SCENE_SET)
+    objects_node_list = list(dict.fromkeys(objects_node_list + list(story_po_items[2])))
+
+    pure_objects_list = [o for o in objects_node_list
+                         if o not in (people_node_list + actions_node_list + scene_set)]
+    logger.debug(actions_node_list)
+    logger.debug(pure_objects_list)
+
+    objects_node_list, objects_str_list, objects_label_list = make_str_label_list(objects_node_list)
+    pure_objects_node_list, pure_objects_str_list, pure_objects_label_list = make_str_label_list(pure_objects_list)
+    people_node_list, people_str_list, people_label_list = make_str_label_list(people_node_list)
+    actions_node_list, actions_str_list, actions_label_list = make_str_label_list(actions_node_list)
+    # logger.debug(pure_objects_str_list)
+
+    spo_array = str_list_for_hdf5(svo_items_shaped).T
+    po_array = str_list_for_hdf5(story_po_items_shaped).T
 
     del_data_if_exist(title_group, ConstName1.all_list())
     save_info_list(
-        title_group, l100,l090, l080, l075, story_iiis_list, story_name_list, objects_list, actions_list, people_list,
-
+        title_group, l100, l090, l080, l075,
+        story_iiis_list, story_name_list,
+        objects_str_list, pure_objects_str_list, people_str_list, actions_str_list,
+        objects_label_list, pure_objects_label_list, people_label_list, actions_label_list,
+        spo_array, po_array
     )
-    [title_group.create_dataset(name, data=value) for name, value in (
-        (ConstName1.LENGTH_100, l100),
-        (ConstName1.LENGTH_090, l090),
-        (ConstName1.LENGTH_080, l080),
-        (ConstName1.LENGTH_075, l075),
-        (ConstName1.STORIES_IIIS, str_list_for_hdf5(story_iiis_list)),
-        (ConstName1.STORIES, str_list_for_hdf5(story_name_list)),
-        (ConstName1.OBJECTS, str_list_for_hdf5(objects_list)),
-        (ConstName1.ACTIONS, str_list_for_hdf5(actions_list)),
-        (ConstName1.PEOPLE, str_list_for_hdf5(people_list)),
-        (ConstName1.OBJECTS_LABEL, str_list_for_hdf5(objects_label_list)),
-        (ConstName1.ACTIONS_LABEL, str_list_for_hdf5(actions_label_list)),
-        (ConstName1.PEOPLE_LABEL, str_list_for_hdf5(people_label_list)),
-        (ConstName1.SPO_TRIPLE, spo_array),
-        (ConstName1.PO_TRIPLE, po_array),
-    ) if value is not None]
-    return objects_list, actions_list, people_list, story_name_list, spo_array, po_array
+    return (
+        objects_str_list, pure_objects_str_list, people_str_list, actions_str_list, story_name_list,
+        objects_label_list, pure_objects_label_list, people_label_list, actions_label_list,
+        spo_array, po_array
+    )
 
 
 def write_():
     # print(f"{DATA_FOLDER_PATH}/../data/story_list.hdf5")
     print("save at: {}".format(get_pure_path(ConstName1.FILE_NAME)))
     with h5py.File(ConstName1.FILE_NAME, 'a') as f:
-        objects_all_set = set()
-        objects_all_set_split_title = set()
-        actions_all_set = set()
-        actions_all_set_split_title = set()
-        people_all_set = set()
-        people_all_set_split_title = set()
-        story_all_name_list = list()
-        spo_all_array_list = []
-        po_all_array_list = []
+        all_objects_str_list, all_pure_objects_str_list, all_people_str_list, all_actions_str_list = \
+            list[str](), list[str](), list[str](), list[str]()
+        all_objects_label_list, all_pure_objects_label_list, all_people_label_list, all_actions_label_list = \
+            list[str](), list[str](), list[str](), list[str]()
+        all_story_name_list = list[str]()
+        all_spo_array_list, all_po_array_list = list[np.ndarray](), list[np.ndarray]()
 
         for title_ja, (title, l100, l090, l080, l075) in title_len_dict.items():
-            objects_list, actions_list, people_list, story_name_list, spo_array, po_array = (
-                write_one_title(f, title_ja, title, l100, l090, l080, l075))
-            objects_all_set |= set(objects_list)
-            objects_all_set_split_title |= {o.replace(f'{title}:', '') for o in objects_list}
-            actions_all_set |= set(actions_list)
-            actions_all_set_split_title |= {a.replace(f'{title}:', '') for a in actions_all_set}
-            people_all_set |= set(people_list)
-            people_all_set_split_title |= {p.replace(f'{title}:', '') for p in people_list}
-            story_all_name_list = story_all_name_list + story_name_list
-            spo_all_array_list.append(spo_array)
-            po_all_array_list.append(po_array)
-            del objects_list, actions_list, people_list, story_name_list, spo_array, po_array
+            (
+                objects_str_list, pure_objects_str_list, people_str_list, actions_str_list, story_name_list,
+                objects_label_list, pure_objects_label_list, people_label_list, actions_label_list,
+                spo_array, po_array
+            ) = (write_one_title(f, title_ja, title, l100, l090, l080, l075))
+            all_objects_str_list += objects_str_list
+            all_objects_label_list += objects_label_list
+            all_pure_objects_str_list += pure_objects_str_list
+            all_pure_objects_label_list += pure_objects_label_list
+            all_people_str_list += people_str_list
+            all_people_label_list += people_label_list
+            all_actions_str_list += actions_str_list
+            all_actions_label_list += actions_label_list
+            all_story_name_list += story_name_list
+            all_spo_array_list.append(spo_array)
+            all_po_array_list.append(po_array)
 
-        spo_all_array = np.concatenate(spo_all_array_list)
-        po_all_array = np.concatenate(po_all_array_list)
+        #
+        def del_duplication(_str_list, _label_list):
+            _dict = {key: value for key, value in zip(_str_list, _label_list)}
+            return list(_dict.keys()), list(_dict.values())
+
+        all_objects_str_list, all_objects_label_list = del_duplication(all_objects_str_list, all_objects_label_list)
+        all_pure_objects_str_list, all_pure_objects_label_list = del_duplication(
+            all_pure_objects_str_list, all_pure_objects_label_list)
+        all_people_str_list, all_people_label_list = del_duplication(all_people_str_list, all_people_label_list)
+        all_actions_str_list, all_actions_label_list = del_duplication(all_actions_str_list, all_actions_label_list)
+        #
+        all_spo_array = np.concatenate(all_spo_array_list)
+        all_po_array = np.concatenate(all_po_array_list)
         # general
         title_group = f.require_group(GENERAL)
         del_data_if_exist(title_group, [ConstName1.PEOPLE, ConstName1.RELATION])
@@ -455,46 +486,46 @@ def write_():
         title_group.create_dataset(ConstName1.RELATION, data=str_list_for_hdf5(ALL_RELATION))
         # all
         title_group = f.require_group(ALL_TITLE)
-        del_data_if_exist(title_group, [
-            ConstName1.OBJECTS, ConstName1.ACTIONS, ConstName1.PEOPLE,
-            ConstName1.STORIES, ConstName1.SPO_TRIPLE, ConstName1.PO_TRIPLE])
-        [title_group.create_dataset(_name, data=_list) for _name, _list in (
-            (ConstName1.OBJECTS, str_list_for_hdf5(list(objects_all_set))),
-            (ConstName1.ACTIONS, str_list_for_hdf5(list(actions_all_set))),
-            (ConstName1.PEOPLE, str_list_for_hdf5(list(people_all_set))),
-            (ConstName1.STORIES, str_list_for_hdf5(story_all_name_list)),
-            (ConstName1.SPO_TRIPLE, spo_all_array),
-            (ConstName1.PO_TRIPLE, po_all_array),
-        )]
-        # all without title info
-        title_group = f.require_group(ALL_WITHOUT_TITLE)
-        del_data_if_exist(title_group, [ConstName1.OBJECTS, ConstName1.ACTIONS, ConstName1.PEOPLE])
-        [title_group.create_dataset(_name, data=_list) for _name, _list in (
-            (ConstName1.OBJECTS, str_list_for_hdf5(list(objects_all_set_split_title))),
-            (ConstName1.ACTIONS, str_list_for_hdf5(list(actions_all_set_split_title))),
-            (ConstName1.PEOPLE, str_list_for_hdf5(list(people_all_set_split_title))),
-        )]
+        del_data_if_exist(title_group, ConstName1.all_list())
+
+        save_info_list(
+            title_group, None, None, None, None,
+            None, all_story_name_list,
+            all_objects_str_list, all_pure_objects_str_list, all_people_str_list, all_actions_str_list,
+            all_objects_label_list, all_pure_objects_label_list, all_people_label_list, all_actions_label_list,
+            all_spo_array, all_po_array,
+        )
 
 
 def read_():
     with h5py.File(ConstName1.FILE_NAME, 'r') as f:
         for title_ja, (title, l100, l090, l080, l075) in title_len_dict.items():
             title_group = f.require_group(title)
-            [logger.debug(title_group[name][()]) for name in ConstName1.all_list()]
+            logger.debug(get_pure_path(title_group.file.filename))
+            # [logger.debug(title_group[name][()]) for name in ConstName1.all_list()]
 
 
 class ConstName2:
-    WRITE_FILE: Final = f"{PROJECT_DIR}/data/processed/KGCdata"
+    WRITE_SVO_INFO_FILE: Final = lambda title: f"{PROJECT_DIR}/data/processed/KGCdata/{title}/SVO/info.hdf5"
+    WRITE_SVO_TRAIN_FILE: Final = lambda title: f"{PROJECT_DIR}/data/processed/KGCdata/{title}/SVO/train.hdf5"
+    WRITE_SRO_INFO_FILE: Final = lambda title: f"{PROJECT_DIR}/data/processed/KGCdata/{title}/SRO/info.hdf5"
+    WRITE_SRO_TRAIN_FILE: Final = lambda title: f"{PROJECT_DIR}/data/processed/KGCdata/{title}/SRO/train.hdf5"
+    WRITE_SRO_ALL_TAIL_FILE: Final = lambda title: f"{PROJECT_DIR}/data/processed/KGCdata/{title}/SVO/all_tail.hdf5"
     keyREVERSE: Final = lambda key: f'{key}_REVERSE'
 
 
-def write2_write_triples(fw_info, fw_train, entity_list, relation_list, is_rev_list, triple, triple_raw=None):
+def write2_write_triples(fw_info, fw_train, entity_list, entity_label_list, relation_list, relation_label_list,
+                         is_rev_list, triple, triple_raw=None):
     #
+    logger.debug(f"info: {get_pure_path(fw_info.filename)}")
+    logger.debug(f"triple: {get_pure_path(fw_train.filename)}")
     del_data_if_exist(fw_info, INFO_INDEX.all_index())
     fw_info.create_dataset(INFO_INDEX.E_LEN, data=len(entity_list))
     fw_info.create_dataset(INFO_INDEX.R_LEN, data=len(relation_list))
     fw_info.create_dataset(INFO_INDEX.ENTITIES, data=entity_list)
+    fw_info.create_dataset(INFO_INDEX.ENTITIES_LABEL, data=entity_label_list)
     fw_info.create_dataset(INFO_INDEX.RELATIONS, data=relation_list)
+    fw_info.create_dataset(INFO_INDEX.RELATIONS_LABEL, data=relation_label_list)
     fw_info.create_dataset(INFO_INDEX.IS_REV_RELATION, data=is_rev_list)
     fw_info.create_dataset(INFO_INDEX.ID2COUNT_ENTITY,
                            data=np.bincount(triple[:, (0, 2)].flatten(), minlength=len(entity_list)))
@@ -510,20 +541,23 @@ def write2_svo(title: str, read_group: Group):
     entity_list = [HOLMES_ALT_NAME, WATSON_ALT_NAME] + [b.decode('utf-8') for b in (
         *(read_group[ConstName1.PEOPLE][()]),
         *(read_group[ConstName1.STORIES][()]),
-        *(read_group[ConstName1.OBJECTS][()]),
+        *(read_group[ConstName1.PURE_OBJECTS][()]),
     )]
+    # logger.debug(entity_list)
     entity_label_list = ['holmes', 'watson'] + [b.decode('utf-8') for b in (
         *(read_group[ConstName1.PEOPLE_LABEL][()]),
         *([b'' for _ in read_group[ConstName1.STORIES][()]]),
         *(read_group[ConstName1.OBJECTS_LABEL][()]),
     )]
     relation_list = [b.decode('utf-8') for b in read_group[ConstName1.ACTIONS][()]]
+    relation_label_list = [b.decode('utf-8') for b in read_group[ConstName1.ACTIONS_LABEL][()]]
     entity_dict = {e: i for i, e in enumerate(entity_list)}
     relation_dict = {r: i for i, r in enumerate(relation_list)}
 
     svo_triple = np.array([
         [entity_dict[s.decode('utf-8')], relation_dict[v.decode('utf-8')], entity_dict[o.decode('utf-8')]]
         for _, _, s, v, o in read_group[ConstName1.SPO_TRIPLE][()]
+        # if print(s, v, o) or True
     ])
     # add reverse
     relation_len_no_reverse = len(relation_list)
@@ -537,27 +571,31 @@ def write2_svo(title: str, read_group: Group):
     # concat
     svo_triple = np.concatenate([svo_triple, svo_triple_reverse])
 
-    with (h5py.File(f"{ConstName2.WRITE_FILE}/{title}/SVO/info.hdf5", 'a') as fw_info,
-          h5py.File(f"{ConstName2.WRITE_FILE}/{title}/SVO/train.hdf5", 'a') as fw_train):
-        write2_write_triples(fw_info, fw_train, entity_list, relation_list, is_rev_list, svo_triple)
+    with (h5py.File(ConstName2.WRITE_SVO_INFO_FILE(title), 'a') as fw_info,
+          h5py.File(ConstName2.WRITE_SVO_TRAIN_FILE(title), 'a') as fw_train):
+        write2_write_triples(fw_info, fw_train, entity_list, entity_label_list, relation_list, relation_label_list,
+                             is_rev_list, svo_triple)
         pass
 
 
 def write2_sro(title: str, read_group: Group, general_read_group: Group):
     entity_list = [HOLMES_ALT_NAME, WATSON_ALT_NAME] + [b.decode('utf-8') for b in (
         *(read_group[ConstName1.PEOPLE][()]),
+        *(read_group[ConstName1.PURE_OBJECTS][()]),
         *(read_group[ConstName1.STORIES][()]),
         *(read_group[ConstName1.ACTIONS][()]),
-        *(read_group[ConstName1.OBJECTS][()]),
     )]
-    entity_label_list = [HOLMES_ALT_NAME, WATSON_ALT_NAME] + [b.decode('utf-8') for b in (
+    entity_label_list = ['Holmes', 'Watson'] + [b.decode('utf-8') for b in (
         *(read_group[ConstName1.PEOPLE_LABEL][()]),
-        *([b'' for _ in read_group[ConstName1.STORIES][()]]),
+        *(read_group[ConstName1.PURE_OBJECTS_LABEL][()]),
+        *[b'' for _ in read_group[ConstName1.STORIES][()]],
         *(read_group[ConstName1.ACTIONS_LABEL][()]),
-        *(read_group[ConstName1.OBJECTS_LABEL][()]),
     )]
     entity_dict = {e: i for i, e in enumerate(entity_list)}
+    entity_label_dict = {e: l for e, l in zip(entity_list, entity_label_list)}
+    assert len(entity_dict) == len(entity_label_dict)
     relation_list = [b.decode('utf-8') for b in general_read_group[ConstName1.RELATION][()]]
+    relation_label_list = ['' for _ in general_read_group[ConstName1.RELATION][()]]
     relation_dict = {r: i for i, r in enumerate(relation_list)}
     sro_triple = np.array([
         [entity_dict[s.decode('utf-8')], relation_dict[r.decode('utf-8')], entity_dict[o.decode('utf-8')]]
@@ -580,15 +618,17 @@ def write2_sro(title: str, read_group: Group, general_read_group: Group):
         for s, r, o in sro_triple
     ]
 
-    with (h5py.File(f"{ConstName2.WRITE_FILE}/{title}/SRO/info.hdf5", 'a') as fw_info,
-          h5py.File(f"{ConstName2.WRITE_FILE}/{title}/SRO/train.hdf5", 'a') as fw_train):
-        write2_write_triples(fw_info, fw_train, entity_list, relation_list,
+    with (h5py.File(ConstName2.WRITE_SRO_INFO_FILE(title), 'a') as fw_info,
+          h5py.File(ConstName2.WRITE_SRO_TRAIN_FILE(title), 'a') as fw_train):
+        write2_write_triples(fw_info, fw_train,
+                             entity_list, entity_label_list, relation_list, relation_label_list,
                              np.zeros(len(relation_list), dtype=bool), sro_triple,
                              str_list_for_hdf5(sro_triple_raw))
 
 
 def write2_():
     with (h5py.File(ConstName1.FILE_NAME, 'r') as fr, ):
+        logger.debug(f"save at: {get_pure_path(ConstName1.FILE_NAME)}")
         general_read_group = fr[GENERAL]
         for title_ja, (title, _, _, _, _) in title_len_dict.items():
             # read
@@ -605,8 +645,8 @@ def write2_():
 
 def write3_write_title(fr_train, fw_all_tail):
     triples: np.ndarray = fr_train[INFO_INDEX.TRIPLE][()]
-    triples_list = cast(list[tuple[int, int, int]], triples.tolist())
-
+    # noinspection PyTypeChecker
+    triples_list: list[tuple[int, int, int]] = triples.tolist()
     er_list = list({(h, r) for (h, r, t) in triples_list})
     er_dict = {key: [] for key in er_list}
     [er_dict[(h, r)].append(t) for (h, r, t) in triples_list]
@@ -626,14 +666,10 @@ def write3_write_title(fr_train, fw_all_tail):
 
 
 def write3_():
-    for title_ja, (title, l100, l090, l080, l075) in title_len_dict.items():
-        with (h5py.File(f"{ConstName2.WRITE_FILE}/{title}/SVO/train.hdf5", 'r') as fr_train,
-              h5py.File(f"{ConstName2.WRITE_FILE}/{title}/SVO/all_tail.hdf5", 'a') as fw_all_tail, ):
+    for title in [_t for _, (_t, _, _, _, _) in title_len_dict.items()] + [ALL_TITLE]:
+        with (h5py.File(ConstName2.WRITE_SVO_TRAIN_FILE(title), 'r') as fr_train,
+              h5py.File(ConstName2.WRITE_SRO_ALL_TAIL_FILE(title), 'a') as fw_all_tail, ):
             write3_write_title(fr_train, fw_all_tail)
-
-    with (h5py.File(f"{ConstName2.WRITE_FILE}/{ALL_TITLE}/SVO/train.hdf5", 'r') as fr_train,
-          h5py.File(f"{ConstName2.WRITE_FILE}/{ALL_TITLE}/SVO/all_tail.hdf5", 'a') as fw_all_tail, ):
-        write3_write_title(fr_train, fw_all_tail)
 
 
 def main():
