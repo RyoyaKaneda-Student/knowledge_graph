@@ -97,17 +97,39 @@ ALL_TITLE_LIST = [
 
 ABOUT_KILL_WORDS: Final = ['word.predicate:kill', 'word.predicate:notKill', 'word.predicate:beKilled']
 
-SRO_ALL_INFO_FILE = "data/processed/KGCdata/All/SRO/info.hdf5"
-SRO_ALL_TRAIN_FILE = "data/processed/KGCdata/All/SRO/train.hdf5"
+SRO_FOLDER = "data/processed/KGCdata/All/SRO"
 
-SRO_AbbeyGrange075_TRAIN_FILE = "data/processed/KGCdata/All/SRO/train_AbbeyGrange_075.hdf5"
-SRO_ACaseOfIdentity075_TRAIN_FILE = "data/processed/KGCdata/All/SRO/train_ACaseOfIdentity_075.hdf5"
-SRO_CrookedMan075_TRAIN_FILE = "data/processed/KGCdata/All/SRO/train_CrookedMan_075.hdf5"
-SRO_DancingMen075_TRAIN_FILE = "data/processed/KGCdata/All/SRO/train_DancingMen_075.hdf5"
-SRO_DevilsFoot075_TRAIN_FILE = "data/processed/KGCdata/All/SRO/train_DevilsFoot_075.hdf5"
-SRO_ResidentPatient075_TRAIN_FILE = "data/processed/KGCdata/All/SRO/train_ResidentPatient_075.hdf5"
-SRO_SilverBlaze075_TRAIN_FILE = "data/processed/KGCdata/All/SRO/train_SilverBlaze_075.hdf5"
-SRO_SpeckledBand075_TRAIN_FILE = "data/processed/KGCdata/All/SRO/train_SpeckledBand_075.hdf5"
+SRO_ALL_INFO_FILE: Final = "{}/info.hdf5".format(SRO_FOLDER)
+SRO_ALL_TRAIN_FILE: Final = "{}/train.hdf5".format(SRO_FOLDER)
+
+SRO_AbbeyGrange090_TRAIN_FILE: Final = "{}/train_AbbeyGrange_090.hdf5".format(SRO_FOLDER)
+SRO_ACaseOfIdentity090_TRAIN_FILE: Final = "{}/train_ACaseOfIdentity_090.hdf5".format(SRO_FOLDER)
+SRO_CrookedMan090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_CrookedMan_090.hdf5"
+SRO_DancingMen090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_DancingMen_090.hdf5"
+SRO_DevilsFoot090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_DevilsFoot_090.hdf5"
+SRO_ResidentPatient090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_ResidentPatient_090.hdf5"
+SRO_SilverBlaze090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_SilverBlaze_090.hdf5"
+SRO_SpeckledBand090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_SpeckledBand_090.hdf5"
+
+SRO_AbbeyGrange075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_AbbeyGrange_075.hdf5"
+SRO_ACaseOfIdentity075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_ACaseOfIdentity_075.hdf5"
+SRO_CrookedMan075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_CrookedMan_075.hdf5"
+SRO_DancingMen075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_DancingMen_075.hdf5"
+SRO_DevilsFoot075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_DevilsFoot_075.hdf5"
+SRO_ResidentPatient075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_ResidentPatient_075.hdf5"
+SRO_SilverBlaze075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_SilverBlaze_075.hdf5"
+SRO_SpeckledBand075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_SpeckledBand_075.hdf5"
+
+TITLE2FILE090 = {
+    'ACaseOfIdentity': SRO_AbbeyGrange090_TRAIN_FILE,
+    'AbbeyGrange': SRO_ACaseOfIdentity090_TRAIN_FILE,
+    'CrookedMan': SRO_CrookedMan090_TRAIN_FILE,
+    'DancingMen': SRO_DancingMen090_TRAIN_FILE,
+    'DevilsFoot': SRO_DevilsFoot090_TRAIN_FILE,
+    'ResidentPatient': SRO_ResidentPatient090_TRAIN_FILE,
+    'SilverBlaze': SRO_SilverBlaze090_TRAIN_FILE,
+    'SpeckledBand': SRO_SpeckledBand090_TRAIN_FILE
+}
 
 TITLE2FILE075 = {
     'ACaseOfIdentity': SRO_AbbeyGrange075_TRAIN_FILE,
@@ -586,7 +608,11 @@ def make_data_helper(args, *, logger: Logger):
     entity_special_num, relation_special_num = args.entity_special_num, args.relation_special_num
     ((pad_token_e, pad_token_r), (cls_token_e, cls_token_r), (mask_token_e, mask_token_r),
      (sep_token_e, sep_token_r), (bos_token_e, bos_token_r)) = get_all_tokens(args)
-    if args.use_for_challenge075:
+    if args.use_for_challenge090:
+        if not args.only_train: raise ValueError("If use for challenge, --only-train must True")
+        if args.use_title is None: raise ValueError("--use-title must not None.")
+        train_file = TITLE2FILE075[args.use_title]
+    elif args.use_for_challenge075:
         if not args.only_train: raise ValueError("If use for challenge, --only-train must True")
         if args.use_title is None: raise ValueError("--use-title must not None.")
         train_file = TITLE2FILE075[args.use_title]
