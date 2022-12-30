@@ -24,18 +24,8 @@ ACTIVATION: Final = 'activation'
 
 def add_bos(triple: np.ndarray, bos_token_h, bos_token_r, bos_token_t,):
     array_bos = np.array([[bos_token_h, bos_token_r, bos_token_t]])
-    old_s = triple[0][0]
-    before_i = 0
-    tmp_list = []
-    for i, (s, r, e) in enumerate(triple):
-        if old_s != s:
-            tmp = triple[before_i: i]
-            tmp_list.append(tmp)
-            old_s, before_i = s, i
-
-    new_triple = np.concatenate(
-        list(itertools.chain(*[(array_bos, _tmp) for _tmp in tmp_list]))
-    )
+    new_triple_list = [np.stack(g) for _, g in itertools.groupby(triple, lambda _t: _t[0])]
+    new_triple = np.concatenate(list(itertools.chain(*[(array_bos, _tmp) for _tmp in new_triple_list])))
     return new_triple
 
 
