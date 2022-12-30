@@ -102,23 +102,23 @@ SRO_FOLDER = "data/processed/KGCdata/All/SRO"
 SRO_ALL_INFO_FILE: Final = "{}/info.hdf5".format(SRO_FOLDER)
 SRO_ALL_TRAIN_FILE: Final = "{}/train.hdf5".format(SRO_FOLDER)
 
-SRO_AbbeyGrange090_TRAIN_FILE: Final = "{}/train_AbbeyGrange_090.hdf5".format(SRO_FOLDER)
-SRO_ACaseOfIdentity090_TRAIN_FILE: Final = "{}/train_ACaseOfIdentity_090.hdf5".format(SRO_FOLDER)
-SRO_CrookedMan090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_CrookedMan_090.hdf5"
-SRO_DancingMen090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_DancingMen_090.hdf5"
-SRO_DevilsFoot090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_DevilsFoot_090.hdf5"
-SRO_ResidentPatient090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_ResidentPatient_090.hdf5"
-SRO_SilverBlaze090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_SilverBlaze_090.hdf5"
-SRO_SpeckledBand090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_SpeckledBand_090.hdf5"
+SRO_AbbeyGrange090_TRAIN_FILE: Final = "{}/train_AbbeyGrange_l090.hdf5".format(SRO_FOLDER)
+SRO_ACaseOfIdentity090_TRAIN_FILE: Final = "{}/train_ACaseOfIdentity_l090.hdf5".format(SRO_FOLDER)
+SRO_CrookedMan090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_CrookedMan_l090.hdf5"
+SRO_DancingMen090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_DancingMen_l090.hdf5"
+SRO_DevilsFoot090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_DevilsFoot_l090.hdf5"
+SRO_ResidentPatient090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_ResidentPatient_l090.hdf5"
+SRO_SilverBlaze090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_SilverBlaze_l090.hdf5"
+SRO_SpeckledBand090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_SpeckledBand_l090.hdf5"
 
-SRO_AbbeyGrange075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_AbbeyGrange_075.hdf5"
-SRO_ACaseOfIdentity075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_ACaseOfIdentity_075.hdf5"
-SRO_CrookedMan075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_CrookedMan_075.hdf5"
-SRO_DancingMen075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_DancingMen_075.hdf5"
-SRO_DevilsFoot075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_DevilsFoot_075.hdf5"
-SRO_ResidentPatient075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_ResidentPatient_075.hdf5"
-SRO_SilverBlaze075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_SilverBlaze_075.hdf5"
-SRO_SpeckledBand075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_SpeckledBand_075.hdf5"
+SRO_AbbeyGrange075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_AbbeyGrange_l075.hdf5"
+SRO_ACaseOfIdentity075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_ACaseOfIdentity_l075.hdf5"
+SRO_CrookedMan075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_CrookedMan_l075.hdf5"
+SRO_DancingMen075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_DancingMen_l075.hdf5"
+SRO_DevilsFoot075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_DevilsFoot_l075.hdf5"
+SRO_ResidentPatient075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_ResidentPatient_l075.hdf5"
+SRO_SilverBlaze075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_SilverBlaze_l075.hdf5"
+SRO_SpeckledBand075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_SpeckledBand_l075.hdf5"
 
 TITLE2FILE090 = {
     'ACaseOfIdentity': SRO_AbbeyGrange090_TRAIN_FILE,
@@ -132,8 +132,8 @@ TITLE2FILE090 = {
 }
 
 TITLE2FILE075 = {
-    'ACaseOfIdentity': SRO_AbbeyGrange075_TRAIN_FILE,
-    'AbbeyGrange': SRO_ACaseOfIdentity075_TRAIN_FILE,
+    'AbbeyGrange': SRO_AbbeyGrange075_TRAIN_FILE,
+    'ACaseOfIdentity': SRO_ACaseOfIdentity075_TRAIN_FILE,
     'CrookedMan': SRO_CrookedMan075_TRAIN_FILE,
     'DancingMen': SRO_DancingMen075_TRAIN_FILE,
     'DevilsFoot': SRO_DevilsFoot075_TRAIN_FILE,
