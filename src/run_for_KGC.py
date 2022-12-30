@@ -795,7 +795,8 @@ def main_function(args: Namespace, *, logger: Logger):
         train_items.update(info_dict)
     elif args.only_load_trainer_evaluator:
         model, info_dict = pre_training(
-            args, data_helper=data_helper, model=model, lr=0.,
+            args, data_helper=data_helper, model=model,
+            lr=0., lr_story=0., lr_relation=0., lr_entity=0.,
             loss_weight_story=1.,
             loss_weight_relation=1.,
             loss_weight_entity=1.,
