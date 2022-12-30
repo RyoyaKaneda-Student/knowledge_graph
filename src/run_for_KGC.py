@@ -609,11 +609,11 @@ def make_data_helper(args, *, logger: Logger):
     entity_special_num, relation_special_num = args.entity_special_num, args.relation_special_num
     ((pad_token_e, pad_token_r), (cls_token_e, cls_token_r), (mask_token_e, mask_token_r),
      (sep_token_e, sep_token_r), (bos_token_e, bos_token_r)) = get_all_tokens(args)
-    if args.use_for_challenge090:
+    if getattr(args, 'use_for_challenge090', None):
         if not args.only_train: raise ValueError("If use for challenge, --only-train must True")
         if args.use_title is None: raise ValueError("--use-title must not None.")
-        train_file = TITLE2FILE075[args.use_title]
-    elif args.use_for_challenge075:
+        train_file = TITLE2FILE090[args.use_title]
+    elif getattr(args, 'use_for_challenge075', None):
         if not args.only_train: raise ValueError("If use for challenge, --only-train must True")
         if args.use_title is None: raise ValueError("--use-title must not None.")
         train_file = TITLE2FILE075[args.use_title]
