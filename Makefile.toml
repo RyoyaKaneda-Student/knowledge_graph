@@ -896,15 +896,8 @@ python3 -O src/run_for_KGC.py   \
 	--checkpoint-dir ${Logfile}/checkpoint/ \
 	--max-len 512 \
 	--embedding-dim 128 --entity-embedding-dim 128 --relation-embedding-dim 64 \
-<<<<<<< HEAD
-	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity}\
-	--valid-interval 10000 ${@:2}
-	'''
-	]
-=======
 	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
 	--valid-interval 10000 ${@:2}
 '''
 ]
->>>>>>> develop
 description = "kgc model ver 03 (new data)"
