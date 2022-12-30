@@ -179,6 +179,7 @@ def setup_parser(args: Namespace = None) -> Namespace:
     paa('--train-valid-test', help='', action='store_true')
     paa('--only-train', help='', action='store_true')
     paa('--use-for-challenge100', help='', action='store_true')
+    paa('--use-for-challenge090', help='', action='store_true')
     paa('--use-for-challenge075', help='', action='store_true')
     paa('--use-title', help=' or '.join(ALL_TITLE_LIST), type=str, choices=ALL_TITLE_LIST)
     # optuna setting
