@@ -986,7 +986,6 @@ python3 -O src/run_for_KGC.py   \
 ]
 description = "kgc challenge: CrookedMan075"
 
-
 [tasks.kgc_CrookedMan090_03]
 workspace = false
 script = [
@@ -1014,4 +1013,60 @@ python3 -O src/run_for_KGC.py   \
 '''
 ]
 description = "kgc challenge: CrookedMan090"
+
+[tasks.kgc_SpeckledBand075_03]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/kgc/SpeckledBand075/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+Title="SpeckledBand"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge075 --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim 128 --entity-embedding-dim 128 --relation-embedding-dim 64 \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc challenge: SpeckledBand075"
+
+[tasks.kgc_SpeckledBand090_03]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/kgc/SpeckledBand/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+Title="SpeckledBand"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge090 --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim 128 --entity-embedding-dim 128 --relation-embedding-dim 64 \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc challenge: SpeckledBand090"
 
