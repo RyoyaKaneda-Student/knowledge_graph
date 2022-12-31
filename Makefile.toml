@@ -1047,7 +1047,7 @@ workspace = false
 script = [
 '''
 #!/usr/bin/env bash
-Logfile="saved_models/kgc/SpeckledBand/03"
+Logfile="saved_models/kgc/SpeckledBand090/03"
 Lr="5e-5"
 LrStory="1e-4"
 LrRelation="1e-6"
