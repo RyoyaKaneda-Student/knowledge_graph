@@ -6,10 +6,8 @@ from collections import namedtuple
 # ========== python ==========
 from logging import Logger
 from pathlib import Path
-import gc
 # noinspection PyUnresolvedReferences
 from typing import List, Dict, Tuple, Optional, Union, Callable, Final, Literal, get_args, cast
-
 # Machine learning
 import h5py
 import numpy as np
@@ -17,33 +15,39 @@ import optuna
 import pandas as pd
 # torch
 import torch
+from torch.utils.data import Dataset
+from torch.utils.data.dataloader import DataLoader
+from torch.utils.tensorboard.writer import SummaryWriter
 from ignite.contrib.handlers.tqdm_logger import ProgressBar
 from ignite.engine import Engine, Events
 from ignite.handlers import Timer, Checkpoint, global_step_from_engine, DiskSaver
 from ignite.metrics import Average, Accuracy
-from torch.utils.data import Dataset
-from torch.utils.data.dataloader import DataLoader
-from torch.utils.tensorboard.writer import SummaryWriter
 
-# Made by myself
+# My Models
 from models.KGModel.kg_story_transformer import (
-    KgStoryTransformer01, KgStoryTransformer02, add_bos, SpecialTokens01 as SpecialTokens, KgStoryTransformer03)
+    KgStoryTransformer01, KgStoryTransformer02, add_bos, KgStoryTransformer03)
 from models.datasets.data_helper import MyDataHelper
-from models.datasets.datasets import StoryTriple, StoryTripleForValid
+from models.datasets.datasets import (
+    StoryTriple, StoryTripleForValid, SpecialTokens01 as SpecialTokens, DefaultIds, DefaultTokens,
+)
+# My utils
 from utils.torch import save_model, torch_fix_seed, DeviceName, force_cpu_decorator
-from utils.utils import force_gc_after_function, version_check, elapsed_time_str
+from utils.utils import version_check, elapsed_time_str
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 
+# About words used as tags
 CPU: Final[str] = 'cpu'
 TRAIN: Final[str] = 'train'
+PRE_TRAIN: Final[str] = 'pre_train'
 TEST: Final[str] = 'test'
 MRR: Final[str] = 'mrr'
 HIT_: Final[str] = 'hit_'
 STUDY: Final[str] = 'study'
 MODEL: Final[str] = 'model'
+PARAMS: Final[str] = 'params'
+LR: Final[str] = 'lr'
 OPTIMIZER: Final[str] = 'optimizer'
-
 TRAINER: Final[str] = 'trainer'
 EVALUATOR: Final[str] = 'evaluator'
 CHECKPOINTER: Final[str] = 'checkpointer'
@@ -51,100 +55,80 @@ CHECKPOINTER_GOOD_LOSS: Final[str] = 'checkpointer_good_loss'
 CHECKPOINTER_LAST: Final[str] = 'checkpointer_last'
 DATA_HELPER: Final[str] = 'data_helper'
 
-PAD_E: Final[str] = '<pad_e>'
-CLS_E: Final[str] = '<cls_e>'
-MASK_E: Final[str] = '<mask_e>'
-SEP_E: Final[str] = '<sep_e>'
-BOS_E: Final[str] = '<bos_e>'
-PAD_R: Final[str] = '<pad_r>'
-CLS_R: Final[str] = '<cls_r>'
-MASK_R: Final[str] = '<mask_r>'
-SEP_R: Final[str] = '<sep_r>'
-BOS_R: Final[str] = '<bos_r>'
+ALL_TAIL: Final[str] = 'all_tail'
+TRIPLE: Final[str] = 'triple'
+DATASETS: Final[str] = 'datasets'
 
-ALL_TAIL = 'all_tail'
-TRIPLE = 'triple'
-DATASETS = 'datasets'
+STORY_RELATION_ENTITY: Final[str, str, str] = ('story', 'relation', 'entity')
 
-LOSS: Final = 'loss'
-STORY_RELATION_ENTITY = ('story', 'relation', 'entity')
-STORY_LOSS: Final = 'story_loss'
-RELATION_LOSS: Final = 'relation_loss'
-OBJECT_LOSS: Final = 'entity_loss'
-LOSS_NAME3 = (STORY_LOSS, RELATION_LOSS, OBJECT_LOSS)
+LOSS: Final[str] = 'loss'
+STORY_LOSS: Final[str] = 'story_loss'
+RELATION_LOSS: Final[str] = 'relation_loss'
+OBJECT_LOSS: Final[str] = 'entity_loss'
+LOSS_NAME3: Final[str, str, str] = (STORY_LOSS, RELATION_LOSS, OBJECT_LOSS)
 
-STORY_PRED: Final = 'story_pred'
-RELATION_PRED: Final = 'relation_pred'
-ENTITY_PRED: Final = 'entity_pred'
-PRED_NAME3 = (STORY_PRED, RELATION_PRED, ENTITY_PRED)
+STORY_PRED: Final[str] = 'story_pred'
+RELATION_PRED: Final[str] = 'relation_pred'
+ENTITY_PRED: Final[str] = 'entity_pred'
+PRED_NAME3: Final[str, str, str] = (STORY_PRED, RELATION_PRED, ENTITY_PRED)
 
-STORY_ANS: Final = 'story_ans'
-RELATION_ANS: Final = 'relation_ans'
-OBJECT_ANS: Final = 'object_ans'
-ANS_NAME3 = (STORY_ANS, RELATION_ANS, OBJECT_ANS)
+STORY_ANS: Final[str] = 'story_ans'
+RELATION_ANS: Final[str] = 'relation_ans'
+OBJECT_ANS: Final[str] = 'object_ans'
+ANS_NAME3: Final[str, str, str] = (STORY_ANS, RELATION_ANS, OBJECT_ANS)
 
-STORY_ACCURACY: Final = 'story_accuracy'
-RELATION_ACCURACY: Final = 'relation_accuracy'
-ENTITY_ACCURACY: Final = 'entity_accuracy'
-ACCURACY_NAME3 = (STORY_ACCURACY, RELATION_ACCURACY, ENTITY_ACCURACY)
+STORY_ACCURACY: Final[str] = 'story_accuracy'
+RELATION_ACCURACY: Final[str] = 'relation_accuracy'
+ENTITY_ACCURACY: Final[str] = 'entity_accuracy'
+ACCURACY_NAME3: Final[str, str, str] = (STORY_ACCURACY, RELATION_ACCURACY, ENTITY_ACCURACY)
 
-METRIC_NAMES = [LOSS, *LOSS_NAME3, *ACCURACY_NAME3]
+METRIC_NAMES: Final[str, str, str, str, str, str, str] = [LOSS, *LOSS_NAME3, *ACCURACY_NAME3]
 
-ALL_TITLE_LIST = [
-    'ACaseOfIdentity', 'AbbeyGrange', 'CrookedMan', 'DancingMen',
-    'DevilsFoot', 'ResidentPatient', 'SilverBlaze', 'SpeckledBand'
-]
+# about all title
+ACaseOfIdentity: Final[str] = 'ACaseOfIdentity'
+AbbeyGrange: Final[str] = 'AbbeyGrange'
+CrookedMan: Final[str] = 'CrookedMan'
+DancingMen: Final = 'DancingMen'
+DevilsFoot: Final[str] = 'DevilsFoot'
+ResidentPatient: Final[str] = 'ResidentPatient'
+SilverBlaze: Final[str] = 'SilverBlaze'
+SpeckledBand: Final[str] = 'SpeckledBand'
 
-ABOUT_KILL_WORDS: Final = ['word.predicate:kill', 'word.predicate:notKill', 'word.predicate:beKilled']
+ALL_TITLE_LIST: Final = (
+    ACaseOfIdentity, AbbeyGrange, CrookedMan, DancingMen, DevilsFoot, ResidentPatient, SilverBlaze, SpeckledBand
+)
 
-SRO_FOLDER = "data/processed/KGCdata/All/SRO"
+ABOUT_KILL_WORDS: Final[str, str, str] = ['word.predicate:kill', 'word.predicate:notKill', 'word.predicate:beKilled']
 
-SRO_ALL_INFO_FILE: Final = "{}/info.hdf5".format(SRO_FOLDER)
-SRO_ALL_TRAIN_FILE: Final = "{}/train.hdf5".format(SRO_FOLDER)
+SRO_FOLDER: Final[str] = "data/processed/KGCdata/All/SRO"
 
-SRO_AbbeyGrange090_TRAIN_FILE: Final = "{}/train_AbbeyGrange_l090.hdf5".format(SRO_FOLDER)
-SRO_ACaseOfIdentity090_TRAIN_FILE: Final = "{}/train_ACaseOfIdentity_l090.hdf5".format(SRO_FOLDER)
-SRO_CrookedMan090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_CrookedMan_l090.hdf5"
-SRO_DancingMen090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_DancingMen_l090.hdf5"
-SRO_DevilsFoot090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_DevilsFoot_l090.hdf5"
-SRO_ResidentPatient090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_ResidentPatient_l090.hdf5"
-SRO_SilverBlaze090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_SilverBlaze_l090.hdf5"
-SRO_SpeckledBand090_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_SpeckledBand_l090.hdf5"
+SRO_ALL_INFO_FILE: Final[str] = f"{SRO_FOLDER}/info.hdf5"
+SRO_ALL_TRAIN_FILE: Final[str] = f"{SRO_FOLDER}/train.hdf5"
 
-SRO_AbbeyGrange075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_AbbeyGrange_l075.hdf5"
-SRO_ACaseOfIdentity075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_ACaseOfIdentity_l075.hdf5"
-SRO_CrookedMan075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_CrookedMan_l075.hdf5"
-SRO_DancingMen075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_DancingMen_l075.hdf5"
-SRO_DevilsFoot075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_DevilsFoot_l075.hdf5"
-SRO_ResidentPatient075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_ResidentPatient_l075.hdf5"
-SRO_SilverBlaze075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_SilverBlaze_l075.hdf5"
-SRO_SpeckledBand075_TRAIN_FILE: Final = "data/processed/KGCdata/All/SRO/train_SpeckledBand_l075.hdf5"
-
-TITLE2FILE090 = {
-    'ACaseOfIdentity': SRO_AbbeyGrange090_TRAIN_FILE,
-    'AbbeyGrange': SRO_ACaseOfIdentity090_TRAIN_FILE,
-    'CrookedMan': SRO_CrookedMan090_TRAIN_FILE,
-    'DancingMen': SRO_DancingMen090_TRAIN_FILE,
-    'DevilsFoot': SRO_DevilsFoot090_TRAIN_FILE,
-    'ResidentPatient': SRO_ResidentPatient090_TRAIN_FILE,
-    'SilverBlaze': SRO_SilverBlaze090_TRAIN_FILE,
-    'SpeckledBand': SRO_SpeckledBand090_TRAIN_FILE
+TITLE2FILE090: Final[dict[str, str]] = {
+    ACaseOfIdentity: f"{SRO_FOLDER}/train_AbbeyGrange_l090.hdf5",
+    AbbeyGrange: f"{SRO_FOLDER}/train_ACaseOfIdentity_l090.hdf5",
+    CrookedMan: f"{SRO_FOLDER}/train_CrookedMan_l090.hdf5",
+    DancingMen: f"{SRO_FOLDER}/train_DancingMen_l090.hdf5",
+    DevilsFoot: f"{SRO_FOLDER}/train_DevilsFoot_l090.hdf5",
+    ResidentPatient: f"{SRO_FOLDER}/train_ResidentPatient_l090.hdf5",
+    SilverBlaze: f"{SRO_FOLDER}/train_SilverBlaze_l090.hdf5",
+    SpeckledBand: f"{SRO_FOLDER}/train_SpeckledBand_l090.hdf5",
 }
 
-TITLE2FILE075 = {
-    'AbbeyGrange': SRO_AbbeyGrange075_TRAIN_FILE,
-    'ACaseOfIdentity': SRO_ACaseOfIdentity075_TRAIN_FILE,
-    'CrookedMan': SRO_CrookedMan075_TRAIN_FILE,
-    'DancingMen': SRO_DancingMen075_TRAIN_FILE,
-    'DevilsFoot': SRO_DevilsFoot075_TRAIN_FILE,
-    'ResidentPatient': SRO_ResidentPatient075_TRAIN_FILE,
-    'SilverBlaze': SRO_SilverBlaze075_TRAIN_FILE,
-    'SpeckledBand': SRO_SpeckledBand075_TRAIN_FILE
+TITLE2FILE075: Final[dict[str, str]] = {
+    'AbbeyGrange': f"{SRO_FOLDER}/train_AbbeyGrange_l075.hdf5",
+    'ACaseOfIdentity': f"{SRO_FOLDER}/train_ACaseOfIdentity_l075.hdf5",
+    'CrookedMan': f"{SRO_FOLDER}/train_CrookedMan_l075.hdf5",
+    'DancingMen': f"{SRO_FOLDER}/train_DancingMen_l075.hdf5",
+    'DevilsFoot':  f"{SRO_FOLDER}/train_DevilsFoot_l075.hdf5",
+    'ResidentPatient': f"{SRO_FOLDER}/train_ResidentPatient_l075.hdf5",
+    'SilverBlaze': f"{SRO_FOLDER}/train_SilverBlaze_l075.hdf5",
+    'SpeckledBand':  f"{SRO_FOLDER}/train_SpeckledBand_l075.hdf5"
 }
 
-CHECKPOINT_DIR: Final = 'saved_models/.tmp/check-point.{}'
-MOST_GOOD_CHECKPOINT_PATH: Final = '{}/most_good/'
-LATEST_CHECKPOINT_PATH: Final = '{}/most_good/'
+MOST_GOOD_CHECKPOINT_PATH: Final[str] = '{}/most_good/'
+LATEST_CHECKPOINT_PATH: Final[str] = '{}/most_good/'
 
 SEED: Final = 42
 
@@ -192,27 +176,27 @@ def setup_parser(args: Namespace = None) -> Namespace:
     paa('--relation-special-num', help='relation special num', type=int, default=5)
     paa('--entity-special-num', help='entity special num', type=int, default=5)
     # e special
-    paa('--padding-token-e', help='padding', type=int, default=0)
-    paa('--cls-token-e', help='cls', type=int, default=1)
-    paa('--mask-token-e', help='mask', type=int, default=2)
-    paa('--sep-token-e', help='sep', type=int, default=3)
-    paa('--bos-token-e', help='bos', type=int, default=4)
+    paa('--padding-token-e', help='padding', type=int, default=DefaultIds.PAD_E_DEFAULT_ID)
+    paa('--cls-token-e', help='cls', type=int, default=DefaultIds.CLS_E_DEFAULT_ID)
+    paa('--mask-token-e', help='mask', type=int, default=DefaultIds.MASK_E_DEFAULT_ID)
+    paa('--sep-token-e', help='sep', type=int, default=DefaultIds.SEP_E_DEFAULT_ID)
+    paa('--bos-token-e', help='bos', type=int, default=DefaultIds.BOS_E_DEFAULT_ID)
     # r special
-    paa('--padding-token-r', help='padding', type=int, default=0)
-    paa('--cls-token-r', help='cls', type=int, default=1)
-    paa('--mask-token-r', help='mask', type=int, default=2)
-    paa('--sep-token-r', help='sep', type=int, default=3)
-    paa('--bos-token-r', help='bos', type=int, default=4)
+    paa('--padding-token-r', help='padding', type=int, default=DefaultIds.PAD_R_DEFAULT_ID)
+    paa('--cls-token-r', help='cls', type=int, default=DefaultIds.CLS_R_DEFAULT_ID)
+    paa('--mask-token-r', help='mask', type=int, default=DefaultIds.MASK_R_DEFAULT_ID)
+    paa('--sep-token-r', help='sep', type=int, default=DefaultIds.SEP_R_DEFAULT_ID)
+    paa('--bos-token-r', help='bos', type=int, default=DefaultIds.BOS_R_DEFAULT_ID)
     # story
-    paa('--padding-token-s', help='padding', type=int, default=0)
-    paa('--cls-token-s', help='cls', type=int, default=1)
-    paa('--mask-token-s', help='mask', type=int, default=2)
-    paa('--sep-token-s', help='sep', type=int, default=3)
-    paa('--bos-token-s', help='bos', type=int, default=4)
+    paa('--padding-token-s', help='padding', type=int, default=DefaultIds.PAD_E_DEFAULT_ID)
+    paa('--cls-token-s', help='cls', type=int, default=DefaultIds.CLS_E_DEFAULT_ID)
+    paa('--mask-token-s', help='mask', type=int, default=DefaultIds.MASK_E_DEFAULT_ID)
+    paa('--sep-token-s', help='sep', type=int, default=DefaultIds.SEP_E_DEFAULT_ID)
+    paa('--bos-token-s', help='bos', type=int, default=DefaultIds.BOS_E_DEFAULT_ID)
     # model
-    paa('--embedding-dim', type=int, default=128, help='The embedding dimension. Default: 128')
-    paa('--entity-embedding-dim', type=int, default=128, help='The embedding dimension. Default: 128')
-    paa('--relation-embedding-dim', type=int, default=128, help='The embedding dimension. Default: 128')
+    paa('--embedding-dim', help='The embedding dimension. Default: 128', type=int, default=128)
+    paa('--entity-embedding-dim', help='The embedding dimension. Default: 128', type=int, default=128)
+    paa('--relation-embedding-dim', help='The embedding dimension. Default: 128', type=int, default=128)
     paa('--separate-head-and-tail', action='store_true', default=False,
         help='If True, it head Embedding and tail Embedding are different.')
     paa('--batch-size', help='batch size', type=int, default=4)
@@ -280,11 +264,11 @@ def pre_training(
     logger.debug("model modules: " + ', '.join(list(modules.keys())))
     del modules['head_maskdlm'], modules['relation_maskdlm'], modules['tail_maskdlm']
     optim_list = [
-        {'params': _module.parameters(), 'lr': lr} for _name, _module in modules.items()
+        {PARAMS: _module.parameters(), LR: lr} for _name, _module in modules.items()
     ] + [
-        {'params': model.head_maskdlm.parameters(), 'lr': lr_story},
-        {'params': model.relation_maskdlm.parameters(), 'lr': lr_relation},
-        {'params': model.tail_maskdlm.parameters(), 'lr': lr_entity},
+        {PARAMS: model.head_maskdlm.parameters(), LR: lr_story},
+        {PARAMS: model.relation_maskdlm.parameters(), LR: lr_relation},
+        {PARAMS: model.tail_maskdlm.parameters(), LR: lr_entity},
     ]
 
     opt = torch.optim.Adam(optim_list)
@@ -478,11 +462,11 @@ def pre_training(
             _value = metrics[_name]
             logger.debug(f"----- train metrics[{_name}]={_value} -----")
             if summary_writer is not None:
-                summary_writer.add_scalar(f"pre_train/{_name}", _value, global_step=epoch)
+                summary_writer.add_scalar(f"{PRE_TRAIN}/{_name}", _value, global_step=epoch)
         if summary_writer is not None and hasattr(model, 'weight_head'):
-            summary_writer.add_scalar(f"pre_train/model_weight/story", model.weight_head.data, global_step=epoch)
-            summary_writer.add_scalar(f"pre_train/model_weight/relation", model.weight_relation.data, global_step=epoch)
-            summary_writer.add_scalar(f"pre_train/model_weight/entity", model.weight_tail.data, global_step=epoch)
+            summary_writer.add_scalar(f"{PRE_TRAIN}/model_weight/story", model.weight_head.data, global_step=epoch)
+            summary_writer.add_scalar(f"{PRE_TRAIN}/model_weight/relation", model.weight_relation.data, global_step=epoch)
+            summary_writer.add_scalar(f"{PRE_TRAIN}/model_weight/entity", model.weight_tail.data, global_step=epoch)
 
     @trainer.on(Events.EPOCH_COMPLETED(every=args.valid_interval))
     def valid_func(engine: Engine):

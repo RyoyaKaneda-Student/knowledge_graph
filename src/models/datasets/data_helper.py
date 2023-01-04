@@ -1,5 +1,6 @@
 # coding: UTF-8
 # region !import area!
+import dataclasses
 import os
 import sys
 from pathlib import Path
@@ -26,7 +27,7 @@ from models.datasets.datasets import (
 )
 from utils.hdf5 import read_one_item
 from utils.setup import easy_logger
-from utils.typing import ConstValueClass
+from utils.typing import ConstValueClass, ConstMeta
 from utils.utils import (
     version_check, true_count, get_true_position_items_using_getter
 )
@@ -34,7 +35,6 @@ from utils.utils import (
 # endregion
 
 PROJECT_DIR = Path(__file__).resolve().parents[3]
-sys.path.append(os.path.join(PROJECT_DIR, 'src'))
 
 PROCESSED_DATA_PATH = './data/processed/'
 EXTERNAL_DATA_PATH = './data/external/'
@@ -42,13 +42,23 @@ EXTERNAL_DATA_PATH = './data/external/'
 KGDATA: Final = 'KGdata'
 KGCDATA: Final = 'KGCdata'
 KGDATA_LITERAL: Final = Literal['FB15k-237', 'WN18RR', 'YAGO3-10', 'KGC-ALL', 'KGC-ALL-SVO']
-KGDATA_ALL: Final = get_args(KGDATA_LITERAL)
+KGDATA_ALL: Final = ('FB15k-237', 'WN18RR', 'YAGO3-10', 'KGC-ALL', 'KGC-ALL-SVO')
+
 KGDATA2FOLDER_PATH = {
     'FB15k-237': os.path.join(PROCESSED_DATA_PATH, KGDATA, 'FB15k-237'),
     'WN18RR': os.path.join(PROCESSED_DATA_PATH, KGDATA, 'WN18RR'),
     'YAGO3-10': os.path.join(PROCESSED_DATA_PATH, KGDATA, 'YAGO3-10'),
     'KGC-ALL-SVO': os.path.join(PROCESSED_DATA_PATH, KGCDATA, 'All', 'SVO'),
 }
+
+
+# noinspection PyTypeChecker
+def make_change_index_func(_length: int, special_ids: list[int]):
+    tmp_list = [True for _ in range(_length+len(special_ids))]
+    for id_ in special_ids: tmp_list[id_] = None
+    change_list = [i for i, tmp in tmp_list if tmp is not None]
+    assert len(change_list) == _length
+    return lambda x: change_list[x]
 
 
 class INFO_INDEX(ConstValueClass):
@@ -82,6 +92,82 @@ class ALL_TAIL_INDEX(ConstValueClass):
     def all_index(cls):
         return [cls.ER_LENGTH, ALL_TAIL_INDEX.ERS,
                 ALL_TAIL_INDEX.ID2ALL_TAIL_ROW, ALL_TAIL_INDEX.ID2ALL_TAIL_ENTITY, ALL_TAIL_INDEX.ID2ALL_TAIL_MODE]
+
+
+# about tokens
+class DefaultTokens(metaclass=ConstMeta):
+    PAD_E: Final[str] = '<pad_e>'
+    CLS_E: Final[str] = '<cls_e>'
+    MASK_E: Final[str] = '<mask_e>'
+    SEP_E: Final[str] = '<sep_e>'
+    BOS_E: Final[str] = '<bos_e>'
+    PAD_R: Final[str] = '<pad_r>'
+    CLS_R: Final[str] = '<cls_r>'
+    MASK_R: Final[str] = '<mask_r>'
+    SEP_R: Final[str] = '<sep_r>'
+    BOS_R: Final[str] = '<bos_r>'
+
+
+class DefaultIds(metaclass=ConstMeta):
+    PAD_E_DEFAULT_ID: Final[int] = 0
+    CLS_E_DEFAULT_ID: Final[int] = 1
+    MASK_E_DEFAULT_ID: Final[int] = 2
+    SEP_E_DEFAULT_ID: Final[int] = 3
+    BOS_E_DEFAULT_ID: Final[int] = 4
+    PAD_R_DEFAULT_ID: Final[int] = 0
+    CLS_R_DEFAULT_ID: Final[int] = 1
+    MASK_R_DEFAULT_ID: Final[int] = 2
+    SEP_R_DEFAULT_ID: Final[int] = 3
+    BOS_R_DEFAULT_ID: Final[int] = 4
+
+
+def default_token2ids_e():
+    DT = DefaultTokens
+    DI = DefaultIds
+    return {DT.PAD_E: DI.PAD_E_DEFAULT_ID, DT.CLS_E: DI.CLS_E_DEFAULT_ID,
+            DT.MASK_E: DI.MASK_E_DEFAULT_ID, DT.SEP_E: DI.SEP_E_DEFAULT_ID, DT.BOS_E: DI.BOS_E_DEFAULT_ID}
+
+
+def default_token2ids_r():
+    DT = DefaultTokens
+    DI = DefaultIds
+    return {DT.PAD_R: DI.PAD_R_DEFAULT_ID, DT.CLS_R: DI.CLS_R_DEFAULT_ID,
+            DT.MASK_R: DI.MASK_R_DEFAULT_ID, DT.SEP_R: DI.SEP_R_DEFAULT_ID, DT.BOS_R: DI.BOS_R_DEFAULT_ID}
+
+
+def default_ids2token_e():
+    return {value: key for key, value in default_token2ids_e()}
+
+
+def default_ids2token_r():
+    return {value: key for key, value in default_token2ids_r()}
+
+
+@dataclasses.dataclass
+class SpecialTokens:
+    @classmethod
+    def default(cls):
+        return cls()
+
+
+@dataclasses.dataclass
+class SpecialPaddingTokens(SpecialTokens):
+    padding_token_e: int = DefaultIds.PAD_E_DEFAULT_ID
+    padding_token_r: int = DefaultIds.PAD_R_DEFAULT_ID
+
+
+@dataclasses.dataclass
+class SpecialTokens01(SpecialPaddingTokens):
+    padding_token_e: int = DefaultIds.PAD_E_DEFAULT_ID
+    padding_token_r: int = DefaultIds.PAD_R_DEFAULT_ID
+    cls_token_e: int = DefaultIds.CLS_E_DEFAULT_ID
+    cls_token_r: int = DefaultIds.CLS_R_DEFAULT_ID
+    mask_token_e: int = DefaultIds.MASK_E_DEFAULT_ID
+    mask_token_r: int = DefaultIds.MASK_R_DEFAULT_ID
+    sep_token_e: int = DefaultIds.SEP_E_DEFAULT_ID
+    sep_token_r: int = DefaultIds.SEP_R_DEFAULT_ID
+    bos_token_e: int = DefaultIds.BOS_E_DEFAULT_ID
+    bos_token_r: int = DefaultIds.BOS_R_DEFAULT_ID
 
 
 @dataclass(init=False)

@@ -21,6 +21,12 @@ from utils.torch import all_same_shape
 LINEAR: Final = 'linear'
 ACTIVATION: Final = 'activation'
 
+MASKED_LM: Final = 'maskdlm'
+HEAD_MASKED_LM: Final = 'head_maskdlm'
+RELATION_MASKED_LM: Final = 'relation_maskdlm'
+TAIL_MASKED_LM: Final = 'tail_maskdlm'
+WEIGHT_HEAD: Final = 'weight_head'
+
 
 def add_bos(triple: np.ndarray, bos_token_h, bos_token_r, bos_token_t,):
     array_bos = np.array([[bos_token_h, bos_token_r, bos_token_t]])
@@ -42,42 +48,15 @@ class Feedforward(torch.nn.Module):
         return self.linear2(self.activation(self.norm(self.linear1(x))))
 
 
-class SpecialTokens:
-    padding_token_e: int
-    padding_token_r: int
-
-
-@dataclasses.dataclass
-class FakeSpecialTokens(SpecialTokens):
-    default: int = 0
-
-    def __getattr__(self):
-        return self.default
-
-
-@dataclasses.dataclass
-class SpecialTokens01(SpecialTokens):
-    padding_token_e: int
-    padding_token_r: int
-    cls_token_e: int
-    cls_token_r: int
-    mask_token_e: int
-    mask_token_r: int
-    sep_token_e: int
-    sep_token_r: int
-    bos_token_e: int
-    bos_token_r: int
-
-
 class KgStoryTransformer(nn.Module, metaclass=abc.ABCMeta):
-    def __init__(self, args, num_entity, num_relations, special_tokens):
+    def __init__(self, args, num_entity, num_relations, special_tokens, **kwargs):
         """
 
         Args:
             args:
             num_entity(int):
             num_relations(int):
-            special_tokens(SpecialTokens):
+            special_tokens(SpecialPaddingTokens):
             **kwargs:
         """
         super().__init__()

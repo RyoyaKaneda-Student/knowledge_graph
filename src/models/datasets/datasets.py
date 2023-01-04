@@ -1,14 +1,11 @@
 # coding: UTF-8
 import itertools
-import os
-import sys
-from pathlib import Path
 # ========== My Utils ==========
 from utils.utils import version_check, is_same_len_in_list
 # ========== python ==========
 from logging import Logger
 # noinspection PyUnresolvedReferences
-from typing import List, Dict, Tuple, Optional, Union, Callable
+from typing import List, Dict, Tuple, Optional, Union, Callable, Final
 # noinspection PyUnresolvedReferences
 from tqdm import tqdm
 import dataclasses
@@ -204,7 +201,7 @@ class StoryTriple(Dataset):
         if len_ > self.max_len:
             return item[:self.max_len]
         else:
-            return torch.cat((item, tensor_all[0:self.max_len-len_]))
+            return torch.cat((item, tensor_all[0:self.max_len - len_]))
 
     def __getitem__(self, index: int):
         bos_index = self.bos_indices[index]
