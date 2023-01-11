@@ -123,6 +123,7 @@ class KgStoryTransformerLabelInit(KgStoryTransformer, ABC):
 
         data_helper: MyDataHelper = kwargs['data_helper']
         bert_model = BertModel.from_pretrained('bert-base-uncased')
+        bert_model.to(args.device)
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         processed_entities_label = [
             "[CLS] {}".format(x) if x is not '' else '' for x in data_helper.processed_entities_label]

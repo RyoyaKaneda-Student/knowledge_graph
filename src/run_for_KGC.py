@@ -35,7 +35,7 @@ from models.datasets.datasets import (
 )
 # My utils
 from utils.torch import save_model, torch_fix_seed, DeviceName, force_cpu_decorator
-from utils.typing import ConstMeta, notNone
+from utils.typing import ConstMeta
 from utils.utils import version_check, elapsed_time_str
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
@@ -748,7 +748,8 @@ def make_get_datasets(args: Namespace, *, data_helper: MyDataHelper, logger: Log
         logger.debug("----- show all triple(no remove) label-----")
         for i in range(30):
             logger.debug(f"example: "
-                         f"{entities_label[triple[i][0]]}, {relations_label[triple[i][1]]}, {entities_label[triple[i][2]]}")
+                         f"{entities_label[triple[i][0]]}, {relations_label[triple[i][1]]}, "
+                         f"{entities_label[triple[i][2]]}")
         logger.debug("----- show example -----")
         # endregion
 
@@ -817,6 +818,7 @@ def make_get_model(args: Namespace, *, data_helper: MyDataHelper, logger: Logger
 
 
 def make_get_dataloader(args: Namespace, *, datasets: tuple[Dataset, Dataset, Dataset], logger: Logger):
+
     batch_size = args.batch_size
     dataset_train, dataset_valid, dataset_test = datasets
     dataloader_train = DataLoader(
@@ -826,6 +828,7 @@ def make_get_dataloader(args: Namespace, *, datasets: tuple[Dataset, Dataset, Da
     dataloader_test = None if dataset_test is None else DataLoader(
         dataset_test, shuffle=False, batch_size=batch_size * 2, num_workers=2, pin_memory=True)
     data_loaders = MyDataLoaderHelper(datasets, dataloader_train, None, dataloader_valid, dataloader_test)
+    logger.debug(f"{dataloader_train=}, {dataloader_valid=}, {dataloader_test=}")
     return data_loaders
 
 
