@@ -13,11 +13,9 @@ from torch import flatten, nn, mm
 from torch.nn import Embedding, Linear, Sequential
 # from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torch.nn import TransformerEncoderLayer, TransformerEncoder
+from transformers import BertTokenizer, BertModel
 
 from models.utilModules.tranformer import PositionalEncoding
-
-import torch
-from transformers import BertTokenizer, BertModel
 
 from utils.utils import tqdm
 
@@ -113,17 +111,17 @@ class KgStoryTransformer(nn.Module, metaclass=ABCMeta):
 class KgStoryTransformerLabelInit(KgStoryTransformer, ABC):
 
     def init(self, args, **kwargs):
-        if not args.init_embedding_using_bert:
-            return
-
         from models.datasets.data_helper import MyDataHelper
 
+        if not args.init_embedding_using_bert:
+            return
+        device = args.device
         assert self.entity_embedding_dim == 768, \
             f"The entity_embedding_dim must 768 but self.entity_embedding_dim=={self.entity_embedding_dim}"
 
         data_helper: MyDataHelper = kwargs['data_helper']
         bert_model = BertModel.from_pretrained('bert-base-uncased')
-        bert_model.to(args.device)
+        bert_model.to(device)
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         processed_entities_label = [
             "[CLS] {}".format(x) if x is not '' else '' for x in data_helper.processed_entities_label]
@@ -132,7 +130,7 @@ class KgStoryTransformerLabelInit(KgStoryTransformer, ABC):
         bert_model.eval()
         with torch.no_grad():
             entity_embeddings_list = [
-                bert_model(torch.tensor([input_ids]))[0][0, 0] if len(input_ids) > 1 else None
+                bert_model(torch.tensor([input_ids]).to(device))[0][0, 0].to('cpu') if len(input_ids) > 1 else None
                 for input_ids in tqdm(input_ids_list)]
 
             entity_embeddings_filter = [True if x is not None else False for x in entity_embeddings_list]
