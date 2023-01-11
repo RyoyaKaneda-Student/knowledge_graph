@@ -4,6 +4,7 @@ from argparse import Namespace
 # noinspection PyUnresolvedReferences
 from collections import namedtuple
 # ========== python ==========
+from itertools import chain
 from logging import Logger
 from pathlib import Path
 # noinspection PyUnresolvedReferences
@@ -25,13 +26,16 @@ from ignite.metrics import Average, Accuracy
 
 # My Models
 from models.KGModel.kg_story_transformer import (
-    KgStoryTransformer01, KgStoryTransformer02, add_bos, KgStoryTransformer03)
-from models.datasets.data_helper import MyDataHelper
+    KgStoryTransformer01, KgStoryTransformer02, add_bos, KgStoryTransformer03, KgStoryTransformer03preInit,
+    KgStoryTransformer00, KgStoryTransformer)
+from models.datasets.data_helper import MyDataHelper, DefaultTokens, DefaultIds, SpecialTokens01 as SpecialTokens, \
+    MyDataLoaderHelper
 from models.datasets.datasets import (
-    StoryTriple, StoryTripleForValid, SpecialTokens01 as SpecialTokens, DefaultIds, DefaultTokens,
+    StoryTriple, StoryTripleForValid,
 )
 # My utils
 from utils.torch import save_model, torch_fix_seed, DeviceName, force_cpu_decorator
+from utils.typing import ConstMeta, notNone
 from utils.utils import version_check, elapsed_time_str
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
@@ -54,35 +58,38 @@ CHECKPOINTER: Final[str] = 'checkpointer'
 CHECKPOINTER_GOOD_LOSS: Final[str] = 'checkpointer_good_loss'
 CHECKPOINTER_LAST: Final[str] = 'checkpointer_last'
 DATA_HELPER: Final[str] = 'data_helper'
+DATA_LOADERS: Final[str] = 'data_loaders'
 
 ALL_TAIL: Final[str] = 'all_tail'
 TRIPLE: Final[str] = 'triple'
 DATASETS: Final[str] = 'datasets'
+TRAIN_ITEMS: Final[str] = 'train_items'
 
-STORY_RELATION_ENTITY: Final[str, str, str] = ('story', 'relation', 'entity')
+STORY_RELATION_ENTITY: Final[tuple[str, str, str]] = ('story', 'relation', 'entity')
 
 LOSS: Final[str] = 'loss'
 STORY_LOSS: Final[str] = 'story_loss'
 RELATION_LOSS: Final[str] = 'relation_loss'
 OBJECT_LOSS: Final[str] = 'entity_loss'
-LOSS_NAME3: Final[str, str, str] = (STORY_LOSS, RELATION_LOSS, OBJECT_LOSS)
+LOSS_NAME3: Final[tuple[str, str, str]] = (STORY_LOSS, RELATION_LOSS, OBJECT_LOSS)
 
 STORY_PRED: Final[str] = 'story_pred'
 RELATION_PRED: Final[str] = 'relation_pred'
 ENTITY_PRED: Final[str] = 'entity_pred'
-PRED_NAME3: Final[str, str, str] = (STORY_PRED, RELATION_PRED, ENTITY_PRED)
+PRED_NAME3: Final[tuple[str, str, str]] = (STORY_PRED, RELATION_PRED, ENTITY_PRED)
 
 STORY_ANS: Final[str] = 'story_ans'
 RELATION_ANS: Final[str] = 'relation_ans'
 OBJECT_ANS: Final[str] = 'object_ans'
-ANS_NAME3: Final[str, str, str] = (STORY_ANS, RELATION_ANS, OBJECT_ANS)
+ANS_NAME3: Final[tuple[str, str, str]] = (STORY_ANS, RELATION_ANS, OBJECT_ANS)
 
 STORY_ACCURACY: Final[str] = 'story_accuracy'
 RELATION_ACCURACY: Final[str] = 'relation_accuracy'
 ENTITY_ACCURACY: Final[str] = 'entity_accuracy'
-ACCURACY_NAME3: Final[str, str, str] = (STORY_ACCURACY, RELATION_ACCURACY, ENTITY_ACCURACY)
+ACCURACY_NAME3: Final[tuple[str, str, str]] = (STORY_ACCURACY, RELATION_ACCURACY, ENTITY_ACCURACY)
 
-METRIC_NAMES: Final[str, str, str, str, str, str, str] = [LOSS, *LOSS_NAME3, *ACCURACY_NAME3]
+METRIC_NAMES: Final[tuple[str, str, str, str, str, str, str]] = (
+    LOSS, STORY_LOSS, RELATION_LOSS, OBJECT_LOSS, STORY_ANS, RELATION_ANS, OBJECT_ANS)
 
 # about all title
 ACaseOfIdentity: Final[str] = 'ACaseOfIdentity'
@@ -98,7 +105,8 @@ ALL_TITLE_LIST: Final = (
     ACaseOfIdentity, AbbeyGrange, CrookedMan, DancingMen, DevilsFoot, ResidentPatient, SilverBlaze, SpeckledBand
 )
 
-ABOUT_KILL_WORDS: Final[str, str, str] = ['word.predicate:kill', 'word.predicate:notKill', 'word.predicate:beKilled']
+ABOUT_KILL_WORDS: Final[tuple[str, str, str]] = (
+    'word.predicate:kill', 'word.predicate:notKill', 'word.predicate:beKilled')
 
 SRO_FOLDER: Final[str] = "data/processed/KGCdata/All/SRO"
 
@@ -121,14 +129,26 @@ TITLE2FILE075: Final[dict[str, str]] = {
     'ACaseOfIdentity': f"{SRO_FOLDER}/train_ACaseOfIdentity_l075.hdf5",
     'CrookedMan': f"{SRO_FOLDER}/train_CrookedMan_l075.hdf5",
     'DancingMen': f"{SRO_FOLDER}/train_DancingMen_l075.hdf5",
-    'DevilsFoot':  f"{SRO_FOLDER}/train_DevilsFoot_l075.hdf5",
+    'DevilsFoot': f"{SRO_FOLDER}/train_DevilsFoot_l075.hdf5",
     'ResidentPatient': f"{SRO_FOLDER}/train_ResidentPatient_l075.hdf5",
     'SilverBlaze': f"{SRO_FOLDER}/train_SilverBlaze_l075.hdf5",
-    'SpeckledBand':  f"{SRO_FOLDER}/train_SpeckledBand_l075.hdf5"
+    'SpeckledBand': f"{SRO_FOLDER}/train_SpeckledBand_l075.hdf5"
 }
 
 MOST_GOOD_CHECKPOINT_PATH: Final[str] = '{}/most_good/'
 LATEST_CHECKPOINT_PATH: Final[str] = '{}/most_good/'
+
+
+class ModelVersion(metaclass=ConstMeta):
+    V01: Final = '01'
+    V02: Final = '02'
+    V03: Final = '03'
+    V03a: Final = '03a'
+
+    @classmethod
+    def ALL_LIST(cls) -> tuple:
+        return cls.V01, cls.V02, cls.V03, cls.V03a
+
 
 SEED: Final = 42
 
@@ -142,108 +162,134 @@ def setup_parser(args: Namespace = None) -> Namespace:
 
     """
     import argparse  # 1. argparseをインポート
-    parser = argparse.ArgumentParser(description='データの初期化')
+    parser = argparse.ArgumentParser(description='This is make and training source code for KGC.')
     paa = parser.add_argument
-    parser.add_argument_group()
     paa('--notebook', help='if use notebook, use this argument.', action='store_true')
-    paa('--train-anyway', help='It will not be reproducible, but it could be faster.', action='store_true')
+    paa('--console-level', help='log level on console', type=str, default='debug', choices=['info', 'debug'])
     paa('--logfile', help='the path of saving log', type=str, default='log/test.log')
     paa('--param-file', help='the path of saving param', type=str, default='log/param.pkl')
-    paa('--tensorboard-dir', help='tensorboard direction', type=str, default='log/tensorboard/')
-    paa('--checkpoint-dir', help='tensorboard direction', type=str, default='log/checkpoint/')
-    paa('--model-path', type=str, help='model path')
-    paa('--model-version', type=str, help='model version.')
-    paa('--resume-from-checkpoint', help='if use checkpoint, use this argument.', action='store_true')
-    paa('--resume-from-last-point', help='if use checkpoint, use this argument.', action='store_true')
-    paa('--only-load-trainer-evaluator', help='', action='store_true')
-    paa('--resume-checkpoint-path', help='if use checkpoint, use this argument.', type=str)
-    paa('--console-level', help='log level on console', type=str, default='debug', choices=['info', 'debug'])
     paa('--device-name', help=DeviceName.ALL_INFO, type=str, default=DeviceName.CPU, choices=DeviceName.ALL_LIST)
-    paa('--pre-train', help="Put on if you are doing pre-training", action='store_true')
-    paa('--train-valid-test', help='', action='store_true')
-    paa('--only-train', help='', action='store_true')
-    paa('--use-for-challenge100', help='', action='store_true')
-    paa('--use-for-challenge090', help='', action='store_true')
-    paa('--use-for-challenge075', help='', action='store_true')
-    paa('--use-title', help=' or '.join(ALL_TITLE_LIST), type=str, choices=ALL_TITLE_LIST)
+    paa('--train-anyway', help='It will not be reproducible, but it could be faster.', action='store_true')
+    # save dir setting
+    parser_group01 = parser.add_argument_group('dir and path', 'There are the setting of training setting dir or path.')
+    paa1 = parser_group01.add_argument
+    paa1('--tensorboard-dir', type=str, default='log/tensorboard/', help='tensorboard direction')
+    paa1('--checkpoint-dir', type=str, default='log/checkpoint/', help='tensorboard direction')
+    paa1('--model-path', type=str, required=True, help='model path')
+    paa1('--resume-from-checkpoint', action='store_true', help='if use checkpoint, use this argument.')
+    paa1('--resume-from-last-point', action='store_true', help='if use checkpoint, use this argument.')
+    paa1('--only-load-trainer-evaluator', action='store_true',
+         help='load only mode. not training. use it for valid model.', )
+    paa1('--resume-checkpoint-path', type=str, help='if use checkpoint, use this argument.')
+    # use title setting
+    parser_group02 = parser.add_argument_group('use title setting', 'There are the setting of training title.')
+    paa2 = parser_group02.add_argument
+    paa2('--pre-train', help="Put on if you are doing pre-training", action='store_true')
+    paa2('--train-valid-test', help='', action='store_true')
+    paa2('--only-train', help='', action='store_true')
+    paa2('--use-for-challenge100', help='', action='store_true')
+    paa2('--use-for-challenge090', help='', action='store_true')
+    paa2('--use-for-challenge075', help='', action='store_true')
+    paa2('--use-title', help=' or '.join(ALL_TITLE_LIST), type=str, choices=ALL_TITLE_LIST)
     # optuna setting
-    paa('--do-optuna', help="do optuna", action='store_true')
-    paa('--optuna-file', help='optuna file', type=str)
-    paa('--study-name', help='optuna study-name', type=str)
-    paa('--n-trials', help='optuna n-trials', type=int)
+    parser_group03 = parser.add_argument_group('optuna setting', 'There are the setting of optuna.')
+    paa3 = parser_group03.add_argument
+    paa3('--do-optuna', action='store_true', help="do optuna")
+    paa3('--optuna-file', type=str, help='optuna file')
+    paa3('--study-name', type=str, help='optuna study-name')
+    paa3('--n-trials', type=int, help='optuna n-trials')
     # special num count
-    paa('--story-special-num', help='story special num', type=int, default=5)
-    paa('--relation-special-num', help='relation special num', type=int, default=5)
-    paa('--entity-special-num', help='entity special num', type=int, default=5)
+    parser_group04 = parser.add_argument_group('special token setting', 'There are the setting of special token.')
+    paa4 = parser_group04.add_argument
+    paa4('--story-special-num', help='story special num', type=int, default=5)
+    paa4('--relation-special-num', help='relation special num', type=int, default=5)
+    paa4('--entity-special-num', help='entity special num', type=int, default=5)
     # e special
-    paa('--padding-token-e', help='padding', type=int, default=DefaultIds.PAD_E_DEFAULT_ID)
-    paa('--cls-token-e', help='cls', type=int, default=DefaultIds.CLS_E_DEFAULT_ID)
-    paa('--mask-token-e', help='mask', type=int, default=DefaultIds.MASK_E_DEFAULT_ID)
-    paa('--sep-token-e', help='sep', type=int, default=DefaultIds.SEP_E_DEFAULT_ID)
-    paa('--bos-token-e', help='bos', type=int, default=DefaultIds.BOS_E_DEFAULT_ID)
+    parser_group041 = parser.add_argument_group(
+        'special (tail) embedding token setting', 'There are the setting of special (tail) embedding token setting.')
+    paa41 = parser_group041.add_argument
+    paa41('--padding-token-e', help='padding', type=int, default=DefaultIds.PAD_E_DEFAULT_ID)
+    paa41('--cls-token-e', help='cls', type=int, default=DefaultIds.CLS_E_DEFAULT_ID)
+    paa41('--mask-token-e', help='mask', type=int, default=DefaultIds.MASK_E_DEFAULT_ID)
+    paa41('--sep-token-e', help='sep', type=int, default=DefaultIds.SEP_E_DEFAULT_ID)
+    paa41('--bos-token-e', help='bos', type=int, default=DefaultIds.BOS_E_DEFAULT_ID)
     # r special
-    paa('--padding-token-r', help='padding', type=int, default=DefaultIds.PAD_R_DEFAULT_ID)
-    paa('--cls-token-r', help='cls', type=int, default=DefaultIds.CLS_R_DEFAULT_ID)
-    paa('--mask-token-r', help='mask', type=int, default=DefaultIds.MASK_R_DEFAULT_ID)
-    paa('--sep-token-r', help='sep', type=int, default=DefaultIds.SEP_R_DEFAULT_ID)
-    paa('--bos-token-r', help='bos', type=int, default=DefaultIds.BOS_R_DEFAULT_ID)
+    parser_group042 = parser.add_argument_group(
+        'special (tail) embedding token setting', 'There are the setting of special relation embedding token setting.')
+    paa42 = parser_group042.add_argument
+    paa42('--padding-token-r', help='padding', type=int, default=DefaultIds.PAD_R_DEFAULT_ID)
+    paa42('--cls-token-r', help='cls', type=int, default=DefaultIds.CLS_R_DEFAULT_ID)
+    paa42('--mask-token-r', help='mask', type=int, default=DefaultIds.MASK_R_DEFAULT_ID)
+    paa42('--sep-token-r', help='sep', type=int, default=DefaultIds.SEP_R_DEFAULT_ID)
+    paa42('--bos-token-r', help='bos', type=int, default=DefaultIds.BOS_R_DEFAULT_ID)
     # story
-    paa('--padding-token-s', help='padding', type=int, default=DefaultIds.PAD_E_DEFAULT_ID)
-    paa('--cls-token-s', help='cls', type=int, default=DefaultIds.CLS_E_DEFAULT_ID)
-    paa('--mask-token-s', help='mask', type=int, default=DefaultIds.MASK_E_DEFAULT_ID)
-    paa('--sep-token-s', help='sep', type=int, default=DefaultIds.SEP_E_DEFAULT_ID)
-    paa('--bos-token-s', help='bos', type=int, default=DefaultIds.BOS_E_DEFAULT_ID)
+    parser_group043 = parser.add_argument_group(
+        'special (tail) embedding token setting', 'There are the setting of special (head) embedding token setting.')
+    paa43 = parser_group043.add_argument
+    paa43('--padding-token-s', help='padding', type=int, default=DefaultIds.PAD_E_DEFAULT_ID)
+    paa43('--cls-token-s', help='cls', type=int, default=DefaultIds.CLS_E_DEFAULT_ID)
+    paa43('--mask-token-s', help='mask', type=int, default=DefaultIds.MASK_E_DEFAULT_ID)
+    paa43('--sep-token-s', help='sep', type=int, default=DefaultIds.SEP_E_DEFAULT_ID)
+    paa43('--bos-token-s', help='bos', type=int, default=DefaultIds.BOS_E_DEFAULT_ID)
     # model
-    paa('--embedding-dim', help='The embedding dimension. Default: 128', type=int, default=128)
-    paa('--entity-embedding-dim', help='The embedding dimension. Default: 128', type=int, default=128)
-    paa('--relation-embedding-dim', help='The embedding dimension. Default: 128', type=int, default=128)
-    paa('--separate-head-and-tail', action='store_true', default=False,
-        help='If True, it head Embedding and tail Embedding are different.')
-    paa('--batch-size', help='batch size', type=int, default=4)
-    paa('--max-len', help='max length of 1 batch. default: 256', type=int, default=256)
-    paa('--mask-percent', help='default: 0.15', type=float, default=0.15)
-    paa('--mask-mask-percent', help='default: 0.80', type=float, default=0.80)
-    paa('--mask-random-percent', help='default: 0.10', type=float, default=0.10)
-    paa('--mask-nomask-percent', help='default: 0.10', type=float, default=0.10)
-    paa('--no-use-pe', help='to check pe(position encoding) power, we have to make no pe model', action='store_true')
-    paa('--epoch', help='max epoch', type=int, default=2)
-    # optimizer
-    paa('--lr', type=float, default=0.003, help='learning rate (default: 0.003)')
-    paa('--lr-story', type=float, help='learning rate (default: same as --lr)')
-    paa('--lr-relation', type=float, help='learning rate (default: same as --lr)')
-    paa('--lr-entity', type=float, help='learning rate (default: same as --lr)')
-    paa('--valid-interval', type=int, default=1, help='valid-interval', )
-    paa('--loss-weight-story', type=float, default=1., help='loss-weight-story')
-    paa('--loss-weight-relation', type=float, default=1., help='loss-weight-relation')
-    paa('--loss-weight-entity', type=float, default=1., help='loss-weight-entity')
+    parser_group05 = parser.add_argument_group('model setting', 'There are the setting of model params.')
+    paa5 = parser_group05.add_argument
+    paa5('--model-version', type=str, choices=ModelVersion.ALL_LIST(), help='model version.')
+    paa5('--embedding-dim', help='The embedding dimension. Default: 128', type=int, default=128)
+    paa5('--entity-embedding-dim', help='The embedding dimension. Default: 128', type=int, default=128)
+    paa5('--relation-embedding-dim', help='The embedding dimension. Default: 128', type=int, default=128)
+    paa5('--separate-head-and-tail', action='store_true', default=False,
+         help='If True, it head Embedding and tail Embedding are different.')
+    paa5('--batch-size', help='batch size', type=int, default=4)
+    paa5('--max-len', metavar='MAX-LENGTH', help='max length of 1 batch. default: 256', type=int, default=256)
+    paa5('--no-use-pe', action='store_true', help='to check pe(position encoding) power, we have to make no pe model')
+    paa5('--init-embedding-using-bert', action='store_true',
+         help='if it is set and the model is 03a, it will be pre_init by bert')
+    # mask percent
+    parser_group051 = parser.add_argument_group(
+        'model setting of mask-percent', 'MUST mask-mask + mask-random + mask-nomask == 1.00.')
+    paa51 = parser_group051.add_argument
+    paa51('--mask-percent', help='default: 0.15', metavar='mask-rate', type=float, default=0.15)
+    paa51('--mask-mask-percent', help='default: 0.80', metavar='mask-rate', type=float, default=0.80)
+    paa51('--mask-random-percent', help='default: 0.10', metavar='random-rate', type=float, default=0.10)
+    paa51('--mask-nomask-percent', help='default: 0.10', metavar='nomask-rate', type=float, default=0.10)
     # transformer
-    paa('--nhead', type=int, default=4, help='nhead. Default: 4.')
-    paa('--num-layers', type=int, default=4, help='num layers. Default: 4.')
-    paa('--dim-feedforward', type=int, default=1028, help='dim of feedforward. Default: 1028.')
-    paa('--transformer-drop', type=float, default=0.1, help='transformer-drop. Default: 0.1.')
-    paa('--position-encoder-drop', type=float, default=0.1, help='position-encoder-drop. Default: 0.1.')
+    parser_group052 = parser.add_argument_group(
+        'model setting of transformer', 'There are the setting of transformer params in model.')
+    paa52 = parser_group052.add_argument
+    paa52('--nhead', type=int, default=4, metavar='N', help='nhead. Default: 4.')
+    paa52('--num-layers', type=int, default=4, metavar='NUM', help='num layers. Default: 4.')
+    paa52('--dim-feedforward', type=int, default=1028, metavar='DIM', help='dim of feedforward. Default: 1028.')
+    paa52('--transformer-drop', type=float, default=0.1, metavar='DROP_RATE', help='transformer-drop. Default: 0.1.')
+    paa52('--position-encoder-drop', type=float, default=0.1, metavar='DROP_RATE',
+          help='position-encoder-drop. Default: 0.1.')
+    # optimizer
+    parser_group06 = parser.add_argument_group('model optimizer setting',
+                                               'There are the setting of model optimizer params.')
+    paa6 = parser_group06.add_argument
+    paa6('--lr', type=float, default=0.003, help='learning rate (default: 0.003)')
+    paa6('--lr-story', type=float, help='learning rate (default: same as --lr)')
+    paa6('--lr-relation', type=float, help='learning rate (default: same as --lr)')
+    paa6('--lr-entity', type=float, help='learning rate (default: same as --lr)')
+    paa6('--valid-interval', type=int, default=1, help='valid-interval', )
+    paa6('--loss-weight-story', type=float, default=1., help='loss-weight-story')
+    paa6('--loss-weight-relation', type=float, default=1., help='loss-weight-relation')
+    paa6('--loss-weight-entity', type=float, default=1., help='loss-weight-entity')
+    paa6('--epoch', help='max epoch', type=int, default=2)
 
     args = parser.parse_args(args=args)
     return args
 
 
-def pre_training(
-        args: Namespace, data_helper: MyDataHelper, model: KgStoryTransformer01,
-        lr, lr_story, lr_relation, lr_entity,
-        loss_weight_story, loss_weight_relation, loss_weight_entity,
-        summary_writer: SummaryWriter, *, logger: Logger, ):
+def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model, *, logger: Logger,
+                 summary_writer: SummaryWriter):
     """
 
     Args:
-        lr(float):
-        lr_story(float):
-        lr_relation(float):
-        lr_entity(float):
-        loss_weight_entity(float):
-        loss_weight_relation(float):
-        loss_weight_story(float):
         args(Namespace):
+        hyper_params(tuple):
         data_helper(MyDataHelper):
+        data_loaders(MyDataLoaderHelper):
         model(KgStoryTransformer01):
         summary_writer(SummaryWriter):
         logger(Logger):
@@ -251,6 +297,7 @@ def pre_training(
     Returns:
 
     """
+    lr, lr_story, lr_relation, lr_entity, loss_weight_story, loss_weight_relation, loss_weight_entity = hyper_params
     device: torch.device = args.device
     non_blocking = True
     model.to(device)
@@ -264,20 +311,20 @@ def pre_training(
     logger.debug("model modules: " + ', '.join(list(modules.keys())))
     del modules['head_maskdlm'], modules['relation_maskdlm'], modules['tail_maskdlm']
     optim_list = [
-        {PARAMS: _module.parameters(), LR: lr} for _name, _module in modules.items()
-    ] + [
-        {PARAMS: model.head_maskdlm.parameters(), LR: lr_story},
-        {PARAMS: model.relation_maskdlm.parameters(), LR: lr_relation},
-        {PARAMS: model.tail_maskdlm.parameters(), LR: lr_entity},
-    ]
+                     {PARAMS: _module.parameters(), LR: lr} for _name, _module in modules.items()
+                 ] + [
+                     {PARAMS: model.head_maskdlm.parameters(), LR: lr_story},
+                     {PARAMS: model.relation_maskdlm.parameters(), LR: lr_relation},
+                     {PARAMS: model.tail_maskdlm.parameters(), LR: lr_entity},
+                 ]
 
     opt = torch.optim.Adam(optim_list)
     loss_fn_entity = torch.nn.CrossEntropyLoss(weight=torch.ones(entity_num).to(device))
     loss_fn_relation = torch.nn.CrossEntropyLoss(weight=torch.ones(relation_num).to(device))
     checkpoint_dir = args.checkpoint_dir
     # checkpoint_dir = CHECKPOINT_DIR.format(line_up_key_value(pid=args.pid, uid=uid))
-    train = data_helper.train_dataloader
-    valid = data_helper.valid_dataloader if args.train_valid_test else None
+    train = data_loaders.train_dataloader
+    valid = data_loaders.valid_dataloader if args.train_valid_test else None
     train_triple = train.dataset.triple
     # mask percents
     mask_percent = args.mask_percent
@@ -465,7 +512,8 @@ def pre_training(
                 summary_writer.add_scalar(f"{PRE_TRAIN}/{_name}", _value, global_step=epoch)
         if summary_writer is not None and hasattr(model, 'weight_head'):
             summary_writer.add_scalar(f"{PRE_TRAIN}/model_weight/story", model.weight_head.data, global_step=epoch)
-            summary_writer.add_scalar(f"{PRE_TRAIN}/model_weight/relation", model.weight_relation.data, global_step=epoch)
+            summary_writer.add_scalar(
+                f"{PRE_TRAIN}/model_weight/relation", model.weight_relation.data, global_step=epoch)
             summary_writer.add_scalar(f"{PRE_TRAIN}/model_weight/entity", model.weight_tail.data, global_step=epoch)
 
     @trainer.on(Events.EPOCH_COMPLETED(every=args.valid_interval))
@@ -568,7 +616,19 @@ def pre_training(
                    CHECKPOINTER_GOOD_LOSS: good_checkpoint, CHECKPOINTER_LAST: last_checkpoint}
 
 
-def get_all_tokens(args):
+def get_all_tokens(args: Namespace):
+    """
+    Args:
+        args(Namespace):
+
+    Returns:
+        tuple[tuple[int, int], tuple[int, int], tuple[int, int], tuple[int, int], tuple[int, int]]:
+            (
+                (pad_token_e, pad_token_r), (cls_token_e, cls_token_r), (mask_token_e, mask_token_r),
+                (sep_token_e, sep_token_r), (bos_token_e, bos_token_r)
+            )
+
+    """
     pad_token_e, pad_token_r = args.padding_token_e, args.padding_token_r
     cls_token_e, cls_token_r = args.cls_token_e, args.cls_token_r
     mask_token_e, mask_token_r = args.mask_token_e, args.mask_token_r
@@ -580,40 +640,42 @@ def get_all_tokens(args):
     )
 
 
-def make_data_helper(args, *, logger: Logger):
+def make_get_data_helper(args: Namespace, *, logger: Logger):
     """
 
     Args:
-        args:
-        logger:
+        args(Namespace):
+        logger(Logger):
 
     Returns:
 
     """
-    entity_special_num, relation_special_num = args.entity_special_num, args.relation_special_num
     ((pad_token_e, pad_token_r), (cls_token_e, cls_token_r), (mask_token_e, mask_token_r),
      (sep_token_e, sep_token_r), (bos_token_e, bos_token_r)) = get_all_tokens(args)
-    if getattr(args, 'use_for_challenge090', None):
+    is_challenge090, is_challenge075 = args.use_for_challenge090, args.use_for_challenge075
+
+    if is_challenge090 or is_challenge075:
         if not args.only_train: raise ValueError("If use for challenge, --only-train must True")
         if args.use_title is None: raise ValueError("--use-title must not None.")
-        train_file = TITLE2FILE090[args.use_title]
-    elif getattr(args, 'use_for_challenge075', None):
-        if not args.only_train: raise ValueError("If use for challenge, --only-train must True")
-        if args.use_title is None: raise ValueError("--use-title must not None.")
-        train_file = TITLE2FILE075[args.use_title]
-    else:
-        train_file = SRO_ALL_TRAIN_FILE
-        pass
-    data_helper = MyDataHelper(SRO_ALL_INFO_FILE, None, train_file, None, None, logger=logger,
-                               entity_special_num=entity_special_num, relation_special_num=relation_special_num)
-    data_helper.set_special_names(
-        {pad_token_e: PAD_E, cls_token_e: CLS_E, mask_token_e: MASK_E, sep_token_e: SEP_E, bos_token_e: BOS_E},
-        {pad_token_r: PAD_R, cls_token_r: CLS_R, mask_token_r: MASK_R, sep_token_r: SEP_R, bos_token_r: BOS_R},
-    )
+
+    train_file = TITLE2FILE090[args.use_title] if is_challenge090 \
+        else TITLE2FILE075[args.use_title] if is_challenge075 else SRO_ALL_TRAIN_FILE
+
+    entity_special_dicts = {
+        pad_token_e: DefaultTokens.PAD_E, cls_token_e: DefaultTokens.CLS_E, mask_token_e: DefaultTokens.MASK_E,
+        sep_token_e: DefaultTokens.SEP_E, bos_token_e: DefaultTokens.BOS_E
+    }
+    relation_special_dicts = {
+        pad_token_r: DefaultTokens.PAD_R, cls_token_r: DefaultTokens.CLS_R, mask_token_r: DefaultTokens.MASK_R,
+        sep_token_r: DefaultTokens.SEP_R, bos_token_r: DefaultTokens.BOS_R
+    }
+    data_helper = MyDataHelper(SRO_ALL_INFO_FILE, train_file, None, None, logger=logger,
+                               entity_special_dicts=entity_special_dicts, relation_special_dicts=relation_special_dicts)
+    data_helper.show(logger)
     return data_helper
 
 
-def make_datasets(args, *, data_helper: MyDataHelper, logger: Logger):
+def make_get_datasets(args: Namespace, *, data_helper: MyDataHelper, logger: Logger):
     """
     
     Args:
@@ -632,7 +694,6 @@ def make_datasets(args, *, data_helper: MyDataHelper, logger: Logger):
     # get from data_helper
     entities, relations = data_helper.processed_entities, data_helper.processed_relations
     triple = data_helper.processed_train_triple
-    logger.debug("----- make_datasets start -----")
     # Check the number of data before including special tokens, as you will need them when creating the validation data.
     len_of_default_triple = len(triple)
     # add bos token in triples
@@ -682,6 +743,15 @@ def make_datasets(args, *, data_helper: MyDataHelper, logger: Logger):
         logger.debug("----- show example -----")
         # endregion
 
+        # region debug area2
+        entities_label, relations_label = data_helper.processed_entities_label, data_helper.processed_relations_label
+        logger.debug("----- show all triple(no remove) label-----")
+        for i in range(30):
+            logger.debug(f"example: "
+                         f"{entities_label[triple[i][0]]}, {relations_label[triple[i][1]]}, {entities_label[triple[i][2]]}")
+        logger.debug("----- show example -----")
+        # endregion
+
         dataset_train = StoryTriple(triple_train, np.where(triple_train[:, 0] == bos_token_e)[0], max_len,
                                     pad_token_e, pad_token_r, pad_token_e,
                                     sep_token_e, sep_token_r, sep_token_e)
@@ -704,7 +774,7 @@ def make_datasets(args, *, data_helper: MyDataHelper, logger: Logger):
     return dataset_train, dataset_valid, dataset_test
 
 
-def make_model(args, *, data_helper: MyDataHelper, logger: Logger):
+def make_get_model(args: Namespace, *, data_helper: MyDataHelper, logger: Logger):
     """
 
     Args:
@@ -716,34 +786,37 @@ def make_model(args, *, data_helper: MyDataHelper, logger: Logger):
 
     """
     # get from args
-    all_tokens = [_t for _tt in get_all_tokens(args) for _t in _tt]
+
+    all_tokens = [_t for _t in chain.from_iterable(get_all_tokens(args))]
     # get from data_helper
     num_entities, num_relations = len(data_helper.processed_entities), len(data_helper.processed_relations)
     logger.debug("----- make_model start -----")
     if 'model_version' not in args or args.model_version is None:
         raise ValueError("")
         pass
-    elif args.model_version == '01':
-        model = KgStoryTransformer01(args, num_entities, num_relations, special_tokens=SpecialTokens(*all_tokens))
-        pass
-    elif args.model_version == '02':
-        model = KgStoryTransformer02(args, num_entities, num_relations, special_tokens=SpecialTokens(*all_tokens))
-        pass
-    elif args.model_version == '03':
-        model = KgStoryTransformer03(args, num_entities, num_relations, special_tokens=SpecialTokens(*all_tokens))
-        pass
-    else:
-        raise ValueError("aaa")
-        pass
+    version_ = args.model_version
 
+    # noinspection PyTypeChecker
+    Model_: KgStoryTransformer = (
+        None if version_ not in ModelVersion.ALL_LIST()
+        else KgStoryTransformer01 if version_ == ModelVersion.V01
+        else KgStoryTransformer02 if version_ == ModelVersion.V02
+        else KgStoryTransformer03 if version_ == ModelVersion.V03
+        else KgStoryTransformer03preInit if version_ == ModelVersion.V03a
+        else KgStoryTransformer00
+    )
+
+    if Model_ is None: raise f"model-version '{version_}' is not defined."
+
+    model = Model_(args, num_entities, num_relations, special_tokens=SpecialTokens(*all_tokens))
     model.assert_check()
+    model.init(args, data_helper=data_helper)
     logger.info(model)
 
     return model
 
 
-def make_set_dataloader(args, *, datasets: tuple[Dataset, Dataset, Dataset], data_helper: MyDataHelper, logger: Logger):
-    logger.debug("----- make_set_dataloader -----")
+def make_get_dataloader(args: Namespace, *, datasets: tuple[Dataset, Dataset, Dataset], logger: Logger):
     batch_size = args.batch_size
     dataset_train, dataset_valid, dataset_test = datasets
     dataloader_train = DataLoader(
@@ -752,70 +825,87 @@ def make_set_dataloader(args, *, datasets: tuple[Dataset, Dataset, Dataset], dat
         dataset_valid, shuffle=False, batch_size=batch_size * 2, num_workers=2, pin_memory=True)
     dataloader_test = None if dataset_test is None else DataLoader(
         dataset_test, shuffle=False, batch_size=batch_size * 2, num_workers=2, pin_memory=True)
-    data_helper.set_loaders(dataloader_train, None, dataloader_valid, dataloader_test)
+    data_loaders = MyDataLoaderHelper(datasets, dataloader_train, None, dataloader_valid, dataloader_test)
+    return data_loaders
 
 
-def main_function(args: Namespace, *, logger: Logger):
-    logger.info('----- make datahelper start. -----')
-    data_helper = make_data_helper(args, logger=logger)
-    logger.info('----- make datahelper complete. -----')
-    datasets = make_datasets(args, data_helper=data_helper, logger=logger)
+def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logger: Logger):
+    """
 
-    logger.info('----- make and set dataloader start. -----')
-    make_set_dataloader(args, datasets=datasets, data_helper=data_helper, logger=logger)
-    logger.info('----- make and set dataloader complete. -----')
+    Args:
+        args(Namespace):
+        data_helper(MyDataHelper):
+        data_loaders(MyDataLoaderHelper):
+        model(KgStoryTransformer01):
+        logger(Logger):
 
-    logger.info('----- make model start -----')
-    model = make_model(args, data_helper=data_helper, logger=logger)
-    logger.info('----- make model complete. -----')
+    Returns:
 
+    """
+    # Now we are ready to start except for the hyper parameters.
     summary_writer = SummaryWriter(log_dir=args.tensorboard_dir) if args.tensorboard_dir is not None else None
     train_items = {TRAINER: None, EVALUATOR: None, CHECKPOINTER_LAST: None, CHECKPOINTER_GOOD_LOSS: None}
 
+    # default mode
     if args.pre_train:
         # setting hyper parameter
-        lr = args.lr
-        lr_story = args.lr_story or args.lr
-        lr_relation = args.lr_relation or args.lr
-        lr_entity = args.lr_entity or args.lr
-        loss_weight_story = args.loss_weight_story
-        loss_weight_relation = args.loss_weight_relation
-        loss_weight_entity = args.loss_weight_story
+        hyper_param = (args.lr, args.lr_story or args.lr, args.lr_relation or args.lr, args.lr_entity or args.lr,
+                       args.loss_weight_story, args.loss_weight_relation, args.loss_weight_story)
         # setting path
         model_path = args.model_path
-        assert model_path is not None
-
+        if model_path is None:
+            raise ValueError("model path must not None")
+        # training.
         model, info_dict = pre_training(
-            args, data_helper=data_helper, model=model,
-            lr=lr, lr_story=lr_story, lr_relation=lr_relation, lr_entity=lr_entity,
-            loss_weight_story=loss_weight_story,
-            loss_weight_relation=loss_weight_relation,
-            loss_weight_entity=loss_weight_entity,
-            summary_writer=summary_writer, logger=logger,
-        )
+            args, hyper_param, data_helper, data_loaders, model, summary_writer=summary_writer, logger=logger)
+        # check the output of the training.
         good_checkpoint: Checkpoint = info_dict[CHECKPOINTER_GOOD_LOSS]
         last_checkpoint: Checkpoint = info_dict[CHECKPOINTER_LAST]
-        logger.info(f"goog model path: {good_checkpoint.last_checkpoint}")
+        logger.info(f"good model path: {good_checkpoint.last_checkpoint}")
         logger.info(f"last model path: {last_checkpoint.last_checkpoint}")
-        if args.only_train:
-            Checkpoint.load_objects(to_load={MODEL: model}, checkpoint=last_checkpoint.last_checkpoint)
-        else:
-            Checkpoint.load_objects(to_load={MODEL: model}, checkpoint=good_checkpoint.last_checkpoint)
+        checkpoint_ = last_checkpoint.last_checkpoint if args.only_train else good_checkpoint.last_checkpoint
+        Checkpoint.load_objects(to_load={MODEL: model}, checkpoint=checkpoint_)
+        # re-save as cpu model
         save_model(model, args.model_path, device=args.device)
         logger.info(f"save model path: {args.model_path}")
+        # update training item for check the output.
         train_items.update(info_dict)
+    # if checking the trained items, use this mode.
     elif args.only_load_trainer_evaluator:
+        hyper_param = (0., 0., 0., 0., 1., 1., 1.)
         model, info_dict = pre_training(
-            args, data_helper=data_helper, model=model,
-            lr=0., lr_story=0., lr_relation=0., lr_entity=0.,
-            loss_weight_story=1.,
-            loss_weight_relation=1.,
-            loss_weight_entity=1.,
-            summary_writer=summary_writer, logger=logger,
-        )
+            args, hyper_param, data_helper, data_loaders, model, summary_writer=summary_writer, logger=logger, )
         train_items.update(info_dict)
 
-    return model, {DATA_HELPER: data_helper, DATASETS: datasets, 'train_items': train_items}
+    return train_items
+
+
+def main_function(args: Namespace, *, logger: Logger):
+    # load raw data and make datahelper. Support for special-tokens by datahelper.
+    logger.info('----- make datahelper start. -----')
+    data_helper = make_get_data_helper(args, logger=logger)
+    logger.info('----- make datahelper complete. -----')
+    # make dataset.
+    logger.info('----- make datasets start. -----')
+    datasets = make_get_datasets(args, data_helper=data_helper, logger=logger)
+    logger.info('----- make datasets complete. -----')
+    # make dataloader.
+    logger.info('----- make dataloader start. -----')
+    data_loaders = make_get_dataloader(args, datasets=datasets, logger=logger)
+    logger.info('----- make dataloader complete. -----')
+    # make model
+    logger.info('----- make model start -----')
+    model = make_get_model(args, data_helper=data_helper, logger=logger)
+    logger.info('----- make model complete. -----')
+    # train test ect
+    logger.info('----- do train start -----')
+    train_items = do_train_test_ect(
+        args, data_helper=data_helper, data_loaders=data_loaders, model=model, logger=logger)
+    logger.info('----- do train complete -----')
+    # return some value
+    return {
+        MODEL: model, DATA_HELPER: data_helper, DATASETS: datasets, DATA_LOADERS: data_loaders, TRAIN_ITEMS: train_items
+    }
 
 
 def main(args=None):
@@ -841,3 +931,4 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+    pass

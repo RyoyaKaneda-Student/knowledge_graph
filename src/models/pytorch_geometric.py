@@ -136,8 +136,8 @@ class GAT(torch.nn.Module):
 
 def make_geodata(data_helper: MyDataHelper,
                  *, is_del_reverse=True, is_add_self_loop=False, num_self_loop=-1, logger=None) -> TorchGeoData:
-    e_length = data_helper.processed_entity_length
-    r_length = data_helper.processed_relation_length
+    e_length = data_helper.processed_entity_num
+    r_length = data_helper.processed_relation_num
 
     reverse_count = np.count_nonzero(data_helper.data.r_is_reverse_list)
     r_length = r_length - reverse_count if is_del_reverse else r_length

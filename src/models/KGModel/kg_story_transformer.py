@@ -1,10 +1,9 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-import abc
-import dataclasses
 import itertools
-from abc import ABC
+from abc import ABC, ABCMeta, abstractmethod
 from collections import OrderedDict
+from argparse import Namespace
 # noinspection PyUnresolvedReferences
 from typing import List, Dict, Tuple, Optional, Union, Callable, overload, Final
 
@@ -16,7 +15,11 @@ from torch.nn import Embedding, Linear, Sequential
 from torch.nn import TransformerEncoderLayer, TransformerEncoder
 
 from models.utilModules.tranformer import PositionalEncoding
-from utils.torch import all_same_shape
+
+import torch
+from transformers import BertTokenizer, BertModel
+
+from utils.utils import tqdm
 
 LINEAR: Final = 'linear'
 ACTIVATION: Final = 'activation'
@@ -28,9 +31,9 @@ TAIL_MASKED_LM: Final = 'tail_maskdlm'
 WEIGHT_HEAD: Final = 'weight_head'
 
 
-def add_bos(triple: np.ndarray, bos_token_h, bos_token_r, bos_token_t,):
+def add_bos(triple: np.ndarray, bos_token_h, bos_token_r, bos_token_t, ):
     array_bos = np.array([[bos_token_h, bos_token_r, bos_token_t]])
-    new_triple_list = [np.stack(g) for _, g in itertools.groupby(triple, lambda _t: _t[0])]
+    new_triple_list = [np.stack(list(g)) for _, g in itertools.groupby(triple, lambda _hrt: _hrt[0])]
     new_triple = np.concatenate(list(itertools.chain(*[(array_bos, _tmp) for _tmp in new_triple_list])))
     return new_triple
 
@@ -48,12 +51,12 @@ class Feedforward(torch.nn.Module):
         return self.linear2(self.activation(self.norm(self.linear1(x))))
 
 
-class KgStoryTransformer(nn.Module, metaclass=abc.ABCMeta):
+class KgStoryTransformer(nn.Module, metaclass=ABCMeta):
     def __init__(self, args, num_entity, num_relations, special_tokens, **kwargs):
         """
 
         Args:
-            args:
+            args(Namespace):
             num_entity(int):
             num_relations(int):
             special_tokens(SpecialPaddingTokens):
@@ -79,19 +82,19 @@ class KgStoryTransformer(nn.Module, metaclass=abc.ABCMeta):
         self.entity_embeddings = Embedding(num_entity, entity_embedding_dim, padding_idx=padding_token_e)
         self.relation_embeddings = Embedding(num_relations, relation_embedding_dim, padding_idx=padding_token_r)
 
-    @abc.abstractmethod
+    @abstractmethod
     def get_head_pred(self, x: torch.Tensor):
         raise NotImplementedError()
 
-    @abc.abstractmethod
+    @abstractmethod
     def get_relation_pred(self, x: torch.Tensor):
         raise NotImplementedError()
 
-    @abc.abstractmethod
+    @abstractmethod
     def get_tail_pred(self, x: torch.Tensor):
         raise NotImplementedError()
 
-    @abc.abstractmethod
+    @abstractmethod
     def get_triple_embedding(self, emb_head, emb_rel, emb_tail):
         raise NotImplementedError()
 
@@ -103,8 +106,42 @@ class KgStoryTransformer(nn.Module, metaclass=abc.ABCMeta):
     def assert_check(self):
         pass
 
+    def init(self, args, **kwargs):
+        pass
 
-class KgStoryTransformer00(KgStoryTransformer, ABC):
+
+class KgStoryTransformerLabelInit(KgStoryTransformer, ABC):
+
+    def init(self, args, **kwargs):
+        if not args.init_embedding_using_bert:
+            return
+
+        from models.datasets.data_helper import MyDataHelper
+
+        assert self.entity_embedding_dim == 768, \
+            f"The entity_embedding_dim must 768 but self.entity_embedding_dim=={self.entity_embedding_dim}"
+
+        data_helper: MyDataHelper = kwargs['data_helper']
+        bert_model = BertModel.from_pretrained('bert-base-uncased')
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        processed_entities_label = [
+            "[CLS] {}".format(x) if x is not '' else '' for x in data_helper.processed_entities_label]
+        result = tokenizer.batch_encode_plus(processed_entities_label, add_special_tokens=False)
+        input_ids_list = result['input_ids']
+        bert_model.eval()
+        with torch.no_grad():
+            entity_embeddings_list = [
+                bert_model(torch.tensor([input_ids]))[0][0, 0] if len(input_ids) > 1 else None
+                for input_ids in tqdm(input_ids_list)]
+
+            entity_embeddings_filter = [True if x is not None else False for x in entity_embeddings_list]
+            entity_embeddings_list = [x for x in entity_embeddings_list if x is not None]
+
+            pre_embeddings = torch.stack(entity_embeddings_list)
+            self.entity_embeddings.weight[entity_embeddings_filter] = pre_embeddings
+
+
+class KgStoryTransformer00(KgStoryTransformer):
     def __init__(self, args, num_entity, num_relations, special_tokens, **kwargs):
         """
 
@@ -202,6 +239,11 @@ class KgStoryTransformer00(KgStoryTransformer, ABC):
 
 
 class KgStoryTransformer01(KgStoryTransformer00):
+    """
+    The head entity and tail entity are elements of the same Entity set.
+    So, we activate head entity embedding.
+    """
+
     def __init__(self, args, num_entity, num_relations, special_tokens, **kwargs):
         super(KgStoryTransformer01, self).__init__(args, num_entity, num_relations, special_tokens, **kwargs)
         embedding_dim = args.embedding_dim
@@ -215,10 +257,13 @@ class KgStoryTransformer02(KgStoryTransformer00):
     """
     推定をベクトル距離ではない方式にしたパターン.
     """
+
     def __init__(self, args, num_entity, num_relations, special_tokens, **kwargs):
         super(KgStoryTransformer02, self).__init__(args, num_entity, num_relations, special_tokens, **kwargs)
-        embedding_dim = args.embedding_dim
         del self.head_maskdlm, self.relation_maskdlm, self.tail_maskdlm
+
+        embedding_dim = args.embedding_dim
+
         self.head_maskdlm = Feedforward(embedding_dim, num_entity, dim_feedforward=embedding_dim, add_norm=False)
         self.relation_maskdlm = Feedforward(embedding_dim, num_relations, dim_feedforward=embedding_dim, add_norm=False)
         self.tail_maskdlm = Feedforward(embedding_dim, num_entity, dim_feedforward=embedding_dim, add_norm=False)
@@ -236,6 +281,7 @@ class KgStoryTransformer02(KgStoryTransformer00):
 class KgStoryTransformer0102(KgStoryTransformer01, KgStoryTransformer02):
     """
     """
+
     def __init__(self, args, num_entity, num_relations, special_tokens, **kwargs):
         super(KgStoryTransformer0102, self).__init__(args, num_entity, num_relations, special_tokens, **kwargs)
 
@@ -245,13 +291,16 @@ class KgStoryTransformer03(KgStoryTransformer02):
     triple の全てを MLP にいれるタイプ.
     その他は KgStoryTransformer02 と同じ.
     """
+
     def __init__(self, args, num_entity, num_relations, special_tokens, **kwargs):
         super(KgStoryTransformer03, self).__init__(args, num_entity, num_relations, special_tokens, **kwargs)
+        del self.weight_head, self.weight_relation, self.weight_tail
+        # get from args
         embedding_dim = args.embedding_dim
         entity_embedding_dim = args.entity_embedding_dim
         relation_embedding_dim = args.relation_embedding_dim
-        del self.weight_head, self.weight_relation, self.weight_tail
-        self.input_activate = Feedforward(2*entity_embedding_dim+relation_embedding_dim, embedding_dim)
+        # set new module
+        self.input_activate = Feedforward(2 * entity_embedding_dim + relation_embedding_dim, embedding_dim)
 
     def get_triple_embedding(self, head, relation, tail):
         emb_head, emb_rel, emb_tail = self.get_emb_head(head), self.get_emb_relation(relation), self.get_emb_tail(tail)
@@ -259,6 +308,10 @@ class KgStoryTransformer03(KgStoryTransformer02):
         return self.pe(x)
 
 
+class KgStoryTransformer03preInit(KgStoryTransformer03, KgStoryTransformerLabelInit):
+    pass
+
+
 if __name__ == '__main__':
-    raise ValueError()
+    raise NotImplementedError()
     pass

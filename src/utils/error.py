@@ -1,0 +1,2 @@
+class UnderDevelopmentError(Exception):
+    pass

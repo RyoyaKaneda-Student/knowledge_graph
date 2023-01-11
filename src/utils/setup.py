@@ -1,17 +1,15 @@
 # coding: UTF-8
-import dataclasses
 import os
-from typing import Tuple, Optional, Any, Callable
-import sys
-from pathlib import Path
 import pickle
-from logging import Logger
 from argparse import Namespace
+from logging import Logger
+from pathlib import Path
+from typing import Optional, Any, Callable, Union
 
 import torch
-from .torch import get_device
 
 from utils.utils import tqdm2notebook_tqdm
+from .torch import get_device
 
 
 class ChangeDisableNamespace(Namespace):
@@ -71,17 +69,26 @@ def setup_logger(name, logfile, console_level=None) -> Logger:
     return logger
 
 
-def setup(setup_parser: Callable[[Optional[list]], Namespace], project_dir, *, parser_args=None
-          ) -> Tuple[Namespace, Logger, torch.device]:
+def setup(setup_parser: Callable[[Optional[list]], Namespace], project_dir: Union[str, Path], *, parser_args=None
+          ) -> tuple[Namespace, Logger, torch.device]:
+    """
+    setup parser, logger and device of pytorch.
+    Args:
+        setup_parser:
+        project_dir:
+        parser_args:
+
+    Returns:
+        tuple[Namespace, Logger, torch.device]: parser args, logger and device.
+    """
     from dotenv import load_dotenv
     load_dotenv()
     args: Namespace = setup_parser(parser_args)
     logger: Logger = setup_logger(__name__, f"{project_dir}/{args.logfile}", console_level=args.console_level)
-    device: torch.device = get_device(device_name=args.device_name, logger=logger
-                                      ) if hasattr(args, 'device_name') else None
+    device: torch.device = get_device(args.device_name, logger=logger) if hasattr(args, 'device_name') else None
     # process id
     args.pid = os.getpid()
-    if hasattr(args, 'device_name') and args.notebook:
+    if hasattr(args, 'notebook') and args.notebook:
         tqdm2notebook_tqdm()
     return args, logger, device
 

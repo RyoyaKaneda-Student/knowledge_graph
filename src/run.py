@@ -234,7 +234,7 @@ def get_model(args: Namespace, data_helper: MyDataHelper) -> Union[KGE_ERE, KGE_
 
     assert model_name in name2model.keys(), f"Unknown model! :{model_name}"
     model = name2model[model_name](
-        args, data_helper.processed_entity_length, data_helper.processed_relation_length, data_helper=data_helper)
+        args, data_helper.processed_entity_num, data_helper.processed_relation_num, data_helper=data_helper)
     model.init()
     return model
 
@@ -434,7 +434,7 @@ def training_ere(
     model.to(device)
     result = ResultPerEpoch(keywords=[LOSS, MRR, HIT_, ])
     progress_helper: ProgressHelper = args.progress_helper
-    count_per_items = data_helper.processed_id2count_entity
+    count_per_items = data_helper.processed_entityIdx2countFrequency
     loss_fn = model.loss
 
     @force_gc_after_function

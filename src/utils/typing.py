@@ -33,6 +33,11 @@ def type_map1(__func: Callable[[_T], _V], __iter1: Iterable[_T]) -> tuple[_T, ..
     return tuple(values)
 
 
+def notNone(x: Optional[_T], error_msg='it must not None, but is is None.') -> _T:
+    if x is None: raise TypeError(error_msg)
+    return x
+
+
 def main():
     a: SkeyDict[int]
 

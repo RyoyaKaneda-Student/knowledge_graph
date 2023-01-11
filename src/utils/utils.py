@@ -160,6 +160,13 @@ def is_same_len_in_list(*args) -> bool:
     return is_same_item_in_list(*len_in_lists(*args))
 
 
+def optional_chaining1(func, x):
+    if x is None:
+        return None
+    else:
+        return func(x)
+
+
 @add_logger_if_logger_is_none
 def version_check(*args, logger):
     logger.debug("====================version check====================")
