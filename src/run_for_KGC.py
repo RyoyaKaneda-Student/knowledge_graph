@@ -89,7 +89,7 @@ ENTITY_ACCURACY: Final[str] = 'entity_accuracy'
 ACCURACY_NAME3: Final[tuple[str, str, str]] = (STORY_ACCURACY, RELATION_ACCURACY, ENTITY_ACCURACY)
 
 METRIC_NAMES: Final[tuple[str, str, str, str, str, str, str]] = (
-    LOSS, STORY_LOSS, RELATION_LOSS, OBJECT_LOSS, STORY_ANS, RELATION_ANS, OBJECT_ANS)
+    LOSS, STORY_LOSS, RELATION_LOSS, OBJECT_LOSS, STORY_ACCURACY, RELATION_ACCURACY, ENTITY_ACCURACY)
 
 # about all title
 ACaseOfIdentity: Final[str] = 'ACaseOfIdentity'
