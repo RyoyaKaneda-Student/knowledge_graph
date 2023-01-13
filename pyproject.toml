@@ -22,7 +22,8 @@ pandas = { version = "^1.4.3", source = "pypi" }
 sklearn = { version = "^0.0", source = "pypi" }
 datasets = { version = "^1.6.0", source = "pypi" }
 tensorboard = { version = "^2.5.0", source = "pypi" }
-optuna = {version = "^3.0.3", source = "pypi"}
+optuna = { version = "^3.0.3", source = "pypi"}
+rdflib = { version ="^6.2.0", source = "pypi"}
 # natural langage tools
 sentencepiece = { version = "^0.1.95", source = "pypi" }
 pyknp = { version = "^0.4.6", source = "pypi" }
@@ -64,7 +65,7 @@ torch-geometric = [
     { version = "^2.2.0", source = "pypi", extras = ["cuda120"], optional = true }
 ]
 # allennlp = { version = "^2.10.1", source = "pypi", extras = ["cuda120"], optional = true }
-rdflib = "^6.2.0"
+
 
 [tool.poetry.group.jupyter]
 optional = true

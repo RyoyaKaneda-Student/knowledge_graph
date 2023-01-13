@@ -14,6 +14,7 @@ import pandas as pd
 import optuna
 # torch
 import torch
+from torch.nn import CrossEntropyLoss
 from torch.utils.data import Dataset
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
@@ -26,10 +27,13 @@ from ignite.metrics import Average, Accuracy
 from models.KGModel.kg_story_transformer import (
     KgStoryTransformer01, KgStoryTransformer02, add_bos, KgStoryTransformer03, KgStoryTransformer03preInit,
     KgStoryTransformer00, KgStoryTransformer, HEAD_MASKED_LM, TAIL_MASKED_LM, RELATION_MASKED_LM, )
-from models.datasets.data_helper import(
+from models.datasets.data_helper import (
     MyDataHelper, DefaultTokens, DefaultIds, SpecialTokens01 as SpecialTokens, MyDataLoaderHelper, )
 from models.datasets.datasets import (StoryTriple, StoryTripleForValid,)
 # My utils
+from models.utilLoss.focal_loss import FocalLoss, GAMMA
+from models.utilLoss.utils import LossFnName
+from utils.error import UnderDevelopmentError
 from utils.torch import save_model, torch_fix_seed, DeviceName, force_cpu_decorator
 from utils.typing import ConstMeta
 from utils.utils import version_check, elapsed_time_str
@@ -133,9 +137,6 @@ class ModelVersion(metaclass=ConstMeta):
     @classmethod
     def ALL_LIST(cls) -> tuple:
         return cls.V01, cls.V02, cls.V03, cls.V03a
-
-
-SEED: Final = 42
 
 
 def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
@@ -257,11 +258,17 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
     paa6('--lr-story', type=float, help='learning rate (default: same as --lr)')
     paa6('--lr-relation', type=float, help='learning rate (default: same as --lr)')
     paa6('--lr-entity', type=float, help='learning rate (default: same as --lr)')
-    paa6('--valid-interval', type=int, default=1, help='valid-interval', )
+    paa6('--loss-function', type=str, choices=LossFnName.ALL_LIST(), help='loss function (default: CrossEntropyLoss)')
     paa6('--loss-weight-story', type=float, default=1., help='loss-weight-story')
     paa6('--loss-weight-relation', type=float, default=1., help='loss-weight-relation')
     paa6('--loss-weight-entity', type=float, default=1., help='loss-weight-entity')
     paa6('--epoch', help='max epoch', type=int, default=2)
+    paa6('--valid-interval', type=int, default=1, help='valid-interval', )
+    # if focal loss, this is need.
+    parser_group061 = parser.add_argument_group('focal loss setting',
+                                                'There are the setting of focal loss.')
+    paa61 = parser_group061.add_argument
+    paa61('--gamma', type=float, help='gamma')
 
     args = parser.parse_args(args=args)
     return args
@@ -283,7 +290,9 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         dict: keys=(MODEL, TRAINER, EVALUATOR, (CHECKPOINTER_GOOD_LOSS, CHECKPOINTER_LAST))
 
     """
-    lr, lr_story, lr_relation, lr_entity, loss_weight_story, loss_weight_relation, loss_weight_entity = hyper_params
+    (lr, lr_story, lr_relation, lr_entity,
+     loss_fn_name, loss_weight_story, loss_weight_relation, loss_weight_entity, other_params) = hyper_params
+    do_weight_loss = False
     device: torch.device = args.device
     max_len = args.max_len
     max_epoch = args.epoch
@@ -291,25 +300,10 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
     checkpoint_dir = args.checkpoint_dir
     non_blocking = True
 
-    model.to(device)
+    # optional function
+    def cpu_deep_copy_or_none(_tensor: Optional[torch.Tensor]):
+        return _tensor.to(CPU, non_blocking=non_blocking).detach().clone() if _tensor is not None else None
 
-    entity_num, relation_num = len(data_helper.processed_entities), len(data_helper.processed_relations)
-    train = data_loaders.train_dataloader
-    valid = data_loaders.valid_dataloader if args.train_valid_test else None
-    train_triple = train.dataset.triple
-    # optimizer setting
-    modules = {_name: _module for _name, _module in model.named_children()}
-    del modules[HEAD_MASKED_LM], modules[RELATION_MASKED_LM], modules[TAIL_MASKED_LM]
-    opt = torch.optim.Adam([
-                     {PARAMS: _module.parameters(), LR: lr} for _name, _module in modules.items()
-                 ] + [
-                     {PARAMS: model.head_maskdlm.parameters(), LR: lr_story},
-                     {PARAMS: model.relation_maskdlm.parameters(), LR: lr_relation},
-                     {PARAMS: model.tail_maskdlm.parameters(), LR: lr_entity},
-                 ])
-    # loss function setting
-    loss_fn_entity = torch.nn.CrossEntropyLoss(weight=torch.ones(entity_num).to(device))
-    loss_fn_relation = torch.nn.CrossEntropyLoss(weight=torch.ones(relation_num).to(device))
     # mask percents
     mask_percent = args.mask_percent
     mask_mask_percent = mask_percent * args.mask_mask_percent
@@ -319,14 +313,6 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
     if not mask_mask_percent + mask_nomask_percent + mask_random_percent + (1 - mask_percent) == 1.:
         raise ValueError(
             "mask_mask_percent + mask_nomask_percent + mask_random_percent + (1 - mask_percent) must be 1.0")
-
-    index2count_head = torch.bincount(train_triple[:, 0], minlength=entity_num).to(torch.float).to(device)
-    index2count_relation = torch.bincount(train_triple[:, 1], minlength=relation_num).to(torch.float).to(device)
-    index2count_tail = torch.bincount(train_triple[:, 2], minlength=entity_num).to(torch.float).to(device)
-
-    # optional function
-    def cpu_deep_copy_or_none(_tensor: Optional[torch.Tensor]):
-        return _tensor.to(CPU, non_blocking=non_blocking).detach().clone() if _tensor is not None else None
 
     # optional function
     # noinspection PyTypeChecker
@@ -342,6 +328,40 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
             weights, torch.count_nonzero(_mask_random_filter).item(), replacement=True)
         _mask_value[_mask_mask_filter] = _mask_token
         return _mask_filter, _mask_ans, _mask_value
+
+    entity_num, relation_num = len(data_helper.processed_entities), len(data_helper.processed_relations)
+    train = data_loaders.train_dataloader
+    valid = data_loaders.valid_dataloader if args.train_valid_test else None
+    train_triple = train.dataset.triple
+    index2count_head = torch.bincount(train_triple[:, 0], minlength=entity_num).to(torch.float).to(device)
+    index2count_relation = torch.bincount(train_triple[:, 1], minlength=relation_num).to(torch.float).to(device)
+    index2count_tail = torch.bincount(train_triple[:, 2], minlength=entity_num).to(torch.float).to(device)
+    # optimizer setting
+    modules = {_name: _module for _name, _module in model.named_children()}
+    del modules[HEAD_MASKED_LM], modules[RELATION_MASKED_LM], modules[TAIL_MASKED_LM]
+    opt = torch.optim.Adam([
+                     {PARAMS: _module.parameters(), LR: lr} for _name, _module in modules.items()
+                 ] + [
+                     {PARAMS: model.head_maskdlm.parameters(), LR: lr_story},
+                     {PARAMS: model.relation_maskdlm.parameters(), LR: lr_relation},
+                     {PARAMS: model.tail_maskdlm.parameters(), LR: lr_entity},
+                 ])
+    # loss function setting
+    gamma = other_params[GAMMA]
+    if do_weight_loss:
+        loss_fn_entity = None
+        loss_fn_relation = None
+        raise UnderDevelopmentError("todo")
+    else:
+        if loss_fn_name not in LossFnName.ALL_LIST():
+            raise ValueError(f"The loss name {loss_fn_name} is not defined.")
+        elif loss_fn_name == LossFnName.CROSS_ENTROPY_LOSS:
+            loss_fn_entity = CrossEntropyLoss(weight=torch.ones(entity_num).to(device))
+            loss_fn_relation = CrossEntropyLoss(weight=torch.ones(relation_num).to(device))
+        elif loss_fn_name == LossFnName.FOCAL_LOSS:
+            if gamma is None: raise ValueError("gamma must not None")
+            loss_fn_entity = FocalLoss(weight=torch.ones(entity_num).to(device), gamma=gamma)
+            loss_fn_relation = FocalLoss(weight=torch.ones(relation_num).to(device), gamma=gamma)
 
     # main train step
     def train_step(_, batch) -> dict:
@@ -447,6 +467,7 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         }
         return return_dict
 
+    model.to(device)
     trainer, evaluator = Engine(train_step), Engine(valid_step)
     [ProgressBar().attach(_e) for _e in (trainer, evaluator)]
 
@@ -840,14 +861,17 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
     # default mode
     if args.pre_train:
         # setting hyper parameter
-        hyper_param = (args.lr, args.lr_story or args.lr, args.lr_relation or args.lr, args.lr_entity or args.lr,
-                       args.loss_weight_story, args.loss_weight_relation, args.loss_weight_story)
+        hyper_params = (
+            args.lr, args.lr_story or args.lr, args.lr_relation or args.lr, args.lr_entity or args.lr,
+            args.loss_function, args.loss_weight_story, args.loss_weight_relation, args.loss_weight_story,
+            {GAMMA: args.gamma}
+        )
         # setting path
         model_path = args.model_path
         if model_path is None: raise ValueError("model path must not None")
         # training.
         train_returns = pre_training(
-            args, hyper_param, data_helper, data_loaders, model, summary_writer=summary_writer, logger=logger)
+            args, hyper_params, data_helper, data_loaders, model, summary_writer=summary_writer, logger=logger)
         # check the output of the training.
         good_checkpoint, last_checkpoint = map(train_returns.get, (CHECKPOINTER_GOOD_LOSS, CHECKPOINTER_LAST))
         checkpoint_ = last_checkpoint.last_checkpoint if args.only_train else good_checkpoint.last_checkpoint
@@ -860,9 +884,9 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
         logger.info(f"save model path: {args.model_path}")
     # if checking the trained items, use this mode.
     elif args.only_load_trainer_evaluator:
-        hyper_param = (0., 0., 0., 0., 1., 1., 1.)
+        hyper_params = (0., 0., 0., 0., LossFnName.CROSS_ENTROPY_LOSS, 1., 1., 1.)
         train_returns = pre_training(
-            args, hyper_param, data_helper, data_loaders, model, summary_writer=summary_writer, logger=logger)
+            args, hyper_params, data_helper, data_loaders, model, summary_writer=summary_writer, logger=logger)
 
     return train_returns
 
@@ -892,6 +916,9 @@ def main_function(args: Namespace, *, logger: Logger):
     # return some value
     return {MODEL: model, DATA_HELPER: data_helper, DATASETS: datasets,
             DATA_LOADERS: data_loaders, TRAIN_RETURNS: train_returns}
+
+
+SEED: Final = 42
 
 
 def main(args=None):
