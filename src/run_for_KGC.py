@@ -1,19 +1,17 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 from argparse import Namespace
-# noinspection PyUnresolvedReferences
-from collections import namedtuple
 # ========== python ==========
 from itertools import chain
 from logging import Logger
 from pathlib import Path
 # noinspection PyUnresolvedReferences
-from typing import List, Dict, Tuple, Optional, Union, Callable, Final, Literal, get_args, cast
+from typing import List, Dict, Tuple, Optional, Union, Callable, Final, Literal, get_args, cast, Sequence, TypedDict
 # Machine learning
 import h5py
 import numpy as np
-import optuna
 import pandas as pd
+import optuna
 # torch
 import torch
 from torch.utils.data import Dataset
@@ -27,12 +25,10 @@ from ignite.metrics import Average, Accuracy
 # My Models
 from models.KGModel.kg_story_transformer import (
     KgStoryTransformer01, KgStoryTransformer02, add_bos, KgStoryTransformer03, KgStoryTransformer03preInit,
-    KgStoryTransformer00, KgStoryTransformer)
-from models.datasets.data_helper import MyDataHelper, DefaultTokens, DefaultIds, SpecialTokens01 as SpecialTokens, \
-    MyDataLoaderHelper
-from models.datasets.datasets import (
-    StoryTriple, StoryTripleForValid,
-)
+    KgStoryTransformer00, KgStoryTransformer, HEAD_MASKED_LM, TAIL_MASKED_LM, RELATION_MASKED_LM, )
+from models.datasets.data_helper import(
+    MyDataHelper, DefaultTokens, DefaultIds, SpecialTokens01 as SpecialTokens, MyDataLoaderHelper, )
+from models.datasets.datasets import (StoryTriple, StoryTripleForValid,)
 # My utils
 from utils.torch import save_model, torch_fix_seed, DeviceName, force_cpu_decorator
 from utils.typing import ConstMeta
@@ -59,38 +55,32 @@ CHECKPOINTER_GOOD_LOSS: Final[str] = 'checkpointer_good_loss'
 CHECKPOINTER_LAST: Final[str] = 'checkpointer_last'
 DATA_HELPER: Final[str] = 'data_helper'
 DATA_LOADERS: Final[str] = 'data_loaders'
-
-ALL_TAIL: Final[str] = 'all_tail'
-TRIPLE: Final[str] = 'triple'
 DATASETS: Final[str] = 'datasets'
-TRAIN_ITEMS: Final[str] = 'train_items'
-
-STORY_RELATION_ENTITY: Final[tuple[str, str, str]] = ('story', 'relation', 'entity')
-
+TRAIN_RETURNS: Final[str] = 'train_returns'
+# about loss tags
 LOSS: Final[str] = 'loss'
 STORY_LOSS: Final[str] = 'story_loss'
 RELATION_LOSS: Final[str] = 'relation_loss'
 OBJECT_LOSS: Final[str] = 'entity_loss'
 LOSS_NAME3: Final[tuple[str, str, str]] = (STORY_LOSS, RELATION_LOSS, OBJECT_LOSS)
-
+# about pred tags
 STORY_PRED: Final[str] = 'story_pred'
 RELATION_PRED: Final[str] = 'relation_pred'
 ENTITY_PRED: Final[str] = 'entity_pred'
 PRED_NAME3: Final[tuple[str, str, str]] = (STORY_PRED, RELATION_PRED, ENTITY_PRED)
-
+# about answer tags
 STORY_ANS: Final[str] = 'story_ans'
 RELATION_ANS: Final[str] = 'relation_ans'
 OBJECT_ANS: Final[str] = 'object_ans'
 ANS_NAME3: Final[tuple[str, str, str]] = (STORY_ANS, RELATION_ANS, OBJECT_ANS)
-
+# about accuracy tags
 STORY_ACCURACY: Final[str] = 'story_accuracy'
 RELATION_ACCURACY: Final[str] = 'relation_accuracy'
 ENTITY_ACCURACY: Final[str] = 'entity_accuracy'
 ACCURACY_NAME3: Final[tuple[str, str, str]] = (STORY_ACCURACY, RELATION_ACCURACY, ENTITY_ACCURACY)
-
+# about metric tags
 METRIC_NAMES: Final[tuple[str, str, str, str, str, str, str]] = (
     LOSS, STORY_LOSS, RELATION_LOSS, OBJECT_LOSS, STORY_ACCURACY, RELATION_ACCURACY, ENTITY_ACCURACY)
-
 # about all title
 ACaseOfIdentity: Final[str] = 'ACaseOfIdentity'
 AbbeyGrange: Final[str] = 'AbbeyGrange'
@@ -100,19 +90,16 @@ DevilsFoot: Final[str] = 'DevilsFoot'
 ResidentPatient: Final[str] = 'ResidentPatient'
 SilverBlaze: Final[str] = 'SilverBlaze'
 SpeckledBand: Final[str] = 'SpeckledBand'
-
 ALL_TITLE_LIST: Final = (
     ACaseOfIdentity, AbbeyGrange, CrookedMan, DancingMen, DevilsFoot, ResidentPatient, SilverBlaze, SpeckledBand
 )
-
+# about wards
 ABOUT_KILL_WORDS: Final[tuple[str, str, str]] = (
     'word.predicate:kill', 'word.predicate:notKill', 'word.predicate:beKilled')
-
+# about file and folder path
 SRO_FOLDER: Final[str] = "data/processed/KGCdata/All/SRO"
-
 SRO_ALL_INFO_FILE: Final[str] = f"{SRO_FOLDER}/info.hdf5"
 SRO_ALL_TRAIN_FILE: Final[str] = f"{SRO_FOLDER}/train.hdf5"
-
 TITLE2FILE090: Final[dict[str, str]] = {
     ACaseOfIdentity: f"{SRO_FOLDER}/train_AbbeyGrange_l090.hdf5",
     AbbeyGrange: f"{SRO_FOLDER}/train_ACaseOfIdentity_l090.hdf5",
@@ -123,7 +110,6 @@ TITLE2FILE090: Final[dict[str, str]] = {
     SilverBlaze: f"{SRO_FOLDER}/train_SilverBlaze_l090.hdf5",
     SpeckledBand: f"{SRO_FOLDER}/train_SpeckledBand_l090.hdf5",
 }
-
 TITLE2FILE075: Final[dict[str, str]] = {
     'AbbeyGrange': f"{SRO_FOLDER}/train_AbbeyGrange_l075.hdf5",
     'ACaseOfIdentity': f"{SRO_FOLDER}/train_ACaseOfIdentity_l075.hdf5",
@@ -134,7 +120,6 @@ TITLE2FILE075: Final[dict[str, str]] = {
     'SilverBlaze': f"{SRO_FOLDER}/train_SilverBlaze_l075.hdf5",
     'SpeckledBand': f"{SRO_FOLDER}/train_SpeckledBand_l075.hdf5"
 }
-
 MOST_GOOD_CHECKPOINT_PATH: Final[str] = '{}/most_good/'
 LATEST_CHECKPOINT_PATH: Final[str] = '{}/most_good/'
 
@@ -153,12 +138,13 @@ class ModelVersion(metaclass=ConstMeta):
 SEED: Final = 42
 
 
-def setup_parser(args: Namespace = None) -> Namespace:
+def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
     """
     Args:
-        args:
+        args(Optional[Sequence[str]]): args list or None
 
     Returns:
+        Namespace: your args.
 
     """
     import argparse  # 1. argparseをインポート
@@ -281,82 +267,83 @@ def setup_parser(args: Namespace = None) -> Namespace:
     return args
 
 
-def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model, *, logger: Logger,
-                 summary_writer: SummaryWriter):
+def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger, summary_writer) -> dict:
     """
 
     Args:
-        args(Namespace):
-        hyper_params(tuple):
-        data_helper(MyDataHelper):
-        data_loaders(MyDataLoaderHelper):
-        model(KgStoryTransformer01):
-        summary_writer(SummaryWriter):
-        logger(Logger):
+        args(Namespace): args.
+        hyper_params(tuple): hyper parameters.
+        data_helper(MyDataHelper): MyDataHelper instance.
+        data_loaders(MyDataLoaderHelper): MyDataLoaderHelper instance. It has .train_dataloader and .valid_dataloader.
+        model(KgStoryTransformer01): model.
+        summary_writer(SummaryWriter): tensorboard's SummaryWriter instance. if it is None, don't write to tensorboard.
+        logger(Logger): logging.Logger.
 
     Returns:
+        dict: keys=(MODEL, TRAINER, EVALUATOR, (CHECKPOINTER_GOOD_LOSS, CHECKPOINTER_LAST))
 
     """
     lr, lr_story, lr_relation, lr_entity, loss_weight_story, loss_weight_relation, loss_weight_entity = hyper_params
     device: torch.device = args.device
-    non_blocking = True
-    model.to(device)
     max_len = args.max_len
-
-    entity_num, relation_num = len(data_helper.processed_entities), len(data_helper.processed_relations)
     max_epoch = args.epoch
     mask_token_e, mask_token_r = args.mask_token_e, args.mask_token_r
-    logger.debug(f"{entity_num=}, {relation_num=}")
+    checkpoint_dir = args.checkpoint_dir
+    non_blocking = True
+
+    model.to(device)
+
+    entity_num, relation_num = len(data_helper.processed_entities), len(data_helper.processed_relations)
+    train = data_loaders.train_dataloader
+    valid = data_loaders.valid_dataloader if args.train_valid_test else None
+    train_triple = train.dataset.triple
+    # optimizer setting
     modules = {_name: _module for _name, _module in model.named_children()}
-    logger.debug("model modules: " + ', '.join(list(modules.keys())))
-    del modules['head_maskdlm'], modules['relation_maskdlm'], modules['tail_maskdlm']
-    optim_list = [
+    del modules[HEAD_MASKED_LM], modules[RELATION_MASKED_LM], modules[TAIL_MASKED_LM]
+    opt = torch.optim.Adam([
                      {PARAMS: _module.parameters(), LR: lr} for _name, _module in modules.items()
                  ] + [
                      {PARAMS: model.head_maskdlm.parameters(), LR: lr_story},
                      {PARAMS: model.relation_maskdlm.parameters(), LR: lr_relation},
                      {PARAMS: model.tail_maskdlm.parameters(), LR: lr_entity},
-                 ]
-
-    opt = torch.optim.Adam(optim_list)
+                 ])
+    # loss function setting
     loss_fn_entity = torch.nn.CrossEntropyLoss(weight=torch.ones(entity_num).to(device))
     loss_fn_relation = torch.nn.CrossEntropyLoss(weight=torch.ones(relation_num).to(device))
-    checkpoint_dir = args.checkpoint_dir
-    # checkpoint_dir = CHECKPOINT_DIR.format(line_up_key_value(pid=args.pid, uid=uid))
-    train = data_loaders.train_dataloader
-    valid = data_loaders.valid_dataloader if args.train_valid_test else None
-    train_triple = train.dataset.triple
     # mask percents
     mask_percent = args.mask_percent
     mask_mask_percent = mask_percent * args.mask_mask_percent
     mask_nomask_percent = mask_percent * args.mask_nomask_percent
     mask_random_percent = mask_percent * args.mask_random_percent
     logger.debug(f"{mask_percent=}, {mask_mask_percent=}, {mask_nomask_percent=}, {mask_random_percent=}")
-    assert mask_mask_percent + mask_nomask_percent + mask_random_percent + (1 - mask_percent) == 1.
+    if not mask_mask_percent + mask_nomask_percent + mask_random_percent + (1 - mask_percent) == 1.:
+        raise ValueError(
+            "mask_mask_percent + mask_nomask_percent + mask_random_percent + (1 - mask_percent) must be 1.0")
 
     index2count_head = torch.bincount(train_triple[:, 0], minlength=entity_num).to(torch.float).to(device)
     index2count_relation = torch.bincount(train_triple[:, 1], minlength=relation_num).to(torch.float).to(device)
     index2count_tail = torch.bincount(train_triple[:, 2], minlength=entity_num).to(torch.float).to(device)
 
-    # torch.from_numpy(data_helper.processed_id2count_entity).to(device, non_blocking=non_blocking)
-    # torch.from_numpy(data_helper.processed_id2count_relation).to(device, non_blocking=non_blocking)
-
+    # optional function
     def cpu_deep_copy_or_none(_tensor: Optional[torch.Tensor]):
         return _tensor.to(CPU, non_blocking=non_blocking).detach().clone() if _tensor is not None else None
 
+    # optional function
+    # noinspection PyTypeChecker
     def mask_function(_random_all, _value, _mask_token, weights) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         _mask_filter = torch.lt(_random_all, mask_percent)
         _mask_ans = _value[_mask_filter].detach().clone()
         _mask_value = _value[_mask_filter]
 
         _random = _random_all[_mask_filter]
-        _mask_random_filter = torch.lt(_random, mask_random_percent)  # <
-        _mask_mask_filter = torch.ge(_random, (mask_nomask_percent + mask_random_percent))  # >=
+        _mask_random_filter = _random < mask_random_percent
+        _mask_mask_filter = _random >= (mask_nomask_percent + mask_random_percent)
         _mask_value[_mask_random_filter] = torch.multinomial(
             weights, torch.count_nonzero(_mask_random_filter).item(), replacement=True)
         _mask_value[_mask_mask_filter] = _mask_token
         return _mask_filter, _mask_ans, _mask_value
 
+    # main train step
     def train_step(_, batch) -> dict:
         model.train()
         triple = batch
@@ -559,9 +546,11 @@ def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model
             epoch, engine.state.iteration, elapsed_time_str(total_timer.value())))
         logger.debug(f"loss={output[LOSS].item()}")
 
+    # Interrupt
     if args.only_load_trainer_evaluator:
         logger.info("load trainer and evaluator. then end")
-        return model, {TRAINER: trainer, EVALUATOR: evaluator}
+        return {MODEL: model, TRAINER: trainer, EVALUATOR: evaluator,
+                CHECKPOINTER_GOOD_LOSS: None, CHECKPOINTER_LAST: None}
 
     # about checkpoint
     to_save = {MODEL: model, OPTIMIZER: opt, TRAINER: trainer}
@@ -612,8 +601,8 @@ def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model
     if max_epoch > trainer.state.epoch:
         valid_func(trainer)  # first valid
         trainer.run(train, max_epochs=max_epoch)
-    return model, {TRAINER: trainer, EVALUATOR: evaluator,
-                   CHECKPOINTER_GOOD_LOSS: good_checkpoint, CHECKPOINTER_LAST: last_checkpoint}
+    return {MODEL: model, TRAINER: trainer, EVALUATOR: evaluator,
+            CHECKPOINTER_GOOD_LOSS: good_checkpoint, CHECKPOINTER_LAST: last_checkpoint}
 
 
 def get_all_tokens(args: Namespace):
@@ -818,7 +807,6 @@ def make_get_model(args: Namespace, *, data_helper: MyDataHelper, logger: Logger
 
 
 def make_get_dataloader(args: Namespace, *, datasets: tuple[Dataset, Dataset, Dataset], logger: Logger):
-
     batch_size = args.batch_size
     dataset_train, dataset_valid, dataset_test = datasets
     dataloader_train = DataLoader(
@@ -843,11 +831,11 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
         logger(Logger):
 
     Returns:
-
+        dict: Keys=(MODEL, TRAINER, EVALUATOR, CHECKPOINTER_LAST, CHECKPOINTER_GOOD_LOSS)
     """
     # Now we are ready to start except for the hyper parameters.
     summary_writer = SummaryWriter(log_dir=args.tensorboard_dir) if args.tensorboard_dir is not None else None
-    train_items = {TRAINER: None, EVALUATOR: None, CHECKPOINTER_LAST: None, CHECKPOINTER_GOOD_LOSS: None}
+    train_returns = {MODEL: None, TRAINER: None, EVALUATOR: None, CHECKPOINTER_LAST: None, CHECKPOINTER_GOOD_LOSS: None}
 
     # default mode
     if args.pre_train:
@@ -856,31 +844,27 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
                        args.loss_weight_story, args.loss_weight_relation, args.loss_weight_story)
         # setting path
         model_path = args.model_path
-        if model_path is None:
-            raise ValueError("model path must not None")
+        if model_path is None: raise ValueError("model path must not None")
         # training.
-        model, info_dict = pre_training(
+        train_returns = pre_training(
             args, hyper_param, data_helper, data_loaders, model, summary_writer=summary_writer, logger=logger)
         # check the output of the training.
-        good_checkpoint: Checkpoint = info_dict[CHECKPOINTER_GOOD_LOSS]
-        last_checkpoint: Checkpoint = info_dict[CHECKPOINTER_LAST]
-        logger.info(f"good model path: {good_checkpoint.last_checkpoint}")
-        logger.info(f"last model path: {last_checkpoint.last_checkpoint}")
+        good_checkpoint, last_checkpoint = map(train_returns.get, (CHECKPOINTER_GOOD_LOSS, CHECKPOINTER_LAST))
         checkpoint_ = last_checkpoint.last_checkpoint if args.only_train else good_checkpoint.last_checkpoint
         Checkpoint.load_objects(to_load={MODEL: model}, checkpoint=checkpoint_)
         # re-save as cpu model
         save_model(model, args.model_path, device=args.device)
+        logger.info(f"good model path: {good_checkpoint.last_checkpoint}")
+        logger.info(f"last model path: {last_checkpoint.last_checkpoint}")
+        logger.info(f"load checkpoint path: {checkpoint_}")
         logger.info(f"save model path: {args.model_path}")
-        # update training item for check the output.
-        train_items.update(info_dict)
     # if checking the trained items, use this mode.
     elif args.only_load_trainer_evaluator:
         hyper_param = (0., 0., 0., 0., 1., 1., 1.)
-        model, info_dict = pre_training(
-            args, hyper_param, data_helper, data_loaders, model, summary_writer=summary_writer, logger=logger, )
-        train_items.update(info_dict)
+        train_returns = pre_training(
+            args, hyper_param, data_helper, data_loaders, model, summary_writer=summary_writer, logger=logger)
 
-    return train_items
+    return train_returns
 
 
 def main_function(args: Namespace, *, logger: Logger):
@@ -902,13 +886,12 @@ def main_function(args: Namespace, *, logger: Logger):
     logger.info('----- make model complete. -----')
     # train test ect
     logger.info('----- do train start -----')
-    train_items = do_train_test_ect(
+    train_returns = do_train_test_ect(
         args, data_helper=data_helper, data_loaders=data_loaders, model=model, logger=logger)
     logger.info('----- do train complete -----')
     # return some value
-    return {
-        MODEL: model, DATA_HELPER: data_helper, DATASETS: datasets, DATA_LOADERS: data_loaders, TRAIN_ITEMS: train_items
-    }
+    return {MODEL: model, DATA_HELPER: data_helper, DATASETS: datasets,
+            DATA_LOADERS: data_loaders, TRAIN_RETURNS: train_returns}
 
 
 def main(args=None):

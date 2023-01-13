@@ -43,6 +43,10 @@ KGDATA2FOLDER_PATH = {
     'KGC-ALL-SVO': os.path.join(PROCESSED_DATA_PATH, KGCDATA, 'All', 'SVO'),
 }
 
+ENTITY: Final = 'entity'
+RELATION: Final = 'relation'
+TAIL: Final = 'tail'
+
 
 class INFO_INDEX(metaclass=ConstMeta):
     TRIPLE: Final = 'triple'
