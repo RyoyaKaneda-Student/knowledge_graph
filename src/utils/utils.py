@@ -1,4 +1,17 @@
+#!/usr/bin/python
+# coding: UTF-8
+"""Utils of Utils
+
+* This file is used to store various useful functions.
+* utils/utils, so there are various functions and classes.
+
+Todo:
+    * Improving.
+    * Cleaning.
+    * Erase what you don't need.
+"""
 import gc
+from pathlib import Path
 import random
 # noinspection PyUnresolvedReferences
 from typing import Tuple, List, Any, TypeVar, Generic, Iterable, Callable
@@ -16,6 +29,18 @@ def tqdm2notebook_tqdm():
     global tqdm
     from tqdm.notebook import tqdm as tqdm_notebook
     tqdm = tqdm_notebook
+
+
+def get_pure_path(_path):
+    """
+
+    Args:
+        _path:
+
+    Returns:
+
+    """
+    return Path(_path).resolve().as_posix()
 
 
 class FakeLogger(Logger):

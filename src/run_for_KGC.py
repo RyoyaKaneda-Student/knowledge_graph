@@ -1,5 +1,13 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+"""run script for Knowledge Graph Challenge
+
+* This script is the script about Knowledge Graph Challenge.
+* Define data, define model, define parameters, and run train.
+Todo:
+    * 色々
+
+"""
 from argparse import Namespace
 # ========== python ==========
 from itertools import chain
@@ -18,18 +26,19 @@ from torch.nn import CrossEntropyLoss
 from torch.utils.data import Dataset
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
+# torch ignite
 from ignite.contrib.handlers.tqdm_logger import ProgressBar
 from ignite.engine import Engine, Events
 from ignite.handlers import Timer, Checkpoint, global_step_from_engine, DiskSaver
 from ignite.metrics import Average, Accuracy
-
 # My Models
 from models.KGModel.kg_story_transformer import (
     KgStoryTransformer01, KgStoryTransformer02, add_bos, KgStoryTransformer03, KgStoryTransformer03preInit,
     KgStoryTransformer00, KgStoryTransformer, HEAD_MASKED_LM, TAIL_MASKED_LM, RELATION_MASKED_LM, )
 from models.datasets.data_helper import (
     MyDataHelper, DefaultTokens, DefaultIds, SpecialTokens01 as SpecialTokens, MyDataLoaderHelper, )
-from models.datasets.datasets import (StoryTriple, StoryTripleForValid,)
+from models.datasets.datasets import (
+    StoryTriple, StoryTripleForValid, )
 # My utils
 from models.utilLoss.focal_loss import FocalLoss, GAMMA
 from models.utilLoss.utils import LossFnName
@@ -129,6 +138,10 @@ LATEST_CHECKPOINT_PATH: Final[str] = '{}/most_good/'
 
 
 class ModelVersion(metaclass=ConstMeta):
+    """Model Versions
+
+    * This is only const value class.
+    """
     V01: Final = '01'
     V02: Final = '02'
     V03: Final = '03'
@@ -136,16 +149,22 @@ class ModelVersion(metaclass=ConstMeta):
 
     @classmethod
     def ALL_LIST(cls) -> tuple:
+        """all list of this const values.
+        Returns:
+            tuple[str]: (01, 02, 03, 03a)
+        """
         return cls.V01, cls.V02, cls.V03, cls.V03a
 
 
 def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
-    """
+    """make parser function
+
+    * My first-setup function needs the function which make and return parser.
     Args:
-        args(Optional[Sequence[str]]): args list or None
+        args(:obj:`Sequence[str]`, optional): args list or None. Default to None.
 
     Returns:
-        Namespace: your args.
+        Namespace: your args instance.
 
     """
     import argparse  # 1. argparseをインポート
@@ -275,7 +294,9 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
 
 
 def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger, summary_writer) -> dict:
-    """
+    """pre training function.
+
+    * main part of my train.
 
     Args:
         args(Namespace): args.
@@ -301,7 +322,16 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
     non_blocking = True
 
     # optional function
-    def cpu_deep_copy_or_none(_tensor: Optional[torch.Tensor]):
+    def cpu_deep_copy_or_none(_tensor: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
+        """return deep copied tensor or None.
+        deep clone to cpu from gpu. However, if _tensor is None, return None.
+        Args:
+            _tensor(Optional[torch.Tensor]): Tensor or None item.
+
+        Returns:
+            Optional[torch.Tensor]: If input is None, return None. else return clone tensor(device=cpu)
+
+        """
         return _tensor.to(CPU, non_blocking=non_blocking).detach().clone() if _tensor is not None else None
 
     # mask percents
@@ -317,7 +347,18 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
     # optional function
     # noinspection PyTypeChecker
     def mask_function(_random_all, _value, _mask_token, weights) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        _mask_filter = torch.lt(_random_all, mask_percent)
+        """ Mask by mask_token
+
+        Args:
+            _random_all(torch.Tensor): random values. All parameters are within 0.0 ~ 1.0.
+            _value(torch.Tensor): Correct value.
+            _mask_token(int): mask token
+            weights(torch.Tensor): the weight of random values frequency.
+
+        Returns:
+            tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+        """
+        _mask_filter = _random_all < mask_percent
         _mask_ans = _value[_mask_filter].detach().clone()
         _mask_value = _value[_mask_filter]
 
@@ -340,12 +381,12 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
     modules = {_name: _module for _name, _module in model.named_children()}
     del modules[HEAD_MASKED_LM], modules[RELATION_MASKED_LM], modules[TAIL_MASKED_LM]
     opt = torch.optim.Adam([
-                     {PARAMS: _module.parameters(), LR: lr} for _name, _module in modules.items()
-                 ] + [
-                     {PARAMS: model.head_maskdlm.parameters(), LR: lr_story},
-                     {PARAMS: model.relation_maskdlm.parameters(), LR: lr_relation},
-                     {PARAMS: model.tail_maskdlm.parameters(), LR: lr_entity},
-                 ])
+                               {PARAMS: _module.parameters(), LR: lr} for _name, _module in modules.items()
+                           ] + [
+                               {PARAMS: model.head_maskdlm.parameters(), LR: lr_story},
+                               {PARAMS: model.relation_maskdlm.parameters(), LR: lr_relation},
+                               {PARAMS: model.tail_maskdlm.parameters(), LR: lr_entity},
+                           ])
     # loss function setting
     gamma = other_params[GAMMA]
     if do_weight_loss:
@@ -364,7 +405,12 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
             loss_fn_relation = FocalLoss(weight=torch.ones(relation_num).to(device), gamma=gamma)
 
     # main train step
+    # noinspection PyTypeChecker
     def train_step(_, batch) -> dict:
+        """train step
+
+        * changing study parameter by this function.
+        """
         model.train()
         triple = batch
         batch_size = triple.shape[0]
@@ -419,6 +465,10 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
 
     @torch.no_grad()
     def valid_step(_, batch) -> dict:
+        """valid step
+
+        * valid model by valid data.
+        """
         model.eval()
         triple: torch.Tensor = batch[0].to(device, non_blocking=non_blocking)
         valid_filter: torch.Tensor = batch[1].to(device, non_blocking=non_blocking)
@@ -505,12 +555,20 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
 
     @trainer.on(Events.EPOCH_STARTED)
     def start_epoch_func(engine: Engine):
+        """start epoch function
+
+        * start epoch function. Move at the beginning of each epoch.
+        """
         epoch = engine.state.epoch
         logger.debug("----- epoch: {:>5} start -----".format(epoch))
         train.dataset.shuffle_per_1scene()
 
     @trainer.on(Events.EPOCH_COMPLETED)
     def end_epoch_func(engine: Engine):
+        """end epoch function
+
+        * end epoch function. Move at the ending of each epoch.
+        """
         epoch = engine.state.epoch
         metrics = engine.state.metrics
         for _name in METRIC_NAMES:
@@ -526,6 +584,10 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
 
     @trainer.on(Events.EPOCH_COMPLETED(every=args.valid_interval))
     def valid_func(engine: Engine):
+        """valid function.
+
+        * Moves at the end of the epoch per Valid_interval
+        """
         epoch = engine.state.epoch
         if args.train_valid_test:
             logger.info(f"----- valid start ({epoch=}) -----")
@@ -542,17 +604,29 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
 
     @trainer.on(Events.STARTED)
     def start_train(engine: Engine):
+        """start train
+
+        * move only ones (when train started)
+        """
         total_timer.reset()
         logger.info("pre training start. epoch length = {}".format(engine.state.max_epochs))
 
     @trainer.on(Events.COMPLETED)
     def complete_train(engine: Engine):
+        """start train
+
+        * move only ones (when train completed)
+        """
         epoch = engine.state.epoch
         time_str = elapsed_time_str(total_timer.value())
         logger.info("pre training complete. finish epoch: {:>5}, time: {:>7}".format(epoch, time_str))
 
     @trainer.on(Events.EPOCH_COMPLETED)
     def print_time_per_epoch(engine: Engine):
+        """print time per epoch function
+
+        * end epoch function. Move at the ending of each epoch.
+        """
         epoch = engine.state.epoch
         logger.info(
             "----- epoch: {:>5} complete. time: {:>8.2f}. total time: {:>7} -----".format(
@@ -561,6 +635,10 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
 
     @trainer.on(Events.ITERATION_COMPLETED(every=100))
     def print_info_per_some_iter(engine: Engine):
+        """print info per some iter function
+
+        * Move at the ending of some iter.
+        """
         output = engine.state.output
         epoch = engine.state.epoch
         logger.debug("----- epoch: {:>5} iter {:>6} complete. total time: {:>7} -----".format(
@@ -828,6 +906,17 @@ def make_get_model(args: Namespace, *, data_helper: MyDataHelper, logger: Logger
 
 
 def make_get_dataloader(args: Namespace, *, datasets: tuple[Dataset, Dataset, Dataset], logger: Logger):
+    """make and get dataloader
+
+    Args:
+        args(Namespace): use "batch_size" in args.
+        datasets(tuple[Dataset, Dataset, Dataset]): dataset_train, dataset_valid and dataset_test
+        logger(Logger): logging.Logger
+
+    Returns:
+        MyDataLoaderHelper: the dataclasses which has dataloader.
+
+    """
     batch_size = args.batch_size
     dataset_train, dataset_valid, dataset_test = datasets
     dataloader_train = DataLoader(
@@ -892,6 +981,22 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
 
 
 def main_function(args: Namespace, *, logger: Logger):
+    """main function
+
+    * First, load data and make datahelper
+    * Second, make datasets and dataloader.
+    * Third, make model by setting hyper parameters.
+    * Forth, Do train. if only load trained model or data, do nothing.
+    * Finally, return data and trained model.
+
+    Args:
+        args(Namespace): args
+        logger(Logger): logging.Logger
+
+    Returns:
+        dict: keys=(MODEL, DATA_HELPER, DATASETS, DATA_LOADERS, TRAIN_RETURNS)
+
+    """
     # load raw data and make datahelper. Support for special-tokens by datahelper.
     logger.info('----- make datahelper start. -----')
     data_helper = make_get_data_helper(args, logger=logger)
@@ -921,7 +1026,17 @@ def main_function(args: Namespace, *, logger: Logger):
 SEED: Final = 42
 
 
-def main(args=None):
+def main(args: Optional[Sequence[str]] = None):
+    """main
+
+    * Set Seed, set parser, save parser parameter and do main_function.
+    * This function itself do nothing. Only call main_function.
+    * If some error in main_function, this function saves the parameters for the moment and exits.
+
+    Args:
+        args(:obj:`Sequence[str]`, optional): args list or None. Default to None.
+
+    """
     from utils.setup import setup, save_param
     torch_fix_seed(seed=SEED)
     args, logger, device = setup(setup_parser, PROJECT_DIR, parser_args=args)

@@ -26,7 +26,10 @@ MASKED_LM: Final = 'maskdlm'
 HEAD_MASKED_LM: Final = 'head_maskdlm'
 RELATION_MASKED_LM: Final = 'relation_maskdlm'
 TAIL_MASKED_LM: Final = 'tail_maskdlm'
+
 WEIGHT_HEAD: Final = 'weight_head'
+WEIGHT_RELATION: Final = 'weight_relation'
+WEIGHT_TAIL: Final = 'weight_tail'
 
 
 def add_bos(triple: np.ndarray, bos_token_h, bos_token_r, bos_token_t, ):

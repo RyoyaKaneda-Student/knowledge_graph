@@ -4,8 +4,8 @@ version = "0.1.4"
 description = "Knowledge Graph"
 authors = ["RyoyaKanedaStudent <kaneda@ss.cs.osakafu-u.ac.jp>"]
 packages = [
-{include = "models", from = 'src' },
-{include = "utils", from = 'src' }
+    {include = "models", from = 'src' },
+    {include = "utils", from = 'src' }
 ]
 
 [tool.poetry.dependencies]
@@ -30,42 +30,26 @@ pyknp = { version = "^0.4.6", source = "pypi" }
 nltk = { version = "^3.7", source = "pypi" }
 pytorch-ignite = { version = "^0.4.9", source = "pypi" }
 transformers = { version = ">=4.1,<4.21", source = "pypi" }
-
-torch = [
-    { version = "^1.13.1", source = "pypi", extras = ["macos"], optional = true },
-    { version = "^1.13.0", source = "pypi", extras = ["cuda120"], optional = true }
-]
-torchvision = [
-    { version = "^0.14.0", source = "pypi", extras = ["macos"], optional = true },
-    { version = "^0.14.0", source = "pypi", extras = ["cuda120"], optional = true }
-] # allennlp
-torchaudio = [
-    { version = "^0.13.0", source = "pypi", extras = ["macos"], optional = true },
-    { version = "^0.13.0", source = "pypi", extras = ["cuda120"], optional = true }
-]
-pyg-lib = { version = "^0.1.0+pt113cu117", source = "torch-geometric", extras = ["cuda120"], optional = true }
+torch = { version = "^1.13.1", source = "pypi"}
+torchvision = { version = "^0.14.0", source = "pypi" }
+torchaudio = { version = "^0.13.0", source = "pypi" }
 torch-scatter = [
-    { version = "^2.0.9", source = "pypi", extras = ["macos"], optional = true },
-    { version = "^2.1.0+pt113cu117", source = "torch-geometric", extras = ["cuda120"], optional = true }
+    { version = "^2.1.0", source = "pypi", markers = "sys_platform == 'darwin'" },
+    { version = "^2.1.0+pt113cu117", source = "torch-geometric", markers = "sys_platform == 'linux'" }
 ]
 torch-sparse = [
-    { version = "^0.6.13", source = "pypi", extras = ["macos"], optional = true },
-    { version = "^0.6.15+pt113cu117", source = "torch-geometric", extras = ["cuda120"], optional = true }
+    { version = "^0.6.15", source = "pypi", markers = "sys_platform == 'darwin'" },
+    { version = "^0.6.15+pt113cu117", source = "torch-geometric", markers = "sys_platform == 'linux'" }
 ]
 torch-cluster = [
-    { version = "^1.6.0", source = "pypi", extras = ["macos"], optional = true },
-    { version = "^1.6.0+pt113cu117", source = "torch-geometric", extras = ["cuda120"], optional = true }
+    { version = "^1.6.0", source = "pypi", markers = "sys_platform == 'darwin'" },
+    { version = "^1.6.0+pt113cu117", source = "torch-geometric", markers = "sys_platform == 'linux'" }
 ]
 torch-spline-conv = [
-    { version = "^1.2.1", source = "pypi", extras = ["macos"], optional = true },
-    { version = "^1.2.1+pt113cu117", source = "torch-geometric", extras = ["cuda120"], optional = true }
+    { version = "^1.2.1", source = "pypi", markers = "sys_platform == 'darwin'" },
+    { version = "^1.2.1+pt113cu117", source = "torch-geometric", markers = "sys_platform == 'linux'" }
 ]
-torch-geometric = [
-    { version = "^2.0.4", source = "pypi", extras = ["macos"], optional = true },
-    { version = "^2.2.0", source = "pypi", extras = ["cuda120"], optional = true }
-]
-# allennlp = { version = "^2.10.1", source = "pypi", extras = ["cuda120"], optional = true }
-
+torch-geometric = { version = "^2.2.0", source = "pypi" }
 
 [tool.poetry.group.jupyter]
 optional = true
@@ -81,6 +65,11 @@ jupyter-nbextensions-configurator =  { version = "*", source = "pypi" }
 
 [tool.poetry.group.dev.dependencies]
 autopep8 = { version = "*", source = "pypi" }
+black = { version = "*", source = "pypi" }
+isort = { version = "*", source = "pypi" }
+mypy = { version = "*", source = "pypi" }
+Pylint = { version = "*", source = "pypi" }
+sphinx = "*"
 
 [tool.poetry.group.test.dependencies]
 pytest = { version = "*", source = "pypi" }
@@ -91,16 +80,12 @@ url = "https://data.pyg.org/whl/torch-1.13.0+cu117.html"
 default = false
 secondary = true
 
-[tool.poetry.extras]
-macos = ["torch", "torchvision", "torchaudio", "torch-scatter", "torch-sparse", "torch-cluster", "torch-spline-conv", "torch-geometric"]
-cuda120 = ["torch", "torchvision", "torchaudio", "pyg-lib", "torch-scatter", "torch-sparse", "torch-cluster", "torch-spline-conv", "torch-geometric"]
-
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.black]
-target-version = ['py39']
+target-version = ['py310']
 line-length = 120
 
 [tool.isort]
@@ -110,7 +95,7 @@ include_trailing_comma = true
 known_local_folder=['config',]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 no_strict_optional = true
 ignore_missing_imports = true
 check_untyped_defs = true

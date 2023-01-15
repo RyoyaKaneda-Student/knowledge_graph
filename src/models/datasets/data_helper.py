@@ -1,7 +1,20 @@
+#!/usr/bin/python
 # coding: UTF-8
+"""Raw data and data helper.
+
+* This file defined raw data and data helper and dataloader helper.
+raw data class is the class of read file and set the data.
+data helper class is the helper class to o support special tokens.
+dataloader helper class is the dataclass of dataloader.
+
+Todo:
+    * Is dataloader helper really need?
+    * To improve data helper class
+"""
+
 # region !import area!
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 # python
 from logging import Logger
 from pathlib import Path
@@ -17,8 +30,9 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 from torch.utils.data.dataloader import DataLoader
+# torch geometric
+from torch_geometric.data import Data as GeometricData
 # my utils
-from utils.error import UnderDevelopmentError
 from utils.hdf5 import read_one_item
 from utils.setup import easy_logger
 from utils.typing import ConstMeta
@@ -28,8 +42,8 @@ from utils.utils import version_check
 
 PROJECT_DIR = Path(__file__).resolve().parents[3]
 
-PROCESSED_DATA_PATH = './data/processed/'
-EXTERNAL_DATA_PATH = './data/external/'
+PROCESSED_DATA_PATH: Final = './data/processed/'
+EXTERNAL_DATA_PATH: Final = './data/external/'
 
 KGDATA: Final = 'KGdata'
 KGCDATA: Final = 'KGCdata'
@@ -49,27 +63,51 @@ TAIL: Final = 'tail'
 
 
 class INFO_INDEX(metaclass=ConstMeta):
-    TRIPLE: Final = 'triple'
-    ENTITY_NUM: Final = 'entity_length'
-    RELATION_NUM: Final = 'relation_length'
+    """Info file's index const parameters.
+    """
     ENTITIES: Final = 'entities'
+    ENTITY_NUM: Final = 'entity_num'
     ENTITIES_LABEL: Final = 'entities_label'
     ID2COUNT_ENTITY: Final = 'id2count_entity'
     RELATIONS: Final = 'relations'
+    RELATION_NUM: Final = 'relation_num'
     RELATIONS_LABEL: Final = 'relations_label'
     IS_REV_RELATION: Final = 'id2is_reverse_relation'
     ID2COUNT_RELATION: Final = 'id2count_relation'
 
     @classmethod
-    def all_index(cls):
-        return [
-            cls.TRIPLE, cls.ENTITY_NUM, cls.RELATION_NUM, cls.ENTITY_NUM, cls.ENTITIES, cls.ENTITIES_LABEL,
+    def ALL_INDEXES(cls):
+        """ALL INDEXES
+        Returns:
+            tuple[str]: ALL INDEXES
+        """
+        return (
+            cls.ENTITY_NUM, cls.RELATION_NUM, cls.ENTITY_NUM, cls.ENTITIES, cls.ENTITIES_LABEL,
             cls.ID2COUNT_ENTITY, cls.RELATIONS, cls.RELATIONS_LABEL, cls.IS_REV_RELATION, cls.ID2COUNT_RELATION
-        ]
+        )
+
+
+class TRAIN_INDEX(metaclass=ConstMeta):
+    """Train file's index const parameters.
+    """
+    TRIPLE: Final = 'triple'
+    TRIPLE_RAW: Final = 'triple_raw'
+
+    @classmethod
+    def ALL_INDEXES(cls):
+        """ALL INDEXES
+        Returns:
+            tuple[str]: ALL INDEXES
+        """
+        return (
+            cls.TRIPLE, cls.TRIPLE_RAW
+        )
 
 
 # about tokens
 class DefaultTokens(metaclass=ConstMeta):
+    """DefaultTokens const parameters.
+    """
     PAD_E: Final[str] = '<pad_e>'
     CLS_E: Final[str] = '<cls_e>'
     MASK_E: Final[str] = '<mask_e>'
@@ -83,6 +121,8 @@ class DefaultTokens(metaclass=ConstMeta):
 
 
 class DefaultIds(metaclass=ConstMeta):
+    """DefaultIds const parameters.
+    """
     PAD_E_DEFAULT_ID: Final[int] = 0
     CLS_E_DEFAULT_ID: Final[int] = 1
     MASK_E_DEFAULT_ID: Final[int] = 2
@@ -96,8 +136,14 @@ class DefaultIds(metaclass=ConstMeta):
 
 
 class DefaultTokenIds:
+    """DefaultTokenIds
+    """
     @staticmethod
     def default_token2ids_e():
+        """default_token to ids_e
+        Returns:
+            dict[str, int]: the key is token about entities and the value is token_id.
+        """
         DT = DefaultTokens
         DI = DefaultIds
         return {DT.PAD_E: DI.PAD_E_DEFAULT_ID, DT.CLS_E: DI.CLS_E_DEFAULT_ID,
@@ -105,6 +151,10 @@ class DefaultTokenIds:
 
     @staticmethod
     def default_token2ids_r():
+        """default_token to ids_r
+        Returns:
+            dict[str, int]: the key is token about relations and the value is token_id.
+        """
         DT = DefaultTokens
         DI = DefaultIds
         return {DT.PAD_R: DI.PAD_R_DEFAULT_ID, DT.CLS_R: DI.CLS_R_DEFAULT_ID,
@@ -112,42 +162,65 @@ class DefaultTokenIds:
 
     @staticmethod
     def default_ids2token_e():
+        """default_ids to token_e
+        Returns:
+            dict[str, int]: the key is token_id and the value is token about entities
+        """
         return {value: key for key, value in DefaultTokenIds.default_token2ids_e()}
 
     @staticmethod
     def default_ids2token_r():
+        """default_ids to token_e
+        Returns:
+            dict[str, int]: the key is token_id and the value is token about relations.
+        """
         return {value: key for key, value in DefaultTokenIds.default_token2ids_r()}
 
 
 # noinspection PyTypeChecker
 def make_change_index_func(_length: int, special_ids: Iterable[int]):
+    """make the function about change index by special tokens.
+
+    Args:
+        _length(int): the length of before list.
+        special_ids(Iterable[int]): special ids.
+    Returns:
+        Callable[[int], int]: This is the function which get old index and return new index.
+    """
     tmp_list = [True for _ in range(_length + len(special_ids))]
     for id_ in special_ids: tmp_list[id_] = None
     change_list = [i for i, tmp in enumerate(tmp_list) if tmp is not None]
     assert len(change_list) == _length
     change_tuple = tuple(change_list)
 
-    def func(x: int) -> int:
-        return change_tuple[x]
-
-    return func
+    return lambda x: change_tuple[x]
 
 
 @dataclass
 class SpecialTokens:
+    """SpecialTokens
+    """
     @classmethod
     def default(cls):
+        """return itself.
+        todo:
+            * is really need?
+        """
         return cls()
 
 
 @dataclass
 class SpecialPaddingTokens(SpecialTokens):
+    """SpecialTokens which has padding token.
+    """
     padding_token_e: int = DefaultIds.PAD_E_DEFAULT_ID
     padding_token_r: int = DefaultIds.PAD_R_DEFAULT_ID
 
 
 @dataclass
 class SpecialTokens01(SpecialPaddingTokens):
+    """SpecialTokens which has (padding, cls, mask, sep, bos) tokens par entity and relation.
+    """
     padding_token_e: int = DefaultIds.PAD_E_DEFAULT_ID
     padding_token_r: int = DefaultIds.PAD_R_DEFAULT_ID
     cls_token_e: int = DefaultIds.CLS_E_DEFAULT_ID
@@ -162,6 +235,13 @@ class SpecialTokens01(SpecialPaddingTokens):
 
 @dataclass(init=False)
 class MyRawData:
+    """Raw Data Class
+
+    * This is the class which instance has the raw data.
+    * Its means this instance has the same data as file.
+    * This class has the file paths, nums, the lists, the label lists, the reverse check lists and frequency lists.
+    * And also (train, valid, test) triple list as optional.
+    """
     # about path
     info_path: str
     train_path: str
@@ -182,7 +262,7 @@ class MyRawData:
     valid_triple: np.ndarray
     test_triple: np.ndarray
     # about init
-    loaded_triple: bool
+    _loaded_triple: bool
 
     def __init__(
             self, info_path, train_path, valid_path, test_path, *, logger=None):
@@ -224,21 +304,30 @@ class MyRawData:
         self.valid_path = valid_path
         self.test_path = test_path
 
-        self.loaded_triple = False
-        self.loaded_all_tail = False
-        self.loaded_all_relation = False
+        self._loaded_triple = False
 
         self.show_log(logger)
 
     def init_triple(self, force_init=False) -> None:
-        if self.loaded_triple and not force_init: return
-        self.loaded_triple = True
-        _func = lambda f: f[INFO_INDEX.TRIPLE][:]
+        """init triple
+
+        Args:
+            force_init(:obj:`bool`, optional): if True, the triple will re-init with or without init. Defaults to False.
+
+        """
+        if self._loaded_triple and not force_init: return
+        self._loaded_triple = True
+        _func = lambda f: f[TRAIN_INDEX.TRIPLE][:]
         self.train_triple, self.valid_triple, self.test_triple = [
             read_one_item(_path, _func) if _path is not None else None
             for _path in (self.train_path, self.valid_path, self.test_path)]
 
     def show_log(self, logger: Logger = None):
+        """show to logger if logger is not None
+
+        Args:
+            logger(Logger): logging.logger
+        """
         if logger is not None:
             logger.info("====== Show MyRawData ======")
             logger.info(f"entity num: {self.entity_num}")
@@ -258,13 +347,23 @@ class MyRawData:
         return f"MyRawData: entity num={entity_num}, relation num={relation_num}"
 
     def del_all_optional(self):
-        if self.loaded_triple:
-            self.loaded_triple = False
+        """ del all optional params.
+
+        * del triple items for memory-friendly.
+        """
+        if self._loaded_triple:
+            self._loaded_triple = False
             del self.train_triple, self.valid_triple, self.test_triple
 
 
 @dataclass(init=False)
 class MyDataHelper:
+    """ Data Helper class
+
+    * This class is the data helper class.
+    * This class return the items considering special tokens.
+    * So, you can use items with no considering  special tokens after this processed.
+    """
     _data: MyRawData
     _entity_special_dicts: dict[int, str]
     _relation_special_dicts: dict[int, str]
@@ -309,53 +408,137 @@ class MyDataHelper:
     def _processed_triple(self, triple) -> np.ndarray:
         return self._special_token_change(triple, entity_index=(0, 2), relation_index=(1,))
 
+    def _processed_triple_geometric(self, processed_triple) -> GeometricData:
+        x = torch.arange(self.processed_entity_num).view(-1, 1)
+        edge_index = torch.from_numpy(processed_triple[:, (0, 2)].transpose(1, 0)).clone().to(torch.long)
+        edge_attr = torch.from_numpy(processed_triple[:, 1]).clone().view(-1, 1)
+        data = GeometricData(x=x, edge_index=edge_index, edge_attr=edge_attr)
+        return data
+
     @property
     def data(self) -> MyRawData:
+        """raw data.
+        Returns:
+            MyRawData: raw data instance.
+        """
         return self._data
 
     @property
     def entity_special_ids(self) -> tuple[int, ...]:
+        """entity special ids
+
+        Returns:
+            tuple[int, ...]: The tuple of entity special ids.
+
+        """
         return tuple(self._entity_special_dicts.keys())
 
     @property
     def relation_special_ids(self) -> tuple[int, ...]:
+        """relation special ids
+
+        Returns:
+            tuple[int, ...]: The tuple of relation special ids.
+        """
         return tuple(self._relation_special_dicts.keys())
 
     @property
     def processed_entity_num(self) -> int:
+        """entity's num considering special_ids
+
+        Returns:
+            int: entity's num considering special_ids.
+        """
         return self.data.entity_num + len(self._entity_special_dicts)
 
     @property
     def processed_relation_num(self) -> int:
+        """relation's num considering special_ids
+
+        Returns:
+            int: relation's num considering special_ids.
+        """
         return self.data.relation_num + len(self._relation_special_dicts)
 
     @property
     def processed_train_triple(self) -> np.ndarray:
+        """train triple considering special_ids.
+        For memory-friendly, this property use cache system.
+        Returns:
+            np.ndarray: train triple considering special_ids.
+        """
         if self._processed_train_triple is None:
             self._processed_train_triple = self._processed_triple(self.data.train_triple)
         return self._processed_train_triple
 
     @property
     def processed_valid_triple(self) -> np.ndarray:
+        """valid triple considering special_ids.
+        For memory-friendly, this property use cache system.
+        Returns:
+            np.ndarray: valid triple considering special_ids.
+        """
         if self._processed_valid_triple is None:
             self._processed_valid_triple = self._processed_triple(self.data.valid_triple)
         return self._processed_valid_triple
 
     @property
     def processed_test_triple(self) -> np.ndarray:
+        """test triple considering special_ids.
+        For memory-friendly, this property use cache system.
+        Returns:
+            np.ndarray: test triple considering special_ids.
+        """
         if self._processed_test_triple is None:
             self._processed_test_triple = self._processed_triple(self.data.test_triple)
         return self._processed_test_triple
 
     @property
-    def processed_entities(self) -> list:
+    def processed_train_triple_geometric(self) -> GeometricData:
+        """train torch geometric triple considering special_ids.
+
+        Returns:
+            GeometricData: train torch geometric triple considering special_ids.
+        """
+        return self._processed_triple_geometric(self.processed_train_triple)
+
+    @property
+    def processed_valid_triple_geometric(self) -> GeometricData:
+        """valid torch geometric triple considering special_ids.
+
+        Returns:
+            GeometricData: valid torch geometric triple considering special_ids.
+        """
+        return self._processed_triple_geometric(self.processed_valid_triple)
+
+    @property
+    def processed_test_triple_geometric(self) -> GeometricData:
+        """test torch geometric triple considering special_ids.
+
+        Returns:
+            GeometricData: test torch geometric triple considering special_ids.
+        """
+        return self._processed_triple_geometric(self.processed_test_triple)
+
+    @property
+    def processed_entities(self) -> list[str]:
+        """entities considering special_ids.
+
+        Returns:
+            list[str]: entities considering special_ids.
+        """
         entities = self.data.entities[:]
         for index, value in sorted(self._entity_special_dicts.items(), key=lambda x: x[0]):
             entities.insert(index, value)
         return entities
 
     @property
-    def processed_entities_label(self) -> list:
+    def processed_entities_label(self) -> list[str]:
+        """entities label considering special_ids.
+
+        Returns:
+            list[str]: entities label considering special_ids.
+        """
         entities_label = self.data.entities_label[:]
         for index, value in sorted(self._entity_special_dicts.items(), key=lambda x: x[0]):
             entities_label.insert(index, value)
@@ -363,19 +546,34 @@ class MyDataHelper:
 
     @property
     def processed_entityIdx2countFrequency(self) -> np.ndarray:
+        """entityIdx2countFrequency considering special_ids.
+
+        Returns:
+            np.ndarray: entityIdx2countFrequency label considering special_ids.
+        """
         idx2count = self.data.entityIdx2countFrequency[:]
         indexes, _ = zip(*[*(sorted(self._entity_special_dicts.items(), key=lambda x: x[0]))])
         return np.insert(idx2count, indexes, [-1] * len(indexes))
 
     @property
-    def processed_relations(self) -> list:
+    def processed_relations(self) -> list[str]:
+        """relations considering special_ids.
+
+        Returns:
+            list[str]: relations considering special_ids.
+        """
         relations = self.data.relations[:]
         for index, value in sorted(self._relation_special_dicts.items(), key=lambda x: x[0]):
             relations.insert(index, value)
         return relations
 
     @property
-    def processed_relations_label(self) -> list:
+    def processed_relations_label(self) -> list[str]:
+        """relations label considering special_ids.
+
+        Returns:
+            list[str]: relations label considering special_ids.
+        """
         relations_label = self.data.relations_label[:]
         for index, value in sorted(self._relation_special_dicts.items(), key=lambda x: x[0]):
             relations_label.insert(index, value)
@@ -383,12 +581,17 @@ class MyDataHelper:
 
     @property
     def processed_relationIdx2countFrequency(self) -> np.ndarray:
+        """relationIdx2countFrequency considering special_ids.
+
+        Returns:
+            np.ndarray: relationIdx2countFrequency considering special_ids.
+        """
         id2count = self.data.relationIdx2countFrequency[:]
         indexes, _ = zip(*[*(sorted(self._relation_special_dicts.items(), key=lambda x: x[0]))])
         return np.insert(id2count, indexes, [-1] * len(indexes))
 
     def show(self, logger: Logger):
-        """
+        """show params ig logger is not None.
 
         Args:
             logger(Logger):
@@ -399,14 +602,14 @@ class MyDataHelper:
         Returns:
 
         """
-
-        logger.info("========== Show DataHelper ==========")
-        self.data.show_log(logger)
-        logger.info(f"entity_special_dicts: {self._entity_special_dicts}")
-        logger.info(f"relation_special_dicts: {self._relation_special_dicts}")
-        logger.info(f"processed entity num: {self.processed_entity_num}")
-        logger.info(f"processed relation num: {self.processed_relation_num}")
-        logger.info("========== Show DataHelper ==========")
+        if logger is not None:
+            logger.info("========== Show DataHelper ==========")
+            self.data.show_log(logger)
+            logger.info(f"entity_special_dicts: {self._entity_special_dicts}")
+            logger.info(f"relation_special_dicts: {self._relation_special_dicts}")
+            logger.info(f"processed entity num: {self.processed_entity_num}")
+            logger.info(f"processed relation num: {self.processed_relation_num}")
+            logger.info("========== Show DataHelper ==========")
 
     def __str__(self):
         entity_num = self.processed_entity_num
@@ -456,52 +659,64 @@ class MyDataLoaderHelper:
 
     @property
     def train_dataloader(self) -> DataLoader:
+        """ the property of train_dataloader
+
+        Returns:
+            DataLoader: train_dataloader
+        """
         _loader = self._train_dataloader
         assert _loader is not None
         return _loader
 
     @property
     def train_valid_dataloader(self) -> DataLoader:
+        """ the property of train_valid_dataloader
+        train_valid_dataloader is the loader_data which is formatted like valid data but is train data.
+        Returns:
+            DataLoader: train_valid_dataloader
+        """
         _loader = self._train_valid_dataloader
         assert _loader is not None
         return _loader
 
     @property
     def valid_dataloader(self) -> DataLoader:
+        """ the property of valid_dataloader
+
+        Returns:
+            DataLoader: valid_dataloader
+        """
         _loader = self._valid_dataloader
         assert _loader is not None
         return _loader
 
     @property
     def test_dataloader(self) -> DataLoader:
+        """ the property of test_dataloader
+
+        Returns:
+            DataLoader: test_dataloader
+        """
         _loader = self._test_dataloader
         assert _loader is not None
         return _loader
 
 
-"""
-def load_preprocess_data(kg_data: KGDATA_LITERAL, entity_special_num, relation_special_num, *, logger=None):
-    paths = [
-        os.path.join(KGDATA2FOLDER_PATH[kg_data], _name)
-        for _name in ('info.hdf5', 'all_tail.hdf5', 'train.hdf5', 'valid.hdf5', 'test.hdf5')
-    ]
-    info_path, all_tail, train_path, valid_path, test_path = [
-        _path if os.path.exists(_path) else None for _path in paths
-    ]
-    logger.debug(f"{info_path=}, {all_tail=}, {train_path=}, {valid_path=}, {test_path=}")
-    data_helper = MyDataHelper(
-        info_path, all_tail, train_path, valid_path, test_path, logger=logger,
-        entity_special_num=entity_special_num, relation_special_num=relation_special_num,
-    )
-    return data_helper
-"""
-
-
 def main():
-    version_check(torch, pd, optuna)
+    """Main class for check its movement.
+    """
+    print("a")
+    SRO_FOLDER = f"{PROJECT_DIR}/data/processed/KGCdata/All/SRO"
+    SRO_ALL_INFO_FILE = f"{SRO_FOLDER}/info.hdf5"
+    SRO_ALL_TRAIN_FILE = f"{SRO_FOLDER}/train.hdf5"
     logger = easy_logger(console_level='debug')
     logger.debug(f"{PROJECT_DIR=}")
-    pass
+    version_check(torch, pd, optuna, logger=logger)
+    data_helper = MyDataHelper(SRO_ALL_INFO_FILE, SRO_ALL_TRAIN_FILE, None, None,
+                               entity_special_dicts={0: '<pad>', 1: 'cls'},
+                               relation_special_dicts={0: '<pad>', 1: 'cls'},
+                               logger=logger)
+    logger.debug(data_helper.processed_train_triple_geometric)
 
 
 if __name__ == '__main__':

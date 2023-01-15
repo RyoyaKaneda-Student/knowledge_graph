@@ -1,19 +1,16 @@
-.. project_name documentation master file, created by
-   sphinx-quickstart.
+.. src documentation master file, created by
+   sphinx-quickstart on Mon Jan 16 08:41:33 2023.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-project_name documentation!
-==============================================
-
-Contents:
+Welcome to src's documentation!
+===============================
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 4
+   :caption: Contents:
 
-   getting-started
-   commands
-
+   src
 
 
 Indices and tables

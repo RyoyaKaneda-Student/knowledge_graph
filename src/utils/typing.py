@@ -15,12 +15,11 @@ StrList = list[str]
 SkeyDict = dict[str, _T]
 
 
-class ConstValueClass:
-    def __init__(self):
-        raise "This class is only Const Value"
-
-
 class ConstMeta(type):
+    """Const parameter metaclass.
+
+    * This is only Const parameter's metaclass.
+    """
     def __setattr__(self, name, value):
         if name in self.__dict__:
             raise TypeError(f'Can\'t rebind const ({name})')
