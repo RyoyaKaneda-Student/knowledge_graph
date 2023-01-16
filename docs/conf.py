@@ -3,12 +3,19 @@
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
+import os
+import sys
+sys.path.insert(0, os.path.abspath('..'))
+
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'src'
-copyright = '2023, Author'
-author = 'Author'
+project = 'KnowledgeGraphChallenge2023'
+copyright = '2023, RyoyaKaneda'
+author = 'RyoyaKaneda'
+
+version = 'v1.0'
+release = 'v1.0'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -20,10 +27,10 @@ extensions = [
     'sphinx.ext.napoleon'
 ]
 
-templates_path = ['_templates']
+templates_path = ['sphinxdoc']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
-language = 'en'
+language = 'ja'
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output

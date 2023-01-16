@@ -17,22 +17,6 @@ Subpackages
 Submodules
 ----------
 
-src.evaluation module
----------------------
-
-.. automodule:: src.evaluation
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-src.run module
---------------
-
-.. automodule:: src.run
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 src.run\_for\_KGC module
 ------------------------
 

@@ -4,6 +4,7 @@
 
 * This script is the script about Knowledge Graph Challenge.
 * Define data, define model, define parameters, and run train.
+
 Todo:
     * 色々
 
@@ -141,6 +142,7 @@ class ModelVersion(metaclass=ConstMeta):
     """Model Versions
 
     * This is only const value class.
+
     """
     V01: Final = '01'
     V02: Final = '02'
@@ -148,10 +150,12 @@ class ModelVersion(metaclass=ConstMeta):
     V03a: Final = '03a'
 
     @classmethod
-    def ALL_LIST(cls) -> tuple:
-        """all list of this const values.
+    def ALL_LIST(cls) -> tuple[str, ...]:
+        """All list of this const values.
+
         Returns:
-            tuple[str]: (01, 02, 03, 03a)
+            tuple[str, ...]: (01, 02, 03, 03a).
+
         """
         return cls.V01, cls.V02, cls.V03, cls.V03a
 
@@ -160,6 +164,7 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
     """make parser function
 
     * My first-setup function needs the function which make and return parser.
+
     Args:
         args(:obj:`Sequence[str]`, optional): args list or None. Default to None.
 
@@ -324,7 +329,9 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
     # optional function
     def cpu_deep_copy_or_none(_tensor: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
         """return deep copied tensor or None.
-        deep clone to cpu from gpu. However, if _tensor is None, return None.
+
+        * deep clone to cpu from gpu. However, if _tensor is None, return None.
+
         Args:
             _tensor(Optional[torch.Tensor]): Tensor or None item.
 
@@ -357,6 +364,7 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
 
         Returns:
             tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+
         """
         _mask_filter = _random_all < mask_percent
         _mask_ans = _value[_mask_filter].detach().clone()
@@ -410,6 +418,7 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         """train step
 
         * changing study parameter by this function.
+
         """
         model.train()
         triple = batch
@@ -468,6 +477,7 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         """valid step
 
         * valid model by valid data.
+
         """
         model.eval()
         triple: torch.Tensor = batch[0].to(device, non_blocking=non_blocking)
@@ -558,6 +568,7 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         """start epoch function
 
         * start epoch function. Move at the beginning of each epoch.
+
         """
         epoch = engine.state.epoch
         logger.debug("----- epoch: {:>5} start -----".format(epoch))
@@ -568,6 +579,7 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         """end epoch function
 
         * end epoch function. Move at the ending of each epoch.
+
         """
         epoch = engine.state.epoch
         metrics = engine.state.metrics
@@ -587,6 +599,7 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         """valid function.
 
         * Moves at the end of the epoch per Valid_interval
+
         """
         epoch = engine.state.epoch
         if args.train_valid_test:
@@ -607,6 +620,7 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         """start train
 
         * move only ones (when train started)
+
         """
         total_timer.reset()
         logger.info("pre training start. epoch length = {}".format(engine.state.max_epochs))
@@ -616,6 +630,7 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         """start train
 
         * move only ones (when train completed)
+
         """
         epoch = engine.state.epoch
         time_str = elapsed_time_str(total_timer.value())
@@ -626,6 +641,7 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         """print time per epoch function
 
         * end epoch function. Move at the ending of each epoch.
+
         """
         epoch = engine.state.epoch
         logger.info(
@@ -638,6 +654,7 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         """print info per some iter function
 
         * Move at the ending of some iter.
+
         """
         output = engine.state.output
         epoch = engine.state.epoch
@@ -705,7 +722,8 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
 
 
 def get_all_tokens(args: Namespace):
-    """
+    """get all_tokens
+
     Args:
         args(Namespace):
 
@@ -729,13 +747,14 @@ def get_all_tokens(args: Namespace):
 
 
 def make_get_data_helper(args: Namespace, *, logger: Logger):
-    """
+    """make and get data_helper
 
     Args:
-        args(Namespace):
-        logger(Logger):
+        args(Namespace): args
+        logger(Logger): logging.Logger
 
     Returns:
+        MyDataHelper: MyDataHelper()
 
     """
     ((pad_token_e, pad_token_r), (cls_token_e, cls_token_r), (mask_token_e, mask_token_r),
@@ -764,14 +783,15 @@ def make_get_data_helper(args: Namespace, *, logger: Logger):
 
 
 def make_get_datasets(args: Namespace, *, data_helper: MyDataHelper, logger: Logger):
-    """
+    """make and get datasets
     
     Args:
-        args: 
-        data_helper: 
-        logger: 
+        args(Namespace): args
+        data_helper(MyDataHelper): data_helper
+        logger(Logger): logger
 
     Returns:
+        tuple[Dataset, Dataset, Dataset]: dataset_train, dataset_valid, dataset_test
 
     """
     # get from args
@@ -864,14 +884,15 @@ def make_get_datasets(args: Namespace, *, data_helper: MyDataHelper, logger: Log
 
 
 def make_get_model(args: Namespace, *, data_helper: MyDataHelper, logger: Logger):
-    """
+    """make and get model
 
     Args:
-        args:
-        data_helper:
-        logger:
+        args(Namespace): args
+        data_helper(MyDataHelper): data_helper
+        logger(Logger): logger
 
     Returns:
+        KgStoryTransformer: KgStoryTransformer
 
     """
     # get from args
@@ -931,17 +952,18 @@ def make_get_dataloader(args: Namespace, *, datasets: tuple[Dataset, Dataset, Da
 
 
 def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logger: Logger):
-    """
+    """do train test ect
 
     Args:
-        args(Namespace):
-        data_helper(MyDataHelper):
-        data_loaders(MyDataLoaderHelper):
-        model(KgStoryTransformer01):
-        logger(Logger):
+        args(Namespace): args
+        data_helper(MyDataHelper): data_helper
+        data_loaders(MyDataLoaderHelper): data_loaders
+        model(KgStoryTransformer01): model
+        logger(Logger): logger
 
     Returns:
         dict: Keys=(MODEL, TRAINER, EVALUATOR, CHECKPOINTER_LAST, CHECKPOINTER_GOOD_LOSS)
+
     """
     # Now we are ready to start except for the hyper parameters.
     summary_writer = SummaryWriter(log_dir=args.tensorboard_dir) if args.tensorboard_dir is not None else None

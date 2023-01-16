@@ -3,6 +3,7 @@
 """Change and save the data using Knowledge Graph Challenge.
 
 * This file is used for changing and saving the data of Knowledge Graph Challenge for useful.
+
 Todo:
     * なんか色々あるきがする. Maybe I have many problem, but I can't write by my words.
 
@@ -53,6 +54,7 @@ class KGC(DefinedNamespace):
     """Knowledge Graph Challenge's Namespaces.
 
     * The word "from" and "if" are Reserved words in Python, So use not just words but function.
+
     """
     source: URIRef
     ActionOption: URIRef
@@ -191,14 +193,17 @@ StoryPredObj = tuple[StoryList, URIRefList, URIRefList]
 
 
 def make_get_graph(title: str, data_file_path: Union[str, Path]):
-    """
-    make the graph and bind the words 'predicate' and the title
+    """make and get rdf graph
+
+    * make the rdf graph and bind the words 'predicate' and the title.
+
     Args:
         title(str): the title.
         data_file_path(Union[str, Path]): file path.
 
     Returns:
         tuple[Graph, NamespaceManager, dict[str, Namespace]]: return (graph ,NamespaceManager, namespace dict)
+
     """
     g = Graph()
     g.parse(data_file_path)
@@ -209,16 +214,17 @@ def make_get_graph(title: str, data_file_path: Union[str, Path]):
 
 
 def change_sentence(_uriref: URIRef, namespace_manager: NamespaceManager) -> str:
-    """
-    Change sentence.
-    If the uriref is string item, this item change to short sentence one by using namespace_manager.
-    Else if the uriref is time item, this item change to time item.
+    """Change one sentence.
+
+    * If the uriref is string item, this item change to short sentence one by using namespace_manager.
+    * Else if the uriref is time item, this item change to time item.
     Args:
-        _uriref:
-        namespace_manager:
+        _uriref(URIRef): uriref item.
+        namespace_manager(NamespaceManager): namespace manager.
 
     Returns:
         str: changed item.
+
     """
     if type(_uriref.toPython()) is str:
         x = str(_uriref).rsplit('/', maxsplit=1)
@@ -234,15 +240,17 @@ def change_sentence(_uriref: URIRef, namespace_manager: NamespaceManager) -> str
 
 
 def replace_holmes_and_watson(title: str, item_list: Iterable[str]):
-    """replace the holmes and watson tags
+    """replace the holmes and watson tags.
 
     * Delete specific title and set the general title for all holmes and watson tags.
+
     Args:
         title(str): The specific title.
         item_list(Iterable[str]): The item list.
 
     Returns:
         list[str]: The item list. the items about Holmes and Watson in this list are changed to no specific title items.
+
     """
     return [HOLMES_ALT_NAME if item == HOLMES_TITLE_NAME(title) else
             WATSON_ALT_NAME if item == WATSON_TITLE_NAME(title) else
@@ -250,15 +258,18 @@ def replace_holmes_and_watson(title: str, item_list: Iterable[str]):
 
 
 def get_shaped_str_list(title, namespace_manager, node_list: Iterable[URIRef]):
-    """
-    Get shaped string list. shape means change_sentence and replace name.
+    """get shaped str list
+
+    * Get shaped string list. shape means change_sentence and replace name.
+
     Args:
-        title(str):
-        namespace_manager(NamespaceManager):
-        node_list(Iterable[URIRef]):
+        title(str): title
+        namespace_manager(NamespaceManager): namespace_manager
+        node_list(Iterable[URIRef]): the list of node.
 
     Returns:
-        list[str]:
+        list[str]: the list of strings.
+
     """
     str_list = [change_sentence(_n, namespace_manager) for _n in node_list]
     alt_name_list = replace_holmes_and_watson(title, str_list)
@@ -267,14 +278,16 @@ def get_shaped_str_list(title, namespace_manager, node_list: Iterable[URIRef]):
 
 # noinspection PyTypeChecker
 def get_type_match_list(graph_: Graph, type_set: set[URIRef]) -> URIRefList:
-    """
-    get the list of URIRef item which type is in the type_set from Graph().
+    """get type match list
+
+    * get the list of URIRef item which type is in the type_set from rdf graph.
+
     Args:
-        graph_(Graph):
+        graph_(Graph): graph
         type_set(set[URIRef]):
 
     Returns:
-        list[URIRef]
+        list[URIRef]: URIRefList
 
     """
     match_list: URIRefList = list(dict.fromkeys(
@@ -284,8 +297,10 @@ def get_type_match_list(graph_: Graph, type_set: set[URIRef]) -> URIRefList:
 
 
 def get_story_list(graph_: Graph, namespace_dict: NamespaceDict, title: str, story_length: int):
-    """
-    get story item list in graph.
+    """get story list.
+
+    * get story item list in graph.
+
     Args:
         graph_(Graph):
         namespace_dict(dict[str, Namespace]):
@@ -294,6 +309,7 @@ def get_story_list(graph_: Graph, namespace_dict: NamespaceDict, title: str, sto
 
     Returns:
         list[str]: the string iiis item. iiis means triple int(iii) and char(s).
+
     """
     story_list = []
 
@@ -310,18 +326,21 @@ def get_story_list(graph_: Graph, namespace_dict: NamespaceDict, title: str, sto
 
 
 def get_triples(graph_: Graph, namespace_dict: NamespaceDict, title: str, story_list: StoryList):
-    """
+    """get triples
+
+    * get some triples from rdf graph.
 
     Args:
-        graph_(Graph):
-        namespace_dict(dict[str, Namespace]):
-        title(str):
-        story_list(list[str]):
+        graph_(Graph): rdf graph
+        namespace_dict(dict[str, Namespace]): namespace_dict
+        title(str): title
+        story_list(list[str]): the list of stories
 
     Returns:
         tuple[TripleDict, SubjHaspredObj, StoryPredObj]:
             TripleDict is the dict. dict[iiis] == dict[_predicate][object_list]
             SubjHaspredObj is list. list[i] == []
+
     """
 
     prefix_title = namespace_dict[title]
@@ -347,13 +366,16 @@ def get_triples(graph_: Graph, namespace_dict: NamespaceDict, title: str, story_
 
 # noinspection PyTypeChecker
 def get_label_list(graph_: Graph, node_list: Iterable[URIRef]):
-    """
-    get label list from node_list
+    """get label list
+
+    * get label list from node_list
+
     Args:
         graph_(Graph):
         node_list(Iterable[URIRef]):
 
     Returns:
+        list[str]: the label list.
 
     """
 
@@ -369,6 +391,7 @@ class TAGS1(metaclass=ConstMeta):
     """TAGS1
 
     * This is only const parameters about tags1.
+
     """
     LENGTH_100: Final = 'length_100'
     LENGTH_090: Final = 'length_090'
@@ -412,7 +435,7 @@ def save_info_list(
 ):
     """Save function.
 
-    Save its items to title_group.
+    * Save its items to title_group.
 
     Args:
         title_group(Group): title group.
@@ -433,9 +456,10 @@ def save_info_list(
             pure means all items not used in any other lists.
         spo_array(np.ndarray): spo_array. It has (Story, predicate, subject, hasPredicate, object) in one sequence.
         po_array(np.ndarray): po_array. It has (storySubject, predicate, object) in one sequence.
+
     """
 
-    def change_to_np_array(_list: Union[list, np.ndarray]) -> np.ndarray:
+    def change_to_np_array(_list: Union[list, np.ndarray, None]) -> Union[list, np.ndarray, None]:
         """change items to np.ndarray if the _list is not np.ndarray
 
         Args:
@@ -445,7 +469,7 @@ def save_info_list(
                 If its type is list, this list change to np.ndarray items.
 
         Returns:
-            np.ndarray: The item which type is np.ndarray or None.
+            Union[list, np.ndarray, None]: The item which type is np.ndarray or None.
 
         """
         if _list is None: return None
@@ -471,8 +495,10 @@ def save_info_list(
     ) if value is not None]
 
 
-def write_one_title(f, title_ja, title, l100, l090, l080, l075):
-    """
+def write1_one_title(f, title_ja, title, l100, l090, l080, l075):
+    """write one title
+
+    * write one title in write1
 
     Args:
         f(File):
@@ -506,6 +532,7 @@ def write_one_title(f, title_ja, title, l100, l090, l080, l075):
 
     def make_str_label_list(_list: list[URIRef]):
         """make_str_label_list
+
         """
         _str_list = get_shaped_str_list(title, namespace_manager, _list)
         _label_list = get_label_list(graph_, _list)
@@ -545,7 +572,8 @@ def write_one_title(f, title_ja, title, l100, l090, l080, l075):
 
 
 def write_():
-    """ Write function 1
+    """Write function 1
+
     """
     # print(f"{DATA_FOLDER_PATH}/../data/story_list.hdf5")
     print("save at: {}".format(get_pure_path(WRITE1_FILE_PATH)))
@@ -562,7 +590,7 @@ def write_():
                 objects_str_list, pure_objects_str_list, people_str_list, actions_str_list, story_name_list,
                 objects_label_list, pure_objects_label_list, people_label_list, actions_label_list,
                 spo_array, po_array
-            ) = (write_one_title(f, title_ja, title, l100, l090, l080, l075))
+            ) = (write1_one_title(f, title_ja, title, l100, l090, l080, l075))
             all_objects_str_list += objects_str_list
             all_objects_label_list += objects_label_list
             all_pure_objects_str_list += pure_objects_str_list
@@ -576,7 +604,7 @@ def write_():
             all_story_pred_obj_array_list.append(po_array)
 
         def del_duplication(_str_list: list[str], _label_list: list[str]):
-            """ delete str_list duplication and reflected in label_list.
+            """delete str_list duplication and reflected in label_list.
 
             Args:
                 _str_list: list[str]: item names list.
@@ -619,6 +647,7 @@ def write_():
 
 def read_():
     """read write1 items
+
     """
     with h5py.File(WRITE1_FILE_PATH, 'r') as f:
         for title_ja, (title, l100, l090, l080, l075) in title_len_dict.items():
@@ -635,15 +664,16 @@ def write2_write_triples(fw_info, fw_train, entity_list, entity_label_list, rela
     """write triples by using train file.
 
     Args:
-        fw_info(File):
-        fw_train(File):
-        entity_list(list[str]):
-        entity_label_list(list[str]):
-        relation_list(list[str]):
-        relation_label_list(list[str]):
-        is_rev_list(np.ndarray):
-        triple(str):
-        triple_raw(str):
+        fw_info(File): fw_info
+        fw_train(File): fw_train
+        entity_list(list[str]): entity_list
+        entity_label_list(list[str]): entity_label_list
+        relation_list(list[str]): relation_list
+        relation_label_list(list[str]): relation_label_list
+        is_rev_list(np.ndarray): is_rev_list
+        triple(str): triple
+        triple_raw(str): triple_raw
+
     """
     #
     logger.debug(f"info: {get_pure_path(fw_info.filename)}")
@@ -773,6 +803,7 @@ def write2_sro(title: str, read_group: Group, general_read_group: Group):
 
 def write2_():
     """ Write function 2
+
     """
     with (h5py.File(WRITE1_FILE_PATH, 'r') as fr, ):
         general_read_group = fr[GENERAL]
@@ -791,6 +822,7 @@ def write2_():
 
 def main():
     """Main function
+
     """
     # write 1
     write_()

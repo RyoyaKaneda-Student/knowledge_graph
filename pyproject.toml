@@ -50,6 +50,8 @@ torch-spline-conv = [
     { version = "^1.2.1+pt113cu117", source = "torch-geometric", markers = "sys_platform == 'linux'" }
 ]
 torch-geometric = { version = "^2.2.0", source = "pypi" }
+attrdict = {version = "^2.0.1", source = "pypi"}
+networkx = {version = "^3.0", source = "pypi"}
 
 [tool.poetry.group.jupyter]
 optional = true
@@ -69,7 +71,8 @@ black = { version = "*", source = "pypi" }
 isort = { version = "*", source = "pypi" }
 mypy = { version = "*", source = "pypi" }
 Pylint = { version = "*", source = "pypi" }
-sphinx = "*"
+sphinx = { version = "*", source = "pypi" }
+sphinx-rtd-theme = { version = "*", source = "pypi" }
 
 [tool.poetry.group.test.dependencies]
 pytest = { version = "*", source = "pypi" }
