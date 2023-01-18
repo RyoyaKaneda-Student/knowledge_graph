@@ -5,7 +5,7 @@ from pathlib import Path
 
 # noinspection PyUnresolvedReferences
 from typing import List, Dict, Tuple, Optional, Union, Callable, Final
-
+from operator import attrgetter
 import abc
 
 import torch
@@ -33,14 +33,15 @@ class KGE_ERTails(torch.nn.Module, metaclass=abc.ABCMeta):
     * This model return all tail prediction as score.
     """
 
-    def __init__(self, embedding_dim, num_entities, num_relations, special_tokens: Optional[SpecialPaddingTokens]):
+    def __init__(self, entity_embedding_dim, relation_embedding_dim, entity_num, relation_num, special_tokens):
         """__init__
 
         Args:
-            embedding_dim(int): The dimensions of embedding.
-            num_entities(int): The number of entities.
-            num_relations(int): The number of relations.
-            special_tokens(Optional[SpecialPaddingTokens]): SpecialTokens
+            entity_embedding_dim(int): The dimensions of entity embedding.
+            relation_embedding_dim(int): The dimensions of relation embedding.
+            entity_num(int): The number of entities.
+            relation_num(int): The number of relations.
+            special_tokens(SpecialPaddingTokens|None): SpecialTokens
         """
         super().__init__()
         if special_tokens is not None:
@@ -48,8 +49,10 @@ class KGE_ERTails(torch.nn.Module, metaclass=abc.ABCMeta):
         else:
             padding_token_e, padding_token_r = None, None
 
-        self.emb_e = torch.nn.Embedding(num_entities, embedding_dim, padding_idx=padding_token_e)
-        self.emb_rel = torch.nn.Embedding(num_relations, embedding_dim, padding_idx=padding_token_r)
+        self.entity_num = entity_num
+        self.relation_num = relation_num
+        self.entity_embeddings = torch.nn.Embedding(entity_num, entity_embedding_dim, padding_idx=padding_token_e)
+        self.relation_embeddings = torch.nn.Embedding(relation_num, relation_embedding_dim, padding_idx=padding_token_r)
 
     @abc.abstractmethod
     def init(self) -> None:
@@ -80,18 +83,24 @@ class KGE_ERE(torch.nn.Module, metaclass=abc.ABCMeta):
 
     """
 
-    def __init__(self, embedding_dim, num_entities, num_relations, padding_token_e, padding_token_r):
-        """
+    def __init__(self, entity_embedding_dim, relation_embedding_dim, num_entities, num_relations, special_tokens):
+        """__init__
+
         Args:
-            embedding_dim: エンべディングの次数
-            num_entities: エンべディングの個数
-            num_relations: リレーションの個数
-            padding_token_e: パディングのトークンのid (エンべディング)
-            padding_token_r: パディングのトークンのid (リレーション)
+            entity_embedding_dim(int): The dimensions of entity embedding.
+            relation_embedding_dim(int): The dimensions of relation embedding.
+            num_entities(int): The number of entities.
+            num_relations(int): The number of relations.
+            special_tokens(SpecialPaddingTokens|None): SpecialTokens
         """
         super().__init__()
-        self.emb_e = torch.nn.Embedding(num_entities, embedding_dim, padding_idx=padding_token_e)
-        self.emb_rel = torch.nn.Embedding(num_relations, embedding_dim, padding_idx=padding_token_r)
+        if special_tokens is not None:
+            padding_token_e, padding_token_r = special_tokens.padding_token_e, special_tokens.padding_token_r
+        else:
+            padding_token_e, padding_token_r = None, None
+
+        self.entity_embeddings = torch.nn.Embedding(num_entities, entity_embedding_dim, padding_idx=padding_token_e)
+        self.relation_embeddings = torch.nn.Embedding(num_relations, relation_embedding_dim, padding_idx=padding_token_r)
 
     @abc.abstractmethod
     def init(self) -> None:
@@ -108,7 +117,7 @@ class KGE_ERE(torch.nn.Module, metaclass=abc.ABCMeta):
             torch.Tensor: The shape is (batch * entity_size).
 
         """
-        pass
+        raise NotImplementedError()
 
 
 class Complex(KGE_ERTails):
@@ -118,16 +127,16 @@ class Complex(KGE_ERTails):
     * "Convolutional 2D Knowledge Graph Embeddings"
 
     """
-    def __init__(self, args, num_entities, num_relations, special_tokens):
-        super(Complex, self).__init__(args.embedding_dim, num_entities, num_relations, special_tokens)
-        del self.emb_e, self.emb_rel
+    def __init__(self, args, entity_num, relation_num, special_tokens):
+        super(Complex, self).__init__(args.embedding_dim, args.embedding_dim, entity_num, relation_num, special_tokens)
+        del self.entity_embeddings, self.relation_embeddings
         embedding_dim = args.embedding_dim
         padding_idx_e, padding_idx_r = special_tokens.padding_token_e, special_tokens.padding_token_r
 
-        self.emb_e_real = torch.nn.Embedding(num_entities, embedding_dim, padding_idx=padding_idx_e)
-        self.emb_e_img = torch.nn.Embedding(num_entities, embedding_dim, padding_idx=padding_idx_e)
-        self.emb_rel_real = torch.nn.Embedding(num_relations, embedding_dim, padding_idx=padding_idx_r)
-        self.emb_rel_img = torch.nn.Embedding(num_relations, embedding_dim, padding_idx=padding_idx_r)
+        self.emb_e_real = torch.nn.Embedding(entity_num, embedding_dim, padding_idx=padding_idx_e)
+        self.emb_e_img = torch.nn.Embedding(entity_num, embedding_dim, padding_idx=padding_idx_e)
+        self.emb_rel_real = torch.nn.Embedding(relation_num, embedding_dim, padding_idx=padding_idx_r)
+        self.emb_rel_img = torch.nn.Embedding(relation_num, embedding_dim, padding_idx=padding_idx_r)
         self.inp_drop = torch.nn.Dropout(args.input_drop)
         self.loss = torch.nn.BCELoss()
 
@@ -173,8 +182,8 @@ class DistMult(KGE_ERTails):
     * "Convolutional 2D Knowledge Graph Embeddings"
 
     """
-    def __init__(self, args, num_entities, num_relations, special_tokens):
-        super(DistMult, self).__init__(args.embedding_dim, num_entities, num_relations, special_tokens)
+    def __init__(self, args, entity_num, relation_num, special_tokens):
+        super(DistMult, self).__init__(args.embedding_dim, entity_num, relation_num, special_tokens)
         self.inp_drop = torch.nn.Dropout(args.input_drop)
         self.loss = torch.nn.BCELoss()
 
@@ -182,31 +191,31 @@ class DistMult(KGE_ERTails):
         """init embeddings.
 
         """
-        xavier_normal_(self.emb_e.weight.data)
-        xavier_normal_(self.emb_rel.weight.data)
+        xavier_normal_(self.entity_embeddings.weight.data)
+        xavier_normal_(self.relation_embeddings.weight.data)
 
     def forward(self, x):
         """Forward function.
 
         """
         e1, rel = torch.split(x, 1, dim=1)
-        e1_embedded = self.emb_e(e1)
-        rel_embedded = self.emb_rel(rel)
+        e1_embedded = self.entity_embeddings(e1)
+        rel_embedded = self.relation_embeddings(rel)
         e1_embedded = e1_embedded.squeeze()
         rel_embedded = rel_embedded.squeeze()
 
         e1_embedded = self.inp_drop(e1_embedded)
         rel_embedded = self.inp_drop(rel_embedded)
 
-        pred = torch.mm(e1_embedded * rel_embedded, self.emb_e.weight.transpose(1, 0))
+        pred = torch.mm(e1_embedded * rel_embedded, self.entity_embeddings.weight.transpose(1, 0))
         pred = torch.sigmoid(pred)
 
         return pred
 
 
 class TransformerVer2E(KGE_ERTails):
-    def __init__(self, args, num_entities, num_relations, special_tokens, **kwargs):
-        super(TransformerVer2E, self).__init__(args.embedding_dim, num_entities, num_relations, special_tokens)
+    def __init__(self, args, entity_num, relation_num, special_tokens, **kwargs):
+        super(TransformerVer2E, self).__init__(args.embedding_dim, entity_num, relation_num, special_tokens)
         embedding_dim = args.embedding_dim
         input_drop = args.input_drop
         hidden_drop = args.hidden_drop
@@ -250,21 +259,21 @@ class TransformerVer2E(KGE_ERTails):
         self.bn02 = torch.nn.BatchNorm1d(embedding_dim)
         self.activate3 = torch.nn.GELU()
         self.mm = MM()
-        self.b = Parameter(torch.zeros(num_entities))
+        self.b = Parameter(torch.zeros(entity_num))
         self.sigmoid1 = torch.nn.Sigmoid()
 
     def init(self):
-        xavier_normal_(self.emb_e.weight.data)
-        xavier_normal_(self.emb_rel.weight.data)
+        xavier_normal_(self.entity_embeddings.weight.data)
+        xavier_normal_(self.relation_embeddings.weight.data)
 
     def get_cls_emb_e(self) -> torch.Tensor:
-        return self.emb_e(self.cls_token_num)
+        return self.entity_embeddings(self.cls_token_num)
 
     def get_emb_e(self, e1) -> torch.Tensor:
-        return self.emb_e(e1)
+        return self.entity_embeddings(e1)
 
     def get_emb_rel(self, rel) -> torch.Tensor:
-        return self.emb_rel(rel)
+        return self.relation_embeddings(rel)
 
     def encoding(self, x: torch.Tensor) -> torch.Tensor:
         x = self.pos_encoder(x)
@@ -298,7 +307,7 @@ class TransformerVer2E(KGE_ERTails):
         x = self.bn02(x)
         x = self.activate3(x)
         # check tail embedding
-        x = self.mm(x, self.emb_e.weight.transpose(1, 0))
+        x = self.mm(x, self.entity_embeddings.weight.transpose(1, 0))
         x += self.b.expand_as(x)
         pred = self.sigmoid1(x)
 
@@ -306,7 +315,7 @@ class TransformerVer2E(KGE_ERTails):
 
 
 class TransformerVer3E(KGE_ERTails):
-    def __init__(self, args, num_entities, num_relations, data_helper, **kwargs):
+    def __init__(self, args, entity_num, relation_num, data_helper, **kwargs):
         from models.pytorch_geometric import make_geodata, separate_triples
 
         embedding_dim = args.embedding_dim
@@ -337,7 +346,7 @@ class TransformerVer3E(KGE_ERTails):
         assert args.relation_special_num >= 3
 
         super(TransformerVer3E, self).__init__(
-            embedding_dim, num_entities, num_relations, padding_token_e, padding_token_r)
+            embedding_dim, entity_num, relation_num, padding_token_e, padding_token_r)
 
         self.padding_token_e = padding_token_e
         self.cls_token_e = cls_token_e
@@ -346,8 +355,8 @@ class TransformerVer3E(KGE_ERTails):
         self.cls_token_r = cls_token_r
         self.self_loop_token_r = self_loop_token_r
 
-        self.num_entities = num_entities
-        self.num_relations = num_relations
+        self.num_entities = entity_num
+        self.num_relations = relation_num
         self.loss = torch.nn.BCELoss()
 
         geo_data = make_geodata(data_helper=data_helper, is_del_reverse=False, is_add_self_loop=False,
@@ -377,23 +386,23 @@ class TransformerVer3E(KGE_ERTails):
         self.fc = torch.nn.Linear(embedding_dim, embedding_dim)
         self.hidden_drop = torch.nn.Dropout(hidden_drop)
         # self.bn2 = torch.nn.BatchNorm1d(embedding_dim)
-        self.b = Parameter(torch.zeros(num_entities))
+        self.b = Parameter(torch.zeros(entity_num))
 
     def init(self):
-        xavier_normal_(self.emb_e.weight.data)
-        xavier_normal_(self.emb_rel.weight.data)
+        xavier_normal_(self.entity_embeddings.weight.data)
+        xavier_normal_(self.relation_embeddings.weight.data)
 
     def get_cls_emb_e(self):
-        return self.emb_e.weight[self.cls_token_e]
+        return self.entity_embeddings.weight[self.cls_token_e]
 
     def get_cls_emb_r(self):
-        return self.emb_rel.weight[self.cls_token_r]
+        return self.relation_embeddings.weight[self.cls_token_r]
 
     def get_emb_e(self, e1):
-        return self.emb_e(e1)
+        return self.entity_embeddings(e1)
 
     def get_emb_rel(self, rel):
-        return self.emb_rel(rel)
+        return self.relation_embeddings(rel)
 
     def add_cls(self, _tensor, batch_size, cls_token):
         device = self.device
@@ -444,15 +453,15 @@ class TransformerVer3E(KGE_ERTails):
         x = self.hidden_drop(x)
         # x = self.bn2(x)
         x = F.relu(x)
-        x = torch.mm(x, self.emb_e.weight.transpose(1, 0))
+        x = torch.mm(x, self.entity_embeddings.weight.transpose(1, 0))
         x += self.b.expand_as(x)
         pred = torch.sigmoid(x)
         return pred
 
 
 class TransformerVer3E_1(TransformerVer3E):
-    def __init__(self, args, num_entities, num_relations, data_helper, **kwargs):
-        super(TransformerVer3E_1, self).__init__(args, num_entities, num_relations, data_helper, **kwargs)
+    def __init__(self, args, entity_num, relation_num, data_helper, **kwargs):
+        super(TransformerVer3E_1, self).__init__(args, entity_num, relation_num, data_helper, **kwargs)
         del self.pos_encoder, self.transformer_encoder, self.fc
 
         embedding_dim = args.embedding_dim
@@ -475,8 +484,8 @@ class TransformerVer3E_1(TransformerVer3E):
 
 
 class MlpMixE(TransformerVer2E):
-    def __init__(self, args, num_entities, num_relations, **kwargs):
-        super(MlpMixE, self).__init__(args, num_entities, num_relations, **kwargs)
+    def __init__(self, args, entity_num, relation_num, **kwargs):
+        super(MlpMixE, self).__init__(args, entity_num, relation_num, **kwargs)
         del self.transformer_encoder
         embedding_dim = args.embedding_dim
         num_layers = args.num_layers

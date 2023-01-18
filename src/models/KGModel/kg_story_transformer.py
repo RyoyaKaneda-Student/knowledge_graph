@@ -100,8 +100,8 @@ class KgStoryTransformerLabelInit(KgStoryTransformer, ABC):
         if not args.init_embedding_using_bert:
             return
         device = args.device
-        assert self.entity_embedding_dim == 768, \
-            f"The entity_embedding_dim must 768 but self.entity_embedding_dim=={self.entity_embedding_dim}"
+        embedding_dim, num_embeddings = self.entity_embeddings.embedding_dim, self.entity_embeddings.num_embeddings
+        assert embedding_dim == 768, f"The entity_embedding_dim must 768 but entity_embedding_dim=={embedding_dim}"
 
         data_helper: MyDataHelper = kwargs['data_helper']
         bert_model = BertModel.from_pretrained('bert-base-uncased')
@@ -111,17 +111,25 @@ class KgStoryTransformerLabelInit(KgStoryTransformer, ABC):
             "[CLS] {}".format(x) if x != '' else '' for x in data_helper.processed_entities_label]
         result = tokenizer.batch_encode_plus(processed_entities_label, add_special_tokens=False)
         input_ids_list = result['input_ids']
-        bert_model.eval()
+
         with torch.no_grad():
+            # get pre_embeddings
+            bert_model.eval()
             entity_embeddings_list = [
                 bert_model(torch.tensor([input_ids]).to(device))[0][0, 0].to('cpu') if len(input_ids) > 1 else None
                 for input_ids in tqdm(input_ids_list)]
-
-            entity_embeddings_filter = [True if x is not None else False for x in entity_embeddings_list]
+            entity_embeddings_filter = torch.tensor([True if x is not None else False for x in entity_embeddings_list])
             entity_embeddings_list = [x for x in entity_embeddings_list if x is not None]
-
+            entity_embeddings_tensor = torch.stack(entity_embeddings_list)
             pre_embeddings = torch.stack(entity_embeddings_list)
+            # get setting parameters using pre_embeddings.
+            pre_embedding_mean = torch.mean(entity_embeddings_tensor).item()
+            pre_embedding_mean_var = torch.var(entity_embeddings_tensor).item()
+            num_pre_emb = pre_embeddings.shape[0]
+            # set parameters
             self.entity_embeddings.weight[entity_embeddings_filter] = pre_embeddings
+            self.entity_embeddings.weight[~entity_embeddings_filter] = torch.normal(
+                pre_embedding_mean, pre_embedding_mean_var, size=(num_embeddings-num_pre_emb, embedding_dim))
 
 
 class KgStoryTransformer00(KgStoryTransformer):

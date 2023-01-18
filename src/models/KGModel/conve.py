@@ -23,8 +23,8 @@ class ConvE(KGE_ERTails):
 
 
     """
-    def __init__(self, args, num_entities, num_relations, special_tokens):
-        super(ConvE, self).__init__(args.embedding_dim, num_entities, num_relations, special_tokens)
+    def __init__(self, args, entity_num, relation_num, special_tokens):
+        super(ConvE, self).__init__(args.embedding_dim, entity_num, relation_num, special_tokens)
         embedding_dim = args.embedding_dim
         input_drop = args.input_drop
         hidden_drop = args.hidden_drop
@@ -45,7 +45,7 @@ class ConvE(KGE_ERTails):
         self.bn1 = torch.nn.BatchNorm2d(32)
         self.bn2 = torch.nn.BatchNorm1d(embedding_dim)
 
-        self.b = Parameter(torch.zeros(num_entities))
+        self.b = Parameter(torch.zeros(entity_num))
         self.fc = torch.nn.Linear(hidden_size, embedding_dim)
 
     def init(self):
@@ -54,16 +54,16 @@ class ConvE(KGE_ERTails):
         Returns:
 
         """
-        xavier_normal_(self.emb_e.weight.data)
-        xavier_normal_(self.emb_rel.weight.data)
+        xavier_normal_(self.entity_embeddings.weight.data)
+        xavier_normal_(self.relation_embeddings.weight.data)
 
     def forward(self, x):
         """Forward function
 
         """
         e1, rel = torch.split(x, 1, dim=1)
-        e1_embedded = self.emb_e(e1).view(-1, 1, self.emb_dim1, self.emb_dim2)
-        rel_embedded = self.emb_rel(rel).view(-1, 1, self.emb_dim1, self.emb_dim2)
+        e1_embedded = self.entity_embeddings(e1).view(-1, 1, self.emb_dim1, self.emb_dim2)
+        rel_embedded = self.relation_embeddings(rel).view(-1, 1, self.emb_dim1, self.emb_dim2)
 
         stacked_inputs = torch.cat([e1_embedded, rel_embedded], 2)
 
@@ -78,7 +78,7 @@ class ConvE(KGE_ERTails):
         x = self.hidden_drop(x)
         x = self.bn2(x)
         x = F.relu(x)
-        x = torch.mm(x, self.emb_e.weight.transpose(1, 0))
+        x = torch.mm(x, self.entity_embeddings.weight.transpose(1, 0))
         x += self.b.expand_as(x)
         pred = torch.sigmoid(x)
 
