@@ -14,9 +14,9 @@ from torch.nn import Embedding, Linear, Sequential
 # from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torch.nn import TransformerEncoderLayer, TransformerEncoder
 from transformers import BertTokenizer, BertModel
-
-from models.utilModules.tranformer import PositionalEncoding
-
+# my modules
+from models.utilModules.tranformer import PositionalEncoding, Feedforward
+# my utils
 from utils.utils import tqdm
 
 LINEAR: Final = 'linear'
@@ -30,26 +30,7 @@ TAIL_MASKED_LM: Final = 'tail_maskdlm'
 WEIGHT_HEAD: Final = 'weight_head'
 WEIGHT_RELATION: Final = 'weight_relation'
 WEIGHT_TAIL: Final = 'weight_tail'
-
-
-def add_bos(triple: np.ndarray, bos_token_h, bos_token_r, bos_token_t, ):
-    array_bos = np.array([[bos_token_h, bos_token_r, bos_token_t]])
-    new_triple_list = [np.stack(list(g)) for _, g in itertools.groupby(triple, lambda _hrt: _hrt[0])]
-    new_triple = np.concatenate(list(itertools.chain(*[(array_bos, _tmp) for _tmp in new_triple_list])))
-    return new_triple
-
-
-class Feedforward(torch.nn.Module):
-    def __init__(self, d_model_in, d_model_out, dim_feedforward=None, activation=torch.nn.GELU(), add_norm=True):
-        super().__init__()
-        dim_feedforward = dim_feedforward or d_model_out
-        self.linear1 = Linear(d_model_in, dim_feedforward, bias=(not add_norm))
-        self.norm = torch.nn.LayerNorm([dim_feedforward]) if add_norm else torch.nn.Identity()
-        self.activation = activation
-        self.linear2 = Linear(dim_feedforward, d_model_out)
-
-    def forward(self, x: torch.Tensor):
-        return self.linear2(self.activation(self.norm(self.linear1(x))))
+ALL_WEIGHT_LIST = (WEIGHT_HEAD, WEIGHT_RELATION, WEIGHT_TAIL)
 
 
 class KgStoryTransformer(nn.Module, metaclass=ABCMeta):
@@ -127,7 +108,7 @@ class KgStoryTransformerLabelInit(KgStoryTransformer, ABC):
         bert_model.to(device)
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         processed_entities_label = [
-            "[CLS] {}".format(x) if x is not '' else '' for x in data_helper.processed_entities_label]
+            "[CLS] {}".format(x) if x != '' else '' for x in data_helper.processed_entities_label]
         result = tokenizer.batch_encode_plus(processed_entities_label, add_special_tokens=False)
         input_ids_list = result['input_ids']
         bert_model.eval()

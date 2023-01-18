@@ -27,9 +27,9 @@ from utils.hdf5 import del_data_if_exist, str_list_for_hdf5
 from utils.setup import easy_logger
 from utils.typing import ConstMeta
 from utils.utils import get_pure_path
+# get PROJECT_DIR
+from const.const_values import PROJECT_DIR
 
-PROJECT_DIR = Path(__file__).resolve().parents[2]
-print(f"{PROJECT_DIR=}")
 
 DATA_FOLDER_PATH: Final = f"{PROJECT_DIR}/data/external/KGRC-RDF"
 WRITE1_FILE_PATH: Final = f"{PROJECT_DIR}/data/external/KGCdata/story_list.hdf5"
@@ -37,8 +37,6 @@ WRITE2_SVO_INFO_FILE: Final = lambda title: f"{PROJECT_DIR}/data/processed/KGCda
 WRITE2_SVO_TRAIN_FILE: Final = lambda title: f"{PROJECT_DIR}/data/processed/KGCdata/{title}/SVO/train.hdf5"
 WRITE2_SRO_INFO_FILE: Final = lambda title: f"{PROJECT_DIR}/data/processed/KGCdata/{title}/SRO/info.hdf5"
 WRITE2_SRO_TRAIN_FILE: Final = lambda title: f"{PROJECT_DIR}/data/processed/KGCdata/{title}/SRO/train.hdf5"
-WRITE2_SRO_ALL_TAIL_FILE: Final = lambda title: f"{PROJECT_DIR}/data/processed/KGCdata/{title}/SVO/all_tail.hdf5"
-
 
 URL_DATA: Final = "http://kgc.knowledge-graph.jp/data"
 URL_PREDICATE: Final = "http://kgc.knowledge-graph.jp/data/predicate/"
@@ -134,7 +132,7 @@ class KGC(DefinedNamespace):
         return cls._NS['if']
 
 
-ALL_RELATION = [
+ALL_RELATION: Final = [
     'rdf:type', 'kgc:subject', 'kgc:ActionOption', 'kgc:Not', 'kgc:RelationBetweenScene', 'kgc:SceneObjectProperty',
     'kgc:SceneProperty', 'kgc:TargetObjProperty', 'kgc:adjunct', 'kgc:around', 'kgc:at_the_same_time',
     'kgc:because', 'kgc:can', 'kgc:canNot', 'kgc:from', 'kgc:hasPart', 'kgc:hasPredicate', 'kgc:hasProperty', 'kgc:how',
@@ -671,8 +669,8 @@ def write2_write_triples(fw_info, fw_train, entity_list, entity_label_list, rela
         relation_list(list[str]): relation_list
         relation_label_list(list[str]): relation_label_list
         is_rev_list(np.ndarray): is_rev_list
-        triple(str): triple
-        triple_raw(str): triple_raw
+        triple(np.ndarray): triple
+        triple_raw(np.ndarray): triple_raw
 
     """
     #

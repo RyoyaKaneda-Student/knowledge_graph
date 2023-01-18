@@ -104,7 +104,6 @@ class TRAIN_INDEX(metaclass=ConstMeta):
         )
 
 
-# about tokens
 class DefaultTokens(metaclass=ConstMeta):
     """DefaultTokens const parameters.
     """

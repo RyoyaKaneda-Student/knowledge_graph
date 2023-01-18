@@ -102,6 +102,19 @@ class EternalGenerator(Generic[_T]):
                 self.queue_ = iter(self.queue_generator())
 
 
+def which_is_True(*args):
+    """select
+
+    Args:
+        args: The list which has True object.
+
+    Returns:
+        int: the n of True index.
+
+    """
+    return list(*args).index(True)
+
+
 def dict_to_list(dict_: dict[int, _T]) -> list[_T]:
     for key in dict_:
         assert type(key) is int

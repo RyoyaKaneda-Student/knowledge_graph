@@ -1,29 +1,21 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-""" TransE だいたいこんな感じじゃないですかね? コード
-です.
-assert はテストにおいて確認および間違いを弾くためのスクリプトです.
-本番実行時には -O にて無視させてください. 詳しくは調べてね.
+"""TransE だいたいこんな感じじゃないですかね? コード
 
-from typing あたりも実行時にはそんなに関係ありません. 詳しくは調べてね.
-参考にしたソースコード: https://github.com/HazyResearch/KGEmb
-
-テストソースコードがありますが, そちらは Dataset, Dataloader などについては何も考慮しておりません. 実行時は注意.
-一般的に, 本タスクの精度の確認は
-MRR(https://qiita.com/tmasao/items/73388948af77105e30c8), top_k(k=1, 3, 10)
-を用いることが多いです. ちょっとこちらはまだまとめられておりません, todo ですね.
-資料に書く可能性もあるので簡単に調べてなんとなく雰囲気を掴んでおくといいかと思います.
-
-分からないことは金田まで.
 """
+# noinspection PyUnresolvedReferences
+from typing import List, Dict, Tuple, Optional, Union, Callable, Literal, Final, get_args
+# pytorch
 import torch
 import torch.nn.functional as F
 
-# noinspection PyUnresolvedReferences
-from typing import List, Dict, Tuple, Optional, Union, Callable, Literal, Final, get_args
+# 定数およびリテラル
+MODEL_MODE_Literal = Literal['train.batch', 'test.batch']
+TRAIN_MODE: Final = 'train.batch'
+TEST_MODE: Final = 'test.batch'
 
 
-# テストに飲み用いる簡単な関数
+# テストにのみ用いる簡単な関数
 def all_same(*args):
     """
     return True if all item in args is same value.
@@ -40,31 +32,15 @@ def all_same(*args):
     return True
 
 
-# 定数およびリテラル
-MODEL_MODE_Literal = Literal['train.batch', 'test.batch']
-TRAIN_MODE: Final = 'train.batch'
-TEST_MODE: Final = 'test.batch'
-if not get_args(MODEL_MODE_Literal) == (TRAIN_MODE, TEST_MODE):
-    raise ValueError("MODEL_MODE.values == \t\t\t{}\n(TRAIN_MODE, TEST_MODE) == \t{}".format(
-        get_args(MODEL_MODE_Literal), (TRAIN_MODE, TEST_MODE)
-    ))
-
-
 class TransE(torch.nn.Module):
-    """ TransE モデル
-    こちらはとりあえず作ってみた TransE モデルです.
-
-    Link Prediction Task でのテストのときには, すべての tail に対する score が欲しいです.
-    なぜなら, どの tail が tail として最もふさわしいか, また正しい tail が何番目に tail としてふさわしいかを推定させる必要があるからです.
-    なので, そのためにモデルを動かす際にはモードに関する変数が必須となります.
-    正直言いますと, bias 項についてはあまり分かっておりません. わからんけど多分いるんだと思います. 元のソースコードをパクったので.
+    """ TransE
 
     """
     def __init__(self, entity_num, relation_num, emb_dim):
         """
 
         Args:
-            entity_num(int): エンティティ数
+            entity_num(int): the number of entiy
             relation_num(int): リレーション数
             emb_dim(int): エンベディングの次元数
         """

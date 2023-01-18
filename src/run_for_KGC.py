@@ -9,17 +9,16 @@ Todo:
     * 色々
 
 """
-from argparse import Namespace
 # ========== python ==========
+from argparse import Namespace
 from itertools import chain
 from logging import Logger
-from pathlib import Path
-# noinspection PyUnresolvedReferences
-from typing import List, Dict, Tuple, Optional, Union, Callable, Final, Literal, get_args, cast, Sequence, TypedDict
+from operator import itemgetter
+from typing import Optional, Callable, Final, cast, Sequence
 # Machine learning
-import h5py
 import numpy as np
 import pandas as pd
+import h5py
 import optuna
 # torch
 import torch
@@ -29,113 +28,48 @@ from torch.utils.data.dataloader import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
 # torch ignite
 from ignite.contrib.handlers.tqdm_logger import ProgressBar
-from ignite.engine import Engine, Events
-from ignite.handlers import Timer, Checkpoint, global_step_from_engine, DiskSaver
+from ignite.engine import Engine
+from ignite.handlers import Checkpoint
 from ignite.metrics import Average, Accuracy
+
+# My const words about words used as tags
+from models.KGModel.kg_story_transformer import (
+    ALL_WEIGHT_LIST, HEAD_MASKED_LM, TAIL_MASKED_LM, RELATION_MASKED_LM, )
 # My Models
 from models.KGModel.kg_story_transformer import (
-    KgStoryTransformer01, KgStoryTransformer02, add_bos, KgStoryTransformer03, KgStoryTransformer03preInit,
-    KgStoryTransformer00, KgStoryTransformer, HEAD_MASKED_LM, TAIL_MASKED_LM, RELATION_MASKED_LM, )
+    KgStoryTransformer01, KgStoryTransformer02, KgStoryTransformer03, KgStoryTransformer03preInit,
+    KgStoryTransformer00, KgStoryTransformer)
 from models.datasets.data_helper import (
     MyDataHelper, DefaultTokens, DefaultIds, SpecialTokens01 as SpecialTokens, MyDataLoaderHelper, )
-from models.datasets.datasets import (
-    StoryTriple, StoryTripleForValid, )
-# My utils
+from models.datasets.datasets_for_story import add_bos, StoryTriple, StoryTripleForValid
 from models.utilLoss.focal_loss import FocalLoss, GAMMA
 from models.utilLoss.utils import LossFnName
-from utils.error import UnderDevelopmentError
-from utils.torch import save_model, torch_fix_seed, DeviceName, force_cpu_decorator
+# My utils
 from utils.typing import ConstMeta
-from utils.utils import version_check, elapsed_time_str
-
-PROJECT_DIR = Path(__file__).resolve().parents[1]
-
-# About words used as tags
-CPU: Final[str] = 'cpu'
-TRAIN: Final[str] = 'train'
-PRE_TRAIN: Final[str] = 'pre_train'
-TEST: Final[str] = 'test'
-MRR: Final[str] = 'mrr'
-HIT_: Final[str] = 'hit_'
-STUDY: Final[str] = 'study'
-MODEL: Final[str] = 'model'
-PARAMS: Final[str] = 'params'
-LR: Final[str] = 'lr'
-OPTIMIZER: Final[str] = 'optimizer'
-TRAINER: Final[str] = 'trainer'
-EVALUATOR: Final[str] = 'evaluator'
-CHECKPOINTER: Final[str] = 'checkpointer'
-CHECKPOINTER_GOOD_LOSS: Final[str] = 'checkpointer_good_loss'
-CHECKPOINTER_LAST: Final[str] = 'checkpointer_last'
-DATA_HELPER: Final[str] = 'data_helper'
-DATA_LOADERS: Final[str] = 'data_loaders'
-DATASETS: Final[str] = 'datasets'
-TRAIN_RETURNS: Final[str] = 'train_returns'
-# about loss tags
-LOSS: Final[str] = 'loss'
-STORY_LOSS: Final[str] = 'story_loss'
-RELATION_LOSS: Final[str] = 'relation_loss'
-OBJECT_LOSS: Final[str] = 'entity_loss'
-LOSS_NAME3: Final[tuple[str, str, str]] = (STORY_LOSS, RELATION_LOSS, OBJECT_LOSS)
-# about pred tags
-STORY_PRED: Final[str] = 'story_pred'
-RELATION_PRED: Final[str] = 'relation_pred'
-ENTITY_PRED: Final[str] = 'entity_pred'
-PRED_NAME3: Final[tuple[str, str, str]] = (STORY_PRED, RELATION_PRED, ENTITY_PRED)
-# about answer tags
-STORY_ANS: Final[str] = 'story_ans'
-RELATION_ANS: Final[str] = 'relation_ans'
-OBJECT_ANS: Final[str] = 'object_ans'
-ANS_NAME3: Final[tuple[str, str, str]] = (STORY_ANS, RELATION_ANS, OBJECT_ANS)
-# about accuracy tags
-STORY_ACCURACY: Final[str] = 'story_accuracy'
-RELATION_ACCURACY: Final[str] = 'relation_accuracy'
-ENTITY_ACCURACY: Final[str] = 'entity_accuracy'
-ACCURACY_NAME3: Final[tuple[str, str, str]] = (STORY_ACCURACY, RELATION_ACCURACY, ENTITY_ACCURACY)
-# about metric tags
-METRIC_NAMES: Final[tuple[str, str, str, str, str, str, str]] = (
-    LOSS, STORY_LOSS, RELATION_LOSS, OBJECT_LOSS, STORY_ACCURACY, RELATION_ACCURACY, ENTITY_ACCURACY)
-# about all title
-ACaseOfIdentity: Final[str] = 'ACaseOfIdentity'
-AbbeyGrange: Final[str] = 'AbbeyGrange'
-CrookedMan: Final[str] = 'CrookedMan'
-DancingMen: Final = 'DancingMen'
-DevilsFoot: Final[str] = 'DevilsFoot'
-ResidentPatient: Final[str] = 'ResidentPatient'
-SilverBlaze: Final[str] = 'SilverBlaze'
-SpeckledBand: Final[str] = 'SpeckledBand'
-ALL_TITLE_LIST: Final = (
-    ACaseOfIdentity, AbbeyGrange, CrookedMan, DancingMen, DevilsFoot, ResidentPatient, SilverBlaze, SpeckledBand
+from utils.error import UnderDevelopmentError
+from utils.torch import save_model, torch_fix_seed, DeviceName
+from utils.torch_ignite import (
+    set_write_model_param_function, set_start_epoch_function, set_end_epoch_function,
+    set_valid_function, training_with_ignite
 )
-# about wards
-ABOUT_KILL_WORDS: Final[tuple[str, str, str]] = (
-    'word.predicate:kill', 'word.predicate:notKill', 'word.predicate:beKilled')
-# about file and folder path
-SRO_FOLDER: Final[str] = "data/processed/KGCdata/All/SRO"
-SRO_ALL_INFO_FILE: Final[str] = f"{SRO_FOLDER}/info.hdf5"
-SRO_ALL_TRAIN_FILE: Final[str] = f"{SRO_FOLDER}/train.hdf5"
-TITLE2FILE090: Final[dict[str, str]] = {
-    ACaseOfIdentity: f"{SRO_FOLDER}/train_AbbeyGrange_l090.hdf5",
-    AbbeyGrange: f"{SRO_FOLDER}/train_ACaseOfIdentity_l090.hdf5",
-    CrookedMan: f"{SRO_FOLDER}/train_CrookedMan_l090.hdf5",
-    DancingMen: f"{SRO_FOLDER}/train_DancingMen_l090.hdf5",
-    DevilsFoot: f"{SRO_FOLDER}/train_DevilsFoot_l090.hdf5",
-    ResidentPatient: f"{SRO_FOLDER}/train_ResidentPatient_l090.hdf5",
-    SilverBlaze: f"{SRO_FOLDER}/train_SilverBlaze_l090.hdf5",
-    SpeckledBand: f"{SRO_FOLDER}/train_SpeckledBand_l090.hdf5",
-}
-TITLE2FILE075: Final[dict[str, str]] = {
-    'AbbeyGrange': f"{SRO_FOLDER}/train_AbbeyGrange_l075.hdf5",
-    'ACaseOfIdentity': f"{SRO_FOLDER}/train_ACaseOfIdentity_l075.hdf5",
-    'CrookedMan': f"{SRO_FOLDER}/train_CrookedMan_l075.hdf5",
-    'DancingMen': f"{SRO_FOLDER}/train_DancingMen_l075.hdf5",
-    'DevilsFoot': f"{SRO_FOLDER}/train_DevilsFoot_l075.hdf5",
-    'ResidentPatient': f"{SRO_FOLDER}/train_ResidentPatient_l075.hdf5",
-    'SilverBlaze': f"{SRO_FOLDER}/train_SilverBlaze_l075.hdf5",
-    'SpeckledBand': f"{SRO_FOLDER}/train_SpeckledBand_l075.hdf5"
-}
-MOST_GOOD_CHECKPOINT_PATH: Final[str] = '{}/most_good/'
-LATEST_CHECKPOINT_PATH: Final[str] = '{}/most_good/'
+from utils.utils import version_check
+# My const words about file direction and title
+from const.const_values import (
+    PROJECT_DIR,
+    ALL_TITLE_LIST, SRO_ALL_TRAIN_FILE, SRO_ALL_INFO_FILE, TITLE2SRO_FILE090, TITLE2SRO_FILE075, ABOUT_KILL_WORDS,
+)
+# My const words about words used as tags
+from const.const_values import (CPU, MODEL, LOSS, PARAMS, LR,
+                                DATA_HELPER, DATASETS, DATA_LOADERS, TRAIN_RETURNS,
+                                STORY_LOSS, RELATION_LOSS, OBJECT_LOSS,
+                                STORY_ACCURACY, RELATION_ACCURACY, ENTITY_ACCURACY,
+                                STORY_ANS, RELATION_ANS, OBJECT_ANS,
+                                STORY_PRED, RELATION_PRED, ENTITY_PRED,
+                                PRE_TRAIN_SCALER_TAG_GETTER, PRE_VALID_SCALER_TAG_GETTER,
+                                PRE_TRAIN_MODEL_WEIGHT_TAG_GETTER,
+                                METRIC_NAMES)
+# My const value about torch ignite
+from utils.torch_ignite import (TRAINER, EVALUATOR, GOOD_LOSS_CHECKPOINTE, LAST_CHECKPOINTE)
 
 
 class ModelVersion(metaclass=ConstMeta):
@@ -298,6 +232,31 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
     return args
 
 
+def get_all_tokens(args: Namespace):
+    """get all_tokens
+
+    Args:
+        args(Namespace):
+
+    Returns:
+        tuple[tuple[int, int], tuple[int, int], tuple[int, int], tuple[int, int], tuple[int, int]]:
+            (
+                (pad_token_e, pad_token_r), (cls_token_e, cls_token_r), (mask_token_e, mask_token_r),
+                (sep_token_e, sep_token_r), (bos_token_e, bos_token_r)
+            )
+
+    """
+    pad_token_e, pad_token_r = args.padding_token_e, args.padding_token_r
+    cls_token_e, cls_token_r = args.cls_token_e, args.cls_token_r
+    mask_token_e, mask_token_r = args.mask_token_e, args.mask_token_r
+    sep_token_e, sep_token_r = args.sep_token_e, args.sep_token_r
+    bos_token_e, bos_token_r = args.bos_token_e, args.bos_token_r
+    return (
+        (pad_token_e, pad_token_r), (cls_token_e, cls_token_r), (mask_token_e, mask_token_r),
+        (sep_token_e, sep_token_r), (bos_token_e, bos_token_r)
+    )
+
+
 def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger, summary_writer) -> dict:
     """pre training function.
 
@@ -308,7 +267,7 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         hyper_params(tuple): hyper parameters.
         data_helper(MyDataHelper): MyDataHelper instance.
         data_loaders(MyDataLoaderHelper): MyDataLoaderHelper instance. It has .train_dataloader and .valid_dataloader.
-        model(KgStoryTransformer01): model.
+        model(KgStoryTransformer): model.
         summary_writer(SummaryWriter): tensorboard's SummaryWriter instance. if it is None, don't write to tensorboard.
         logger(Logger): logging.Logger.
 
@@ -324,6 +283,10 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
     max_epoch = args.epoch
     mask_token_e, mask_token_r = args.mask_token_e, args.mask_token_r
     checkpoint_dir = args.checkpoint_dir
+    resume_checkpoint_path = args.resume_checkpoint_path
+    is_resume_from_checkpoint = args.resume_from_checkpoint
+    is_resume_from_last_point = args.resume_from_last_point
+
     non_blocking = True
 
     # optional function
@@ -382,9 +345,11 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
     train = data_loaders.train_dataloader
     valid = data_loaders.valid_dataloader if args.train_valid_test else None
     train_triple = train.dataset.triple
-    index2count_head = torch.bincount(train_triple[:, 0], minlength=entity_num).to(torch.float).to(device)
-    index2count_relation = torch.bincount(train_triple[:, 1], minlength=relation_num).to(torch.float).to(device)
-    index2count_tail = torch.bincount(train_triple[:, 2], minlength=entity_num).to(torch.float).to(device)
+    # count frequency list
+    head_index2count = torch.bincount(train_triple[:, 0], minlength=entity_num).to(torch.float).to(device)
+    relation_index2count = torch.bincount(train_triple[:, 1], minlength=relation_num).to(torch.float).to(device)
+    tail_index2count = torch.bincount(train_triple[:, 2], minlength=entity_num).to(torch.float).to(device)
+
     # optimizer setting
     modules = {_name: _module for _name, _module in model.named_children()}
     del modules[HEAD_MASKED_LM], modules[RELATION_MASKED_LM], modules[TAIL_MASKED_LM]
@@ -429,11 +394,11 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         triple: torch.Tensor = triple.to(device, non_blocking=non_blocking)
 
         mask_filter_story, mask_ans_story, mask_value_story = mask_function(
-            torch.rand((batch_size, max_len)), triple[:, :, 0], mask_token_e, index2count_head)
+            torch.rand((batch_size, max_len)), triple[:, :, 0], mask_token_e, head_index2count)
         mask_filter_relation, mask_ans_relation, mask_value_relation = mask_function(
-            torch.rand((batch_size, max_len)), triple[:, :, 1], mask_token_r, index2count_relation)
+            torch.rand((batch_size, max_len)), triple[:, :, 1], mask_token_r, relation_index2count)
         mask_filter_object, mask_ans_object, mask_value_object = mask_function(
-            torch.rand((batch_size, max_len)), triple[:, :, 2], mask_token_e, index2count_tail)
+            torch.rand((batch_size, max_len)), triple[:, :, 2], mask_token_e, tail_index2count)
 
         triple[:, :, 0][mask_filter_story] = mask_value_story
         triple[:, :, 1][mask_filter_relation] = mask_value_relation
@@ -472,6 +437,7 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         }
         return return_dict
 
+    # main valid step
     @torch.no_grad()
     def valid_step(_, batch) -> dict:
         """valid step
@@ -527,223 +493,55 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         }
         return return_dict
 
-    model.to(device)
-    trainer, evaluator = Engine(train_step), Engine(valid_step)
-    [ProgressBar().attach(_e) for _e in (trainer, evaluator)]
+    def set_engine_metrix(_step: Callable) -> tuple[Engine, dict]:
+        """This is the function to set engine and metrix.
 
-    # loss and average of trainer
-    trainer_matrix = {
-        LOSS: Average(lambda x: x[LOSS]),
-        STORY_LOSS: Average(lambda x: x[STORY_LOSS]),
-        RELATION_LOSS: Average(lambda x: x[RELATION_LOSS]),
-        OBJECT_LOSS: Average(lambda x: x[OBJECT_LOSS]),
-        STORY_ACCURACY: Accuracy(lambda x: (x[STORY_PRED], x[STORY_ANS])),
-        RELATION_ACCURACY: Accuracy(lambda x: (x[RELATION_PRED], x[RELATION_ANS])),
-        ENTITY_ACCURACY: Accuracy(lambda x: (x[ENTITY_PRED], x[OBJECT_ANS]))
-    }
-    logger.debug(f"----- add trainer matrix start -----")
-    for key, value in trainer_matrix.items():
-        value.attach(trainer, key)
-        logger.debug(f"add trainer matrix: {key}")
-    logger.debug(f"----- add trainer matrix end -----")
-    # loss and average of evaluator
-    if args.train_valid_test:
-        valid_matrix = {
-            LOSS: Average(lambda x: x[LOSS]),
-            STORY_LOSS: Average(lambda x: x[STORY_LOSS]),
-            RELATION_LOSS: Average(lambda x: x[RELATION_LOSS]),
-            OBJECT_LOSS: Average(lambda x: x[OBJECT_LOSS]),
-            STORY_ACCURACY: Accuracy(lambda x: (x[STORY_PRED], x[STORY_ANS])),
-            RELATION_ACCURACY: Accuracy(lambda x: (x[RELATION_PRED], x[RELATION_ANS])),
-            ENTITY_ACCURACY: Accuracy(lambda x: (x[ENTITY_PRED], x[OBJECT_ANS]))
+        Args:
+            _step(Callable): step function.
+
+        Returns:
+            tuple[Engine, dict]: Engine and matrix dict.
+
+        """
+        _engine = Engine(_step)
+        ProgressBar().attach(_engine)
+        # loss and average of trainer
+        _matrix = {
+            LOSS: Average(itemgetter(LOSS)),
+            STORY_LOSS: Average(itemgetter(STORY_LOSS)),
+            RELATION_LOSS: Average(itemgetter(RELATION_LOSS)),
+            OBJECT_LOSS: Average(itemgetter(OBJECT_LOSS)),
+            STORY_ACCURACY: Accuracy(itemgetter(STORY_PRED, STORY_ANS)),
+            RELATION_ACCURACY: Accuracy(itemgetter(RELATION_PRED, RELATION_ANS)),
+            ENTITY_ACCURACY: Accuracy(itemgetter(ENTITY_PRED, OBJECT_ANS))
         }
-        logger.debug(f"----- add evaluator matrix start -----")
-        for key, value in valid_matrix.items():
-            value.attach(evaluator, key)
-            logger.debug(f"add evaluator matrix: {key}")
-        logger.debug(f"----- add evaluator matrix end -----")
+        [_value.attach(_engine, _key) for _key, _value in _matrix.items()]
 
-    @trainer.on(Events.EPOCH_STARTED)
-    def start_epoch_func(engine: Engine):
-        """start epoch function
+        return _engine, _matrix
 
-        * start epoch function. Move at the beginning of each epoch.
+    model.to(device)
+    trainer, trainer_matrix = set_engine_metrix(train_step)
+    evaluator, evaluator_matrix = set_engine_metrix(valid_step) if args.train_valid_test else (None, None)
 
-        """
-        epoch = engine.state.epoch
-        logger.debug("----- epoch: {:>5} start -----".format(epoch))
-        train.dataset.shuffle_per_1scene()
-
-    @trainer.on(Events.EPOCH_COMPLETED)
-    def end_epoch_func(engine: Engine):
-        """end epoch function
-
-        * end epoch function. Move at the ending of each epoch.
-
-        """
-        epoch = engine.state.epoch
-        metrics = engine.state.metrics
-        for _name in METRIC_NAMES:
-            _value = metrics[_name]
-            logger.debug(f"----- train metrics[{_name}]={_value} -----")
-            if summary_writer is not None:
-                summary_writer.add_scalar(f"{PRE_TRAIN}/{_name}", _value, global_step=epoch)
-        if summary_writer is not None and hasattr(model, 'weight_head'):
-            summary_writer.add_scalar(f"{PRE_TRAIN}/model_weight/story", model.weight_head.data, global_step=epoch)
-            summary_writer.add_scalar(
-                f"{PRE_TRAIN}/model_weight/relation", model.weight_relation.data, global_step=epoch)
-            summary_writer.add_scalar(f"{PRE_TRAIN}/model_weight/entity", model.weight_tail.data, global_step=epoch)
-
-    @trainer.on(Events.EPOCH_COMPLETED(every=args.valid_interval))
-    def valid_func(engine: Engine):
-        """valid function.
-
-        * Moves at the end of the epoch per Valid_interval
-
-        """
-        epoch = engine.state.epoch
-        if args.train_valid_test:
-            logger.info(f"----- valid start ({epoch=}) -----")
-            evaluator.run(valid)
-            metrics = evaluator.state.metrics
-            for _name in METRIC_NAMES:
-                _value = metrics[_name]
-                logger.debug(f"----- valid metrics[{_name}]={_value} -----")
-                if summary_writer is not None:
-                    summary_writer.add_scalar(f"pre_valid/{_name}", _value, global_step=epoch)
-            logger.info("----- valid end -----")
-
-    total_timer = Timer(average=False)
-
-    @trainer.on(Events.STARTED)
-    def start_train(engine: Engine):
-        """start train
-
-        * move only ones (when train started)
-
-        """
-        total_timer.reset()
-        logger.info("pre training start. epoch length = {}".format(engine.state.max_epochs))
-
-    @trainer.on(Events.COMPLETED)
-    def complete_train(engine: Engine):
-        """start train
-
-        * move only ones (when train completed)
-
-        """
-        epoch = engine.state.epoch
-        time_str = elapsed_time_str(total_timer.value())
-        logger.info("pre training complete. finish epoch: {:>5}, time: {:>7}".format(epoch, time_str))
-
-    @trainer.on(Events.EPOCH_COMPLETED)
-    def print_time_per_epoch(engine: Engine):
-        """print time per epoch function
-
-        * end epoch function. Move at the ending of each epoch.
-
-        """
-        epoch = engine.state.epoch
-        logger.info(
-            "----- epoch: {:>5} complete. time: {:>8.2f}. total time: {:>7} -----".format(
-                epoch, engine.state.times['EPOCH_COMPLETED'], elapsed_time_str(total_timer.value()))
-        )
-
-    @trainer.on(Events.ITERATION_COMPLETED(every=100))
-    def print_info_per_some_iter(engine: Engine):
-        """print info per some iter function
-
-        * Move at the ending of some iter.
-
-        """
-        output = engine.state.output
-        epoch = engine.state.epoch
-        logger.debug("----- epoch: {:>5} iter {:>6} complete. total time: {:>7} -----".format(
-            epoch, engine.state.iteration, elapsed_time_str(total_timer.value())))
-        logger.debug(f"loss={output[LOSS].item()}")
+    _kwargs = dict(summary_writer=summary_writer, metric_names=METRIC_NAMES, param_names=ALL_WEIGHT_LIST, logger=logger)
+    set_start_epoch_function(trainer, optional_func=train.dataset.shuffle_per_1scene, logger=logger)
+    set_end_epoch_function(trainer, PRE_TRAIN_SCALER_TAG_GETTER, **_kwargs)
+    set_valid_function(trainer, evaluator, valid, args.valid_interval, PRE_VALID_SCALER_TAG_GETTER, **_kwargs)
+    set_write_model_param_function(
+        trainer, model, PRE_TRAIN_MODEL_WEIGHT_TAG_GETTER, lambda _key: getattr(model, _key).data, **_kwargs)
 
     # Interrupt
     if args.only_load_trainer_evaluator:
         logger.info("load trainer and evaluator. then end")
         return {MODEL: model, TRAINER: trainer, EVALUATOR: evaluator,
-                CHECKPOINTER_GOOD_LOSS: None, CHECKPOINTER_LAST: None}
-
-    # about checkpoint
-    to_save = {MODEL: model, OPTIMIZER: opt, TRAINER: trainer}
-    good_checkpoint = Checkpoint(
-        to_save, DiskSaver(MOST_GOOD_CHECKPOINT_PATH.format(checkpoint_dir), require_empty=False),
-        global_step_transform=global_step_from_engine(trainer), include_self=True,
-        score_name=LOSS, score_function=Checkpoint.get_default_score_fn(LOSS, -1.0))
-
-    to_save = to_save | {CHECKPOINTER_GOOD_LOSS: good_checkpoint}
-    last_checkpoint = Checkpoint(
-        to_save, DiskSaver(LATEST_CHECKPOINT_PATH.format(checkpoint_dir), require_empty=False),
-        include_self=True,
-    )
-
-    if args.resume_from_checkpoint and args.resume_from_last_point:
-        raise ValueError("resume-from-checkpoint or resume-from-last-point can be 'True', not both.")
-        pass
-    elif args.resume_from_checkpoint:
-        load_path = args.resume_checkpoint_path
-        if load_path is None: raise "checkpoint_path must not None."
-        to_load = {MODEL: model, OPTIMIZER: opt, TRAINER: trainer}
-        logger.info(f"----- resume from path: {load_path}")
-        Checkpoint.load_objects(to_load=to_load, checkpoint=load_path)
-        good_checkpoint.save_handler = DiskSaver(MOST_GOOD_CHECKPOINT_PATH.format(checkpoint_dir), require_empty=True)
-        last_checkpoint.save_handler = DiskSaver(LATEST_CHECKPOINT_PATH.format(checkpoint_dir), require_empty=True)
-    elif args.resume_from_last_point:
-        load_path = args.resume_checkpoint_path
-        if load_path is None:
-            raise ValueError("--checkpoint-path must not None.")
-            pass
-        to_load = {MODEL: model, OPTIMIZER: opt, TRAINER: trainer,
-                   CHECKPOINTER_GOOD_LOSS: good_checkpoint, CHECKPOINTER: last_checkpoint}
-        logger.info(f"----- resume from last. last_path: {load_path}")
-        checkpoint = torch.load(load_path)
-        to_load = {key: value for key, value in to_load.items() if key in checkpoint.keys()}
-        Checkpoint.load_objects(to_load=to_load, checkpoint=checkpoint)
-        logger.info(f"----- load objects keys: {to_load.keys()}")
-        good_checkpoint.save_handler = DiskSaver(MOST_GOOD_CHECKPOINT_PATH.format(checkpoint_dir), require_empty=False)
-        last_checkpoint.save_handler = DiskSaver(LATEST_CHECKPOINT_PATH.format(checkpoint_dir), require_empty=False)
+                GOOD_LOSS_CHECKPOINTE: None, LAST_CHECKPOINTE: None}
     else:
-        good_checkpoint.save_handler = DiskSaver(MOST_GOOD_CHECKPOINT_PATH.format(checkpoint_dir), require_empty=True)
-        last_checkpoint.save_handler = DiskSaver(LATEST_CHECKPOINT_PATH.format(checkpoint_dir), require_empty=True)
-
-    trainer.add_event_handler(Events.EPOCH_COMPLETED, last_checkpoint)
-    evaluator.add_event_handler(
-        Events.COMPLETED, force_cpu_decorator(model, device, non_blocking=non_blocking)(good_checkpoint))
-
-    if max_epoch > trainer.state.epoch:
-        valid_func(trainer)  # first valid
-        trainer.run(train, max_epochs=max_epoch)
-    return {MODEL: model, TRAINER: trainer, EVALUATOR: evaluator,
-            CHECKPOINTER_GOOD_LOSS: good_checkpoint, CHECKPOINTER_LAST: last_checkpoint}
-
-
-def get_all_tokens(args: Namespace):
-    """get all_tokens
-
-    Args:
-        args(Namespace):
-
-    Returns:
-        tuple[tuple[int, int], tuple[int, int], tuple[int, int], tuple[int, int], tuple[int, int]]:
-            (
-                (pad_token_e, pad_token_r), (cls_token_e, cls_token_r), (mask_token_e, mask_token_r),
-                (sep_token_e, sep_token_r), (bos_token_e, bos_token_r)
-            )
-
-    """
-    pad_token_e, pad_token_r = args.padding_token_e, args.padding_token_r
-    cls_token_e, cls_token_r = args.cls_token_e, args.cls_token_r
-    mask_token_e, mask_token_r = args.mask_token_e, args.mask_token_r
-    sep_token_e, sep_token_r = args.sep_token_e, args.sep_token_r
-    bos_token_e, bos_token_r = args.bos_token_e, args.bos_token_r
-    return (
-        (pad_token_e, pad_token_r), (cls_token_e, cls_token_r), (mask_token_e, mask_token_r),
-        (sep_token_e, sep_token_r), (bos_token_e, bos_token_r)
-    )
+        good_checkpoint, last_checkpoint, dict_ = training_with_ignite(
+            model, opt, max_epoch, trainer, evaluator, checkpoint_dir,
+            resume_checkpoint_path, is_resume_from_checkpoint, is_resume_from_last_point,
+            train=train, device=device, non_blocking=non_blocking, logger=logger)
+        return {MODEL: model, TRAINER: trainer, EVALUATOR: evaluator,
+                GOOD_LOSS_CHECKPOINTE: good_checkpoint, LAST_CHECKPOINTE: last_checkpoint}
 
 
 def make_get_data_helper(args: Namespace, *, logger: Logger):
@@ -757,17 +555,16 @@ def make_get_data_helper(args: Namespace, *, logger: Logger):
         MyDataHelper: MyDataHelper()
 
     """
+    use_title = args.use_title
     ((pad_token_e, pad_token_r), (cls_token_e, cls_token_r), (mask_token_e, mask_token_r),
      (sep_token_e, sep_token_r), (bos_token_e, bos_token_r)) = get_all_tokens(args)
-    is_challenge090, is_challenge075 = args.use_for_challenge090, args.use_for_challenge075
-
-    if is_challenge090 or is_challenge075:
+    is_090, is_075 = args.use_for_challenge090, args.use_for_challenge075
+    if is_090 or is_075:
         if not args.only_train: raise ValueError("If use for challenge, --only-train must True")
         if args.use_title is None: raise ValueError("--use-title must not None.")
 
-    train_file = TITLE2FILE090[args.use_title] if is_challenge090 \
-        else TITLE2FILE075[args.use_title] if is_challenge075 else SRO_ALL_TRAIN_FILE
-
+    train_file = TITLE2SRO_FILE090[use_title] if is_090 else TITLE2SRO_FILE075[
+        use_title] if is_075 else SRO_ALL_TRAIN_FILE
     entity_special_dicts = {
         pad_token_e: DefaultTokens.PAD_E, cls_token_e: DefaultTokens.CLS_E, mask_token_e: DefaultTokens.MASK_E,
         sep_token_e: DefaultTokens.SEP_E, bos_token_e: DefaultTokens.BOS_E
@@ -939,13 +736,13 @@ def make_get_dataloader(args: Namespace, *, datasets: tuple[Dataset, Dataset, Da
 
     """
     batch_size = args.batch_size
-    dataset_train, dataset_valid, dataset_test = datasets
-    dataloader_train = DataLoader(
-        dataset_train, shuffle=True, batch_size=batch_size, num_workers=2, pin_memory=True)
-    dataloader_valid = None if dataset_valid is None else DataLoader(
-        dataset_valid, shuffle=False, batch_size=batch_size * 2, num_workers=2, pin_memory=True)
-    dataloader_test = None if dataset_test is None else DataLoader(
-        dataset_test, shuffle=False, batch_size=batch_size * 2, num_workers=2, pin_memory=True)
+    train_dataset, valid_dataset, test_dataset = datasets
+    dataloader_train = None if train_dataset is None else DataLoader(
+        train_dataset, shuffle=True, batch_size=batch_size, num_workers=2, pin_memory=True)
+    dataloader_valid = None if valid_dataset is None else DataLoader(
+        valid_dataset, shuffle=False, batch_size=batch_size * 2, num_workers=2, pin_memory=True)
+    dataloader_test = None if test_dataset is None else DataLoader(
+        test_dataset, shuffle=False, batch_size=batch_size * 2, num_workers=2, pin_memory=True)
     data_loaders = MyDataLoaderHelper(datasets, dataloader_train, None, dataloader_valid, dataloader_test)
     logger.debug(f"{dataloader_train=}, {dataloader_valid=}, {dataloader_test=}")
     return data_loaders
@@ -958,7 +755,7 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
         args(Namespace): args
         data_helper(MyDataHelper): data_helper
         data_loaders(MyDataLoaderHelper): data_loaders
-        model(KgStoryTransformer01): model
+        model(KgStoryTransformer): model
         logger(Logger): logger
 
     Returns:
@@ -967,7 +764,7 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
     """
     # Now we are ready to start except for the hyper parameters.
     summary_writer = SummaryWriter(log_dir=args.tensorboard_dir) if args.tensorboard_dir is not None else None
-    train_returns = {MODEL: None, TRAINER: None, EVALUATOR: None, CHECKPOINTER_LAST: None, CHECKPOINTER_GOOD_LOSS: None}
+    train_returns = {MODEL: None, TRAINER: None, EVALUATOR: None, LAST_CHECKPOINTE: None, GOOD_LOSS_CHECKPOINTE: None}
 
     # default mode
     if args.pre_train:
@@ -984,7 +781,7 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
         train_returns = pre_training(
             args, hyper_params, data_helper, data_loaders, model, summary_writer=summary_writer, logger=logger)
         # check the output of the training.
-        good_checkpoint, last_checkpoint = map(train_returns.get, (CHECKPOINTER_GOOD_LOSS, CHECKPOINTER_LAST))
+        good_checkpoint, last_checkpoint = map(train_returns.get, (GOOD_LOSS_CHECKPOINTE, LAST_CHECKPOINTE))
         checkpoint_ = last_checkpoint.last_checkpoint if args.only_train else good_checkpoint.last_checkpoint
         Checkpoint.load_objects(to_load={MODEL: model}, checkpoint=checkpoint_)
         # re-save as cpu model
