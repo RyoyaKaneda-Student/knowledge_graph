@@ -115,7 +115,7 @@ def get_attention(model, input_, entities, relations):
     df_attention = pd.DataFrame(
         [[entities[h], relations[r], entities[t]] + [features[j, i].item() for j in range(len(features))] for
          i, (h, r, t) in enumerate(input_[0])])
-    df_attention.columns = [HEAD, RELATION, TAIL] + [f'attention_from{i}' for i in range(len(df_attention.columns) - 3)]
+    df_attention.columns = [HEAD, RELATION, TAIL] + [f'atten_from{i}' for i in range(len(df_attention.columns) - 3)]
     return df_attention
 
 
