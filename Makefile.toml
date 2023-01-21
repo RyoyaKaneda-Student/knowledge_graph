@@ -1,4 +1,5 @@
 [tasks.init_folder]
+workspace = false
 script = [
 '''
 #!/usr/bin/env bash
@@ -13,6 +14,7 @@ mkdir -p ./models
 ]
 
 [tasks.init_kgc_folder]
+workspace = false
 script = [
 '''
 #!/usr/bin/env bash
@@ -28,6 +30,7 @@ git clone -b kaneda/feature/change_some_tags https://github.com/RyoyaKaneda-Stud
 ]
 
 [tasks.init_kg_folder]
+workspace = false
 script = [
 '''
 #!/usr/bin/env bash
