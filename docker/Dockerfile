@@ -1,19 +1,7 @@
-# install jumanpp 1.02
-# if you need...
-# FROM ubuntu:20.04 as builder
-# WORKDIR $WORKSPACE/jumanpp
-# COPY jumanpp-1.02.tar.xz $WORKSPACE/jumanpp
-# RUN apt-get install -y gcc g++ make cmake libboost-dev &&\
-#     tar xJvf jumanpp-1.02.tar.xz &&\
-#     cd ./jumanpp-1.02 &&\
-#     ./configure &&\
-#     make &&make install&&cd ../
-# WORKDIR $WORKSPACE
-# RUN rm -rf jumanpp
-
 FROM nvidia/cuda:12.0.0-runtime-ubuntu22.04
+# FROM ubuntu:22.04
 LABEL maintainer="Ryoya Kaneda"
-LABEL MakeDay="2022/12/22"
+LABEL MakeDay="2023/01/21"
 
 ARG USERNAME=user
 ARG GROUPNAME=group
@@ -34,7 +22,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    git wget curl locales gosu \
+    git wget ssh curl locales gosu \
     build-essential libbz2-dev libdb-dev \
     libreadline-dev libffi-dev libgdbm-dev liblzma-dev \
     libncursesw5-dev libsqlite3-dev libssl-dev \
@@ -43,30 +31,29 @@ RUN apt-get update && \
 
 # set Timezone and Language
 ENV TZ=Asia/Tokyo
-RUN locale-gen ja_JP.UTF-8 && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+RUN locale-gen ja_JP.UTF-8 && ln -snf /usr/share/zoneinfo/${TZ} /etc/localtime && echo $TZ > /etc/timezone
 ENV LANG ja_JP.UTF-8
 ENV LANGUAGE ja_JP.UTF-8
 ENV LC_ALL ja_JP.UTF-8
 
-# Python install
+# Python3 install
 RUN wget https://www.python.org/ftp/python/${PYTHONVERSION}/Python-${PYTHONVERSION}.tar.xz -O - | tar xJf - && \
     cd Python-${PYTHONVERSION} && ./configure && make && make install && \
     cd ../ && rm -rf Python-${PYTHONVERSION} && \
     pip3 install --upgrade pip && pip3 install setuptools entrypoints
 
-# Rust install
+# Rust and cargo-make install
 RUN mkdir $RUST_HOME && chmod 0755 $RUST_HOME && \
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > ${RUST_HOME}/rustup.sh && \
     chmod +x ${RUST_HOME}/rustup.sh && ${RUST_HOME}/rustup.sh -y --default-toolchain nightly --no-modify-path && \
     cargo install --force cargo-make
 
-# poetry
+# poetry initalize
 COPY pyproject.toml $WORKSPACE
-COPY src/ $WORKSPACE/src/
+COPY src/ ${WORKSPACE}/src/
 RUN curl -sSL https://install.python-poetry.org | python3 - && \
     poetry config virtualenvs.create false && \
-    poetry install --no-cache --with jupyter,torch-cu117 && \ 
-    # poetry install --no-cache --with torch-cu117 && \ 
+    poetry install --no-cache --with jupyter,torch-cu117 && \
     jupyter contrib nbextension install && jupyter nbextensions_configurator enable
 
 # add user and set user
