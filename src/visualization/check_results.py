@@ -128,7 +128,8 @@ def show_attension_heatmap(df_attention):
 def make_ranking(args, from_story_name, to_story_name, predicate_, whom_, subject_, why_, what_, where_,
                  *, return_dict):
     (model, triple,
-     entity2index, relation2index, index2entity, index2relation,
+     entity2index, relation2index,
+     index2entity, index2relation,
      triple_df, story_entities) = get_from_return_dict(args, return_dict)
 
     bos_triple = [
