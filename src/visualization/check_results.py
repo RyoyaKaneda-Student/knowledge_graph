@@ -28,7 +28,7 @@ from run_for_KGC import main_function
 # My utils
 from utils.setup import load_param
 from utils.setup import setup_logger, get_device
-from utils.torch import load_model
+from utils.torch import load_model, torch_fix_seed
 
 from const.const_values import SpeckledBand
 
@@ -224,6 +224,7 @@ def main():
     logger: Logger = setup_logger(__name__, f'{PROJECT_DIR}/log/jupyter_run.log', 'info')
     device = get_device(device_name='cpu', logger=logger)
     args = get_args_from_path(args_path, logger=logger, device=device)
+    torch_fix_seed(seed=SEED)
     return_dict = main_function(args, logger=logger)
 
     do_madara_pred(args, logger, return_dict)
