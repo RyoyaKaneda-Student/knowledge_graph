@@ -49,6 +49,9 @@ def get_args_from_path(args_path: str, *, logger: Logger, device: torch.device):
     args.batch_size = 1
     args.pre_train = False
     args.init_embedding_using_bert = False
+    args.use_for_challenge090 = getattr(args, 'use_for_challenge090', False)
+    args.use_for_challenge075 = getattr(args, 'use_for_challenge075', False)
+
     del args.optuna_file, args.device_name, args.pid, args.study_name, args.n_trials
     logger.info(args)
     return args
@@ -56,12 +59,6 @@ def get_args_from_path(args_path: str, *, logger: Logger, device: torch.device):
 
 def get_from_return_dict(args, return_dict):
     """get some items from return_dict.
-
-    Args:
-        args:
-        return_dict:
-
-    Returns:
 
     """
     model = return_dict[MODEL]
@@ -221,7 +218,7 @@ def main():
     """main
 
     """
-    args_path = f'{PROJECT_DIR}/models/230114/01/param.pkl'
+    args_path = f'{PROJECT_DIR}/saved_models/kgc/all100/03/param.pkl'
     logger: Logger = setup_logger(__name__, f'{PROJECT_DIR}/log/jupyter_run.log', 'info')
     device = get_device(device_name='cpu', logger=logger)
     args = get_args_from_path(args_path, logger=logger, device=device)
