@@ -10,6 +10,7 @@ from typing import Final
 import matplotlib.pyplot as plt
 # Machine learning
 import pandas as pd
+from IPython.display import display
 # jupyter
 import seaborn as sns
 # torch
@@ -190,12 +191,12 @@ def main_func01(_title, _victim_name, criminal, predicate, _last_index, _story_l
 
     pred_rank = df_ranking.index[df_ranking['subject'] == criminal].tolist()[0]
     logger.info(f"The pred ranking about {criminal} is {pred_rank}")
-    logger.info(df_ranking.iloc[:max(20, pred_rank)])
+    display(df_ranking.iloc[:max(20, pred_rank)])
     len_ = len(df_attention)
     for i in range(len_ - 10, len_):
         logger.info(f"index{i}: {df_attention.iloc[i, :3].tolist()}")
-        logger.info(df_attention.sort_values(f'atten_from{i}', ascending=False).iloc[:20, [0, 1, 2, 3 + i]])
-        print("----------")
+        display(df_attention.sort_values(f'atten_from{i}', ascending=False).iloc[:20, [0, 1, 2, 3 + i]])
+        logger.info("----------")
     return df_ranking, df_attention
 
 
