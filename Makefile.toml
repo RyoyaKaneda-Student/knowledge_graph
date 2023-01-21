@@ -1,8 +1,34 @@
-[tasks.init_ran]
+[tasks.init_folder]
 script = [
 '''
 #!/usr/bin/env bash
-ls
+mkdir -p ./log
+mkdir -p ./models
+'''
+]
+
+[tasks.init_kgc_folder]
+script = [
+'''
+#!/usr/bin/env bash
+mkdir  -p ./data/external/KGCdata
+mkdir  -p ./data/processed/KGCdata
+for Title in All AbbeyGrange ACaseOfIdentity CrookedMan DancingMen DevilsFoot ResidentPatient SilverBlaze SpeckledBand
+do
+mkdir  -p ./data/processed/KGCdata/$Title/SRO
+mkdir  -p ./data/processed/KGCdata/$Title/SVO
+done
+git clone -b kaneda/feature/change_some_tags https://github.com/RyoyaKaneda-Student/KGRC-RDF.git ./data/external/KGRC-RDF
+'''
+]
+
+[tasks.init_kg_folder]
+script = [
+'''
+#!/usr/bin/env bash
+mkdir -p ./data/external/KGdata
+mkdir -p ./data/processed/KGdata
+git clone git@github.com:villmow/datasets_knowledge_embedding.git ./data/external/KGdata/
 '''
 ]
 

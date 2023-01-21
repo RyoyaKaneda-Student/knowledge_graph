@@ -133,3 +133,14 @@ TITLE2SVO_FILE075: Final[dict[str, str]] = {
     'SilverBlaze': f"{SRO_FOLDER}/train_SilverBlaze_l075.hdf5",
     'SpeckledBand': f"{SRO_FOLDER}/train_SpeckledBand_l075.hdf5"
 }
+
+JA_TITLE2LEN_INFO = {
+    "僧坊荘園": ("AbbeyGrange", 414, 372, 331, 310),
+    "花婿失踪事件": ("ACaseOfIdentity", 580, 522, 464, 435),
+    "背中の曲がった男": ("CrookedMan", 373, 335, 298, 279),
+    "踊る人形": ("DancingMen", 231, 207, 184, 173),
+    "悪魔の足": ("DevilsFoot", 489, 440, 391, 366),
+    "入院患者": ("ResidentPatient", 324, 291, 259, 243),
+    "白銀号事件": ("SilverBlaze", 397, 367, 317, 297),
+    "マダラのひも": ("SpeckledBand", 401, 360, 320, 300)
+}
