@@ -14,6 +14,7 @@ python-dotenv = { version = "^0.19.1", source = "pypi" }
 PyYAML = { version = "^5.3.1", source = "pypi" }
 h5py = { version = "^3.7.0", source = "pypi" }
 path = { version = "^16.4.0", source = "pypi" }
+# machine learning tools
 numpy = { version = "^1.23.4", source = "pypi" }
 numba = { version = "^0.56.3", source = "pypi"}
 spacy = { version = ">=2.1.0,<3.4", source = "pypi" }
@@ -24,7 +25,7 @@ datasets = { version = "^1.6.0", source = "pypi" }
 tensorboard = { version = "^2.5.0", source = "pypi" }
 optuna = { version = "^3.0.3", source = "pypi"}
 rdflib = { version ="^6.2.0", source = "pypi"}
-# natural langage tools
+# deep larning and natural langage processing tools.
 sentencepiece = { version = "^0.1.95", source = "pypi" }
 pyknp = { version = "^0.4.6", source = "pypi" }
 nltk = { version = "^3.7", source = "pypi" }
@@ -57,7 +58,7 @@ networkx = {version = "^3.0", source = "pypi"}
 optional = true
 
 [tool.poetry.group.jupyter.dependencies]
-notebook = { version = "^6.5.1", source = "pypi" }
+notebook = { version = "^6.5.2", source = "pypi" }
 seaborn = { version = "^0.12.1", source = "pypi"}
 jupyterlab = { version = "^3.0.16", source = "pypi" }
 ipywidgets = { version = "^7.6.3", source = "pypi" }

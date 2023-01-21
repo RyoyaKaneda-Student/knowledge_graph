@@ -1,35 +1,10 @@
-[tasks.update_Makefile]
-workspace = false
+[tasks.init_ran]
 script = [
 '''
 #!/usr/bin/env bash
-#scp ./Makefile.toml thxserv:~/M1Study/knowledge_graph/
-scp ./Makefile.toml merciserv:~/M1Study/knowledge_graph/
+ls
 '''
 ]
-description = ""
-
-[tasks.update_src]
-workspace = false
-script = [
-'''
-#!/usr/bin/env bash
-#scp -r ./src thxserv:~/M1Study/knowledge_graph/
-scp -r ./src merciserv:~/M1Study/knowledge_graph/
-'''
-]
-description = ""
-
-[tasks.update_data]
-workspace = false
-script = [
-'''
-#!/usr/bin/env bash
-scp -r ./data thxserv:~/M1Study/knowledge_graph/
-scp -r ./data merciserv:~/M1Study/knowledge_graph/
-'''
-]
-description = ""
 
 [tasks.transformer_1025_01]
 workspace = false
@@ -1302,3 +1277,126 @@ python3 -O src/run_for_KGC.py   \
 	'''
 	]
 description = "kgc model ver 03 pre init embedding and focal loss"
+
+[tasks.kgc_0119_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/230119/01"
+Lr="1e-5"
+LrStory="5e-5"
+LrRelation="1e-6"
+LREntity="1e-6"
+EmbeddingDim="768"
+EEmbeddingDim="768"
+REmbeddingDim="64"
+MaskPercent="0.30"
+MaskMaskPercent="0.80"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.10"
+LossFunction="focal_loss"
+Gamma="4.0"
+
+Epoch="2500"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03a --init-embedding-using-bert \
+	--train-valid-test --epoch ${Epoch} --batch-size 64 \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--loss-function ${LossFunction} --gamma ${Gamma} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--valid-interval 50 ${@:2}
+	'''
+	]
+description = "kgc model ver 03 pre init embedding and focal loss"
+
+[tasks.kgc_0121_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/230121/01"
+Lr="1e-5"
+LrStory="5e-5"
+LrRelation="1e-6"
+LREntity="1e-6"
+EmbeddingDim="768"
+EEmbeddingDim="768"
+REmbeddingDim="64"
+MaskPercent="0.30"
+MaskMaskPercent="0.80"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.10"
+LossFunction="focal_loss"
+Gamma="3.0"
+
+Epoch="2000"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--train-valid-test --epoch ${Epoch} --batch-size 96 \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--loss-function ${LossFunction} --gamma ${Gamma} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--valid-interval 50 ${@:2}
+	'''
+	]
+description = "kgc model ver 03 focal loss (Compare with models that use Bert)"
+
+[tasks.kgc_0121_02]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/230121/02"
+Lr="1e-5"
+LrStory="5e-5"
+LrRelation="1e-6"
+LREntity="1e-6"
+EmbeddingDim="768"
+EEmbeddingDim="768"
+REmbeddingDim="64"
+MaskPercent="0.30"
+MaskMaskPercent="0.80"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.10"
+LossFunction="focal_loss"
+Gamma="3.0"
+
+Epoch="2000"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03a --init-embedding-using-bert \
+	--train-valid-test --epoch ${Epoch} --batch-size 96 \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--loss-function ${LossFunction} --gamma ${Gamma} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--valid-interval 50 ${@:2}
+	'''
+	]
+description = "kgc model ver 03 focal loss and pre embedding with BERT)"
+
+[tasks.kgc_0121]
+workspace = false
+dependencies = ["kgc_0121_01", "kgc_0121_02"]
+
+description = "kgc model ver 03 focal loss, and check the validity of bert."
