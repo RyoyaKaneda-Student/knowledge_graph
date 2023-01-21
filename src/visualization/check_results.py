@@ -185,18 +185,18 @@ def main_func01(_title, _victim_name, criminal, predicate, _last_index, _story_l
     predicate = predicate
     victim = f'{_title}:{_victim_name}'
     criminal = f'{_title}:{criminal}'
-    df_ranking, df_attension = make_ranking(
+    df_ranking, df_attention = make_ranking(
         args, from_, to_, predicate, victim, MASK_E, MASK_E, MASK_E, MASK_E, return_dict=return_dict)
 
     pred_rank = df_ranking.index[df_ranking['subject'] == criminal].tolist()[0]
     logger.info(f"The pred ranking about {criminal} is {pred_rank}")
     logger.info(df_ranking.iloc[:max(20, pred_rank)])
-    len_ = len(df_attension)
+    len_ = len(df_attention)
     for i in range(len_ - 10, len_):
-        logger.info(i, df_attension.iloc[i, :3].tolist())
-        logger.info(df_attension.sort_values(f'atten_from{i}', ascending=False).iloc[:20, [0, 1, 2, 3 + i]])
+        logger.info(f"index{i}: {df_attention.iloc[i, :3].tolist()}")
+        logger.info(df_attention.sort_values(f'atten_from{i}', ascending=False).iloc[:20, [0, 1, 2, 3 + i]])
         print("----------")
-    return df_ranking, df_attension
+    return df_ranking, df_attention
 
 
 def check_killer(_title, _victim_name, _killer_name, _last_index, _story_len, *, args, logger, return_dict):
