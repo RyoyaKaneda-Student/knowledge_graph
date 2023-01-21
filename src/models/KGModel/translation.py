@@ -10,6 +10,7 @@ from typing import List, Dict, Tuple, Optional, Union, Callable, Literal, Final,
 import torch
 from torch import nn
 from torch.nn import functional as F
+
 # My abstract module
 from models.KGModel.kg_model import KGE_ERE
 
@@ -18,6 +19,7 @@ class TransE(KGE_ERE):
     """ TransE
 
     """
+
     def __init__(self, entity_embedding_dim, relation_embedding_dim, entity_num, relation_num):
         """
 
@@ -49,7 +51,7 @@ class TransE(KGE_ERE):
         Returns:
             torch.Tensor: score. 学習が進むと平均的に上がる
         """
-        tail_len = triple.shape[1]-2
+        tail_len = triple.shape[1] - 2
         head, relation, tail = torch.split(triple, [1, 1, tail_len], dim=1)
 
         head_emb = self.entity_embeddings(head)
@@ -68,6 +70,7 @@ class TransH(KGE_ERE):
     """ TransE
 
     """
+
     def __init__(self, entity_embedding_dim, relation_embedding_dim, entity_num, relation_num):
         """
 
@@ -100,7 +103,7 @@ class TransH(KGE_ERE):
         Returns:
             torch.Tensor: score. 学習が進むと平均的に上がる
         """
-        tail_len = triple.shape[1]-2
+        tail_len = triple.shape[1] - 2
         head, relation, tail = torch.split(triple, [1, 1, tail_len], dim=1)
 
         head_emb = self.entity_embeddings(head)
@@ -123,6 +126,7 @@ class TransR(KGE_ERE):
     """ TransE
 
     """
+
     def __init__(self, entity_embedding_dim, relation_embedding_dim, entity_num, relation_num):
         """
 
@@ -151,7 +155,7 @@ class TransR(KGE_ERE):
         Returns:
             torch.Tensor: score. 学習が進むと平均的に上がる
         """
-        tail_len = triple.shape[1]-2
+        tail_len = triple.shape[1] - 2
         head, relation, tail = torch.split(triple, [1, 1, tail_len], dim=1)
 
         head_emb = self.entity_embeddings(head)
@@ -171,18 +175,20 @@ class TransR(KGE_ERE):
 
 def main():
     entity_num, relation_num, emb_dim = 2, 4, 8
-    model = TransE(entity_num, relation_num, emb_dim)
-    tensor_triple = torch.tensor([
-        [0, 0, 0], [1, 1, 1], [0, 0, 1]
+    train_triple = torch.tensor([
+        [0, 0, 0], [1, 1, 0], [0, 0, 0]
     ])  # batch*3
+    batch_size = train_triple.shape[0]
+    valid_triple = torch.cat((train_triple[:, :2], torch.arange(entity_num).repeat(batch_size, 1)), dim=1)
 
-    batch_size = tensor_triple.shape[0]
-    tensor_triple_valid = torch.cat((tensor_triple[:, :2], torch.arange(entity_num).repeat(batch_size, 1)), dim=1)
-    print(tensor_triple_valid)
-
+    _transe = TransE(emb_dim, emb_dim, entity_num, relation_num)
+    _transh = TransH(emb_dim, emb_dim, entity_num, relation_num)
+    _transr = TransR(emb_dim, emb_dim, entity_num, relation_num)
     with torch.no_grad():
-        print(model(tensor_triple).shape)
-        print(model(tensor_triple_valid).shape)
+        for model in (_transe, _transh, _transr):
+            print(model.__class__)
+            print(model(train_triple).shape)
+            print(model(valid_triple).shape)
 
 
 if __name__ == '__main__':

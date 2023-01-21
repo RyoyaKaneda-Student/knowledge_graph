@@ -34,6 +34,14 @@ ALL_WEIGHT_LIST = (WEIGHT_HEAD, WEIGHT_RELATION, WEIGHT_TAIL)
 
 
 class KgStoryTransformer(nn.Module, metaclass=ABCMeta):
+    """KgStoryTransformer
+
+    * get head, relation, tail embedding.
+    * get triple embedding by using head, relation, tail embedding.
+    * get activated embedding by using Transformer.
+    * pred head, relation, tail item by using triple embedding.
+
+    """
     def __init__(self, args, num_entity, num_relations, special_tokens, **kwargs):
         """
 
@@ -93,6 +101,11 @@ class KgStoryTransformer(nn.Module, metaclass=ABCMeta):
 
 
 class KgStoryTransformerLabelInit(KgStoryTransformer, ABC):
+    """This is the option method for inheritance.
+
+    * Entity embedding is pre-set according to the natural language of the label by init function.
+
+    """
 
     def init(self, args, **kwargs):
         from models.datasets.data_helper import MyDataHelper
@@ -133,6 +146,15 @@ class KgStoryTransformerLabelInit(KgStoryTransformer, ABC):
 
 
 class KgStoryTransformer00(KgStoryTransformer):
+    """KgStoryTransformer00
+
+    * get head, relation, tail embedding.
+    * weighted sum 3 embedding, and it is triple embedding.
+    * get activated embedding by using Transformer.
+    * after embedding activation for head, relation, tail.
+    * pred head, relation, tail item by these embeddings.
+
+    """
     def __init__(self, args, num_entity, num_relations, special_tokens, **kwargs):
         """
 
@@ -230,9 +252,14 @@ class KgStoryTransformer00(KgStoryTransformer):
 
 
 class KgStoryTransformer01(KgStoryTransformer00):
-    """
-    The head entity and tail entity are elements of the same Entity set.
-    So, we activate head entity embedding.
+    """KgStoryTransformer01
+
+    * Changed from 00.
+    * --- ---
+    * Original get_emb_head function: return entity embedding.
+    * This model:  return ACTIVATE entity embedding by using feedfoward.
+    * --- ---
+
     """
 
     def __init__(self, args, num_entity, num_relations, special_tokens, **kwargs):
@@ -245,8 +272,14 @@ class KgStoryTransformer01(KgStoryTransformer00):
 
 
 class KgStoryTransformer02(KgStoryTransformer00):
-    """
-    推定をベクトル距離ではない方式にしたパターン.
+    """KgStoryTransformer02
+
+    * Changed from 00.
+    * --- ---
+    * Original estimation method: vector distance
+    * This model: onehot
+    * --- ---
+
     """
 
     def __init__(self, args, num_entity, num_relations, special_tokens, **kwargs):
@@ -270,7 +303,17 @@ class KgStoryTransformer02(KgStoryTransformer00):
 
 
 class KgStoryTransformer0102(KgStoryTransformer01, KgStoryTransformer02):
-    """
+    """KgStoryTransformer0102
+
+    * Changed from 00.
+    * --- ---
+    * Original get_emb_head function: return entity embedding.
+    * This model:  return ACTIVATE entity embedding by using feedfoward.
+    * ---
+    * Original estimation method, vector distance
+    * This model, onehot
+    * --- ---
+
     """
 
     def __init__(self, args, num_entity, num_relations, special_tokens, **kwargs):
@@ -278,9 +321,17 @@ class KgStoryTransformer0102(KgStoryTransformer01, KgStoryTransformer02):
 
 
 class KgStoryTransformer03(KgStoryTransformer02):
-    """
-    triple の全てを MLP にいれるタイプ.
-    その他は KgStoryTransformer02 と同じ.
+    """KgStoryTransformer0102
+
+    * Changed from 00.
+    * --- ---
+    * Original get_triple_embedding function: return sum of embeddings.
+    * This model:  return cat and activate embeddings.
+    * ---
+    * Original estimation method: vector distance.
+    * This model: onehot.
+    * --- ---
+
     """
 
     def __init__(self, args, num_entity, num_relations, special_tokens, **kwargs):
@@ -300,7 +351,17 @@ class KgStoryTransformer03(KgStoryTransformer02):
 
 
 class KgStoryTransformer03preInit(KgStoryTransformer03, KgStoryTransformerLabelInit):
-    pass
+    """KgStoryTransformer03 and pre init by bert model.
+
+    """
+    
+    def init(self, args, **kwargs):
+        """init
+
+        change entity embeddings by labels.
+
+        """
+        super(KgStoryTransformer03preInit, self).init(args, **kwargs)
 
 
 if __name__ == '__main__':
