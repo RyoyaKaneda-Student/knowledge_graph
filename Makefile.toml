@@ -2,6 +2,7 @@
 script = [
 '''
 #!/usr/bin/env bash
+mkdir -p ./data
 mkdir -p ./log
 mkdir -p ./models
 '''

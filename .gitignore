@@ -94,9 +94,6 @@ target/
 /github_sankou/
 
 # docker
-docker/
-.dockerignore
-
 
 log/
 /tensorboard/
