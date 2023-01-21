@@ -1,0 +1,10 @@
+saved_models
+data
+log
+docs
+*.log
+notebook
+models
+saved_models
+docs
+references

@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-""" utils related to pytorch
+"""utils related to pytorch
 This module is the utils for pytorch basic operations and devices.
 todo:
 

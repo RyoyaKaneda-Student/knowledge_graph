@@ -30,13 +30,12 @@ from torch_geometric.nn.conv import GATv2Conv
 from torch_geometric.utils import add_self_loops
 # ========== My Utils ==========
 # noinspection PyUnresolvedReferences
-from utils.utils import force_gc, force_gc_after_function, get_from_dict, version_check, logger_is_optional
+from utils.utils import force_gc, force_gc_after_function, get_from_dict, version_check
 from utils.str_process import info_str as _info_str
 from utils.setup import setup, save_param
 # from utilModules.torch import cuda_empty_cache as _ccr, load_model, save_model, decorate_loader, onehot
 # ========== Made by me ==========
-from models.datasets.data_helper import MyDataHelper, load_preprocess_data
-from run import KGDATA_ALL
+from models.datasets.data_helper import MyDataHelper, KGDATA_ALL
 
 
 # endregion
@@ -59,8 +58,7 @@ def setup_parser() -> Namespace:
     parser.add_argument('--study-name', help='optuna study-name', type=str)
     parser.add_argument('--n-trials', help='optuna n-trials', type=int, default=20)
     """
-    parser.add_argument('--KGdata', help=' or '.join(KGDATA_ALL), type=str,
-                        choices=KGDATA_ALL)
+    parser.add_argument('--KGdata', help=' or '.join(KGDATA_ALL), type=str, choices=KGDATA_ALL)
 
     """
     parser.add_argument('--model', type=str,
@@ -136,8 +134,8 @@ class GAT(torch.nn.Module):
 
 def make_geodata(data_helper: MyDataHelper,
                  *, is_del_reverse=True, is_add_self_loop=False, num_self_loop=-1, logger=None) -> TorchGeoData:
-    e_length = data_helper.processed_entity_length
-    r_length = data_helper.processed_relation_length
+    e_length = data_helper.processed_entity_num
+    r_length = data_helper.processed_relation_num
 
     reverse_count = np.count_nonzero(data_helper.data.r_is_reverse_list)
     r_length = r_length - reverse_count if is_del_reverse else r_length
@@ -232,8 +230,9 @@ def do_1train(args, *, logger: Logger):
 
     # load data
     logger.info(_info_str(f"load data start."))
-    data_helper = load_preprocess_data(kg_data, eco_memory=True, logger=logger,
-                                       entity_special_num=special_token_num, relation_special_num=special_token_num)
+    data_helper = None
+    # load_preprocess_data(kg_data, eco_memory=True,
+    # logger=logger,entity_special_num=special_token_num, relation_special_num=special_token_num)
     logger.info(_info_str(f"load data complete."))
     data_helper.show_log(logger)
 

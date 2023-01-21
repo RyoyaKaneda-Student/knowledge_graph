@@ -1,4 +1,17 @@
+#!/usr/bin/python
+# coding: UTF-8
+"""Utils of Utils
+
+* This file is used to store various useful functions.
+* utils/utils, so there are various functions and classes.
+
+Todo:
+    * Improving.
+    * Cleaning.
+    * Erase what you don't need.
+"""
 import gc
+from pathlib import Path
 import random
 # noinspection PyUnresolvedReferences
 from typing import Tuple, List, Any, TypeVar, Generic, Iterable, Callable
@@ -16,6 +29,18 @@ def tqdm2notebook_tqdm():
     global tqdm
     from tqdm.notebook import tqdm as tqdm_notebook
     tqdm = tqdm_notebook
+
+
+def get_pure_path(_path):
+    """
+
+    Args:
+        _path:
+
+    Returns:
+
+    """
+    return Path(_path).resolve().as_posix()
 
 
 class FakeLogger(Logger):
@@ -77,6 +102,19 @@ class EternalGenerator(Generic[_T]):
                 self.queue_ = iter(self.queue_generator())
 
 
+def which_is_True(*args):
+    """select
+
+    Args:
+        args: The list which has True object.
+
+    Returns:
+        int: the n of True index.
+
+    """
+    return list(*args).index(True)
+
+
 def dict_to_list(dict_: dict[int, _T]) -> list[_T]:
     for key in dict_:
         assert type(key) is int
@@ -122,13 +160,15 @@ def get_true_position_items(
 
 
 def replace_list_value(list_: list[_T], before_after_list: Iterable[tuple[_T, _T]]) -> list[_T]:
+    list_ = list_[:] # copy
     for before_, after_ in before_after_list:
         list_ = [v if v != before_ else after_ for v in list_]
     return list_
 
 
-def remove_duplicate_order_save(list_):
+def remove_duplicate_as_same_order(list_):
     return sorted(set(list_), key=list_.index)
+    # return list(dict.fromkeys(list_))
 
 
 def true_count(*args):
@@ -156,6 +196,13 @@ def is_same_item_in_list(*args) -> bool:
 
 def is_same_len_in_list(*args) -> bool:
     return is_same_item_in_list(*len_in_lists(*args))
+
+
+def optional_chaining1(func, x):
+    if x is None:
+        return None
+    else:
+        return func(x)
 
 
 @add_logger_if_logger_is_none

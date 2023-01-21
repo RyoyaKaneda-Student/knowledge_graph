@@ -1,35 +1,41 @@
-[tasks.update_Makefile]
-workspace = false
+[tasks.init_folder]
 script = [
 '''
 #!/usr/bin/env bash
-#scp ./Makefile.toml thxserv:~/M1Study/knowledge_graph/
-scp ./Makefile.toml merciserv:~/M1Study/knowledge_graph/
+mkdir -p ./data
+mkdir -p ./data/external
+mkdir -p ./data/interim
+mkdir -p ./data/processed
+mkdir -p ./data/raw
+mkdir -p ./log
+mkdir -p ./models
 '''
 ]
-description = ""
 
-[tasks.update_src]
-workspace = false
+[tasks.init_kgc_folder]
 script = [
 '''
 #!/usr/bin/env bash
-#scp -r ./src thxserv:~/M1Study/knowledge_graph/
-scp -r ./src merciserv:~/M1Study/knowledge_graph/
+mkdir  -p ./data/external/KGCdata
+mkdir  -p ./data/processed/KGCdata
+for Title in All AbbeyGrange ACaseOfIdentity CrookedMan DancingMen DevilsFoot ResidentPatient SilverBlaze SpeckledBand
+do
+mkdir  -p ./data/processed/KGCdata/$Title/SRO
+mkdir  -p ./data/processed/KGCdata/$Title/SVO
+done
+git clone -b kaneda/feature/change_some_tags https://github.com/RyoyaKaneda-Student/KGRC-RDF.git ./data/external/KGRC-RDF
 '''
 ]
-description = ""
 
-[tasks.update_data]
-workspace = false
+[tasks.init_kg_folder]
 script = [
 '''
 #!/usr/bin/env bash
-scp -r ./data thxserv:~/M1Study/knowledge_graph/
-scp -r ./data merciserv:~/M1Study/knowledge_graph/
+mkdir -p ./data/external/KGdata
+mkdir -p ./data/processed/KGdata
+git clone git@github.com:villmow/datasets_knowledge_embedding.git ./data/external/KGdata/
 '''
 ]
-description = ""
 
 [tasks.transformer_1025_01]
 workspace = false
@@ -779,3 +785,649 @@ python3 -O src/run_for_KGC.py   \
 	'''
 	]
 description = "kgc model after fixed"
+
+
+[tasks.kgc_1222_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1222/01"
+Lr="5e-5"
+Epoch="5000"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--train-valid-test --epoch ${Epoch} --batch-size 192 \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 --embedding-dim 128 \
+	--lr ${Lr} --valid-interval 50 ${@:2}
+	'''
+	]
+description = "kgc model ver 03"
+
+[tasks.kgc_1226_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1226/01"
+Lr="5e-5"
+Epoch="5000"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--train-valid-test --epoch ${Epoch} --batch-size 256 \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim 128 --entity-embedding-dim 128 --relation-embedding-dim 64 \
+	--lr ${Lr} --valid-interval 50 ${@:2}
+	'''
+	]
+description = "kgc model ver 03"
+
+[tasks.kgc_1228_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1228/01"
+Lr="5e-5"
+LrStory="1e-5"
+LrRelation="5e-6"
+LREntity="5e-6"
+Epoch="5000"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--train-valid-test --epoch ${Epoch} --batch-size 256 \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim 128 --entity-embedding-dim 128 --relation-embedding-dim 64 \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--valid-interval 50 ${@:2}
+	'''
+	]
+description = "kgc model ver 03"
+
+[tasks.kgc_1229_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/1229/01"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="5000"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--train-valid-test --epoch ${Epoch} --batch-size 256 \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim 128 --entity-embedding-dim 128 --relation-embedding-dim 64 \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--valid-interval 50 ${@:2}
+	'''
+	]
+description = "kgc model ver 03 (new data)"
+
+[tasks.kgc_all100_03]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/kgc/all100/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim 128 --entity-embedding-dim 128 --relation-embedding-dim 64 \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc model ver 03 (new data)"
+
+[tasks.kgc_AbbeyGrange075_03]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/kgc/AbbeyGrange075/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+Title="AbbeyGrange"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge075 --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim 128 --entity-embedding-dim 128 --relation-embedding-dim 64 \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc challenge075: AbbeyGrange075"
+
+[tasks.kgc_AbbeyGrange090_03]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/kgc/AbbeyGrange090/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+Title="AbbeyGrange"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge090 --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim 128 --entity-embedding-dim 128 --relation-embedding-dim 64 \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc challenge090: AbbeyGrange090"
+
+[tasks.kgc_CrookedMan075_03]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/kgc/CrookedMan075/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+Title="CrookedMan"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge075 --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim 128 --entity-embedding-dim 128 --relation-embedding-dim 64 \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc challenge: CrookedMan075"
+
+[tasks.kgc_CrookedMan090_03]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/kgc/CrookedMan090/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+Title="CrookedMan"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge090 --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim 128 --entity-embedding-dim 128 --relation-embedding-dim 64 \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc challenge: CrookedMan090"
+
+[tasks.kgc_SpeckledBand075_03]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/kgc/SpeckledBand075/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+Title="SpeckledBand"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge075 --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim 128 --entity-embedding-dim 128 --relation-embedding-dim 64 \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc challenge: SpeckledBand075"
+
+[tasks.kgc_SpeckledBand090_03]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/kgc/SpeckledBand090/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+Title="SpeckledBand"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge090 --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim 128 --entity-embedding-dim 128 --relation-embedding-dim 64 \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc challenge: SpeckledBand090"
+
+[tasks.kgc_DevilsFoot075_03]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/kgc/DevilsFoot075/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+Title="DevilsFoot"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge075 --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim 128 --entity-embedding-dim 128 --relation-embedding-dim 64 \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc challenge: DevilsFoot075"
+
+[tasks.kgc_DevilsFoot090_03]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/kgc/DevilsFoot090/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+Title="DevilsFoot"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge090 --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim 128 --entity-embedding-dim 128 --relation-embedding-dim 64 \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc challenge: DevilsFoot090"
+
+[tasks.kgc_ResidentPatient075_03]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/kgc/ResidentPatient075/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+Title="ResidentPatient"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge075 --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim 128 --entity-embedding-dim 128 --relation-embedding-dim 64 \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc challenge: ResidentPatient075"
+
+[tasks.kgc_ResidentPatient090_03]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/kgc/ResidentPatient090/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+Title="ResidentPatient"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge090 --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim 128 --entity-embedding-dim 128 --relation-embedding-dim 64 \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc challenge: ResidentPatient090"
+
+[tasks.kgc_SilverBlaze075_03]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/kgc/SilverBlaze075/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+Title="SilverBlaze"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge075 --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim 128 --entity-embedding-dim 128 --relation-embedding-dim 64 \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc challenge: ResidentPatient075"
+
+[tasks.kgc_SilverBlaze090_03]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/kgc/SilverBlaze090/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+Title="SilverBlaze"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge090 --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim 128 --entity-embedding-dim 128 --relation-embedding-dim 64 \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc challenge: ResidentPatient090"
+
+
+[tasks.kgc_0112_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/230112/01"
+Lr="1e-4"
+LrStory="5e-4"
+LrRelation="1e-5"
+LREntity="1e-5"
+EmbeddingDim="768"
+EEmbeddingDim="768"
+REmbeddingDim="64"
+
+Epoch="5000"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03a --init-embedding-using-bert \
+	--train-valid-test --epoch ${Epoch} --batch-size 64 \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--valid-interval 50 ${@:2}
+	'''
+	]
+description = "kgc model ver 03 (new data) pre init embedding"
+
+
+[tasks.kgc_0114_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="saved_models/230114/01"
+Lr="1e-5"
+LrStory="5e-5"
+LrRelation="1e-6"
+LREntity="1e-6"
+EmbeddingDim="768"
+EEmbeddingDim="768"
+REmbeddingDim="64"
+LossFunction="focal_loss"
+Gamma="2.5"
+
+Epoch="5000"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03a --init-embedding-using-bert \
+	--train-valid-test --epoch ${Epoch} --batch-size 64 \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--loss-function ${LossFunction} --gamma ${Gamma} \
+	--valid-interval 50 ${@:2}
+	'''
+	]
+description = "kgc model ver 03 pre init embedding and focal loss"
+
+[tasks.kgc_0119_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/230119/01"
+Lr="1e-5"
+LrStory="5e-5"
+LrRelation="1e-6"
+LREntity="1e-6"
+EmbeddingDim="768"
+EEmbeddingDim="768"
+REmbeddingDim="64"
+MaskPercent="0.30"
+MaskMaskPercent="0.80"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.10"
+LossFunction="focal_loss"
+Gamma="4.0"
+
+Epoch="2500"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03a --init-embedding-using-bert \
+	--train-valid-test --epoch ${Epoch} --batch-size 64 \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--loss-function ${LossFunction} --gamma ${Gamma} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--valid-interval 50 ${@:2}
+	'''
+	]
+description = "kgc model ver 03 pre init embedding and focal loss"
+
+[tasks.kgc_0121_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/230121/01"
+Lr="1e-5"
+LrStory="5e-5"
+LrRelation="1e-6"
+LREntity="1e-6"
+EmbeddingDim="768"
+EEmbeddingDim="768"
+REmbeddingDim="64"
+MaskPercent="0.30"
+MaskMaskPercent="0.80"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.10"
+LossFunction="focal_loss"
+Gamma="3.0"
+
+Epoch="2000"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--train-valid-test --epoch ${Epoch} --batch-size 96 \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--loss-function ${LossFunction} --gamma ${Gamma} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--valid-interval 50 ${@:2}
+	'''
+	]
+description = "kgc model ver 03 focal loss (Compare with models that use Bert)"
+
+[tasks.kgc_0121_02]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/230121/02"
+Lr="1e-5"
+LrStory="5e-5"
+LrRelation="1e-6"
+LREntity="1e-6"
+EmbeddingDim="768"
+EEmbeddingDim="768"
+REmbeddingDim="64"
+MaskPercent="0.30"
+MaskMaskPercent="0.80"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.10"
+LossFunction="focal_loss"
+Gamma="3.0"
+
+Epoch="2000"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03a --init-embedding-using-bert \
+	--train-valid-test --epoch ${Epoch} --batch-size 96 \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--loss-function ${LossFunction} --gamma ${Gamma} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--valid-interval 50 ${@:2}
+	'''
+	]
+description = "kgc model ver 03 focal loss and pre embedding with BERT)"
+
+[tasks.kgc_0121]
+workspace = false
+dependencies = ["kgc_0121_01", "kgc_0121_02"]
+
+description = "kgc model ver 03 focal loss, and check the validity of bert."

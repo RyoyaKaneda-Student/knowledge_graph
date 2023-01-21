@@ -21,7 +21,8 @@ def del_data_if_exist(group: Group, names: Iterable[str], *, logger: Logger = No
             logger.debug("{} was deleted.".format(name))
 
 
-def str_list_for_hdf5(p_object: Iterable[str], *args: Any, **kwargs: Any):
+def str_list_for_hdf5(p_object: Union[Iterable[str], Iterable[Iterable[str]]],
+                      *args: Any, **kwargs: Any):
     return np.array(p_object, dtype=h5py.special_dtype(vlen=str), *args, **kwargs)
 
 
@@ -43,9 +44,6 @@ class EscapeData:
             data = f[data_name][()]
             del f[data_name]
         return data
-
-
-
 
 
 if __name__ == '__main__':

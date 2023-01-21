@@ -89,13 +89,11 @@ target/
 .mypy_cache/
 
 # savad data
+/models/
 /saved_models/
 /github_sankou/
 
 # docker
-docker/
-.dockerignore
-
 
 log/
 /tensorboard/

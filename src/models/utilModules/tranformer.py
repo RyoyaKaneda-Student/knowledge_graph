@@ -5,6 +5,7 @@ import numpy as np
 
 import torch
 import torch.nn as nn
+from torch.nn import Linear
 from logging import Logger
 # noinspection PyUnresolvedReferences
 from typing import List, Dict, Tuple, Optional, Callable, Union, Final, NamedTuple
@@ -16,17 +17,23 @@ from utils.utils import none_count, is_same_len_in_list
 INF = float('inf')
 
 
-class FeedForwardNetworks(nn.Module):
-    def __init__(self, d_model: int, dim_feedforward: int, activation=nn.ReLU) -> None:
-        super().__init__()
-        self.linear1 = nn.Linear(d_model, dim_feedforward)
-        self.linear2 = nn.Linear(dim_feedforward, d_model)
-        self.activate = activation()
+class Feedforward(torch.nn.Module):
+    """Feedforward module
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.linear1(x)
-        x = self.activate(x)
-        return self.linear2(x)
+    """
+    def __init__(self, d_model_in, d_model_out, dim_feedforward=None, activation=torch.nn.GELU(), add_norm=True):
+        super().__init__()
+        dim_feedforward = dim_feedforward or d_model_out
+        self.linear1 = Linear(d_model_in, dim_feedforward, bias=(not add_norm))
+        self.norm = torch.nn.LayerNorm([dim_feedforward]) if add_norm else torch.nn.Identity()
+        self.activation = activation
+        self.linear2 = Linear(dim_feedforward, d_model_out)
+
+    def forward(self, x: torch.Tensor):
+        """forward
+
+        """
+        return self.linear2(self.activation(self.norm(self.linear1(x))))
 
 
 class PositionalEncoding(nn.Module):
