@@ -1,10 +1,10 @@
-src.visualization package
-=========================
+src.features package
+====================
 
 Module contents
 ---------------
 
-.. automodule:: src.visualization
+.. automodule:: src.features
    :members:
    :undoc-members:
    :show-inheritance:

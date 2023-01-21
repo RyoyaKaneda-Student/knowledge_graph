@@ -1,0 +1,300 @@
+
+<!DOCTYPE html>
+
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>src.models.KGModel.translation &#8212; KnowledgeGraphChallenge2023 v1.0 ドキュメント</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/alabaster.css" />
+    <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js"></script>
+    <script src="../../../../_static/jquery.js"></script>
+    <script src="../../../../_static/underscore.js"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+    <script src="../../../../_static/doctools.js"></script>
+    <script src="../../../../_static/sphinx_highlight.js"></script>
+    <script src="../../../../_static/translations.js"></script>
+    <link rel="index" title="索引" href="../../../../genindex.html" />
+    <link rel="search" title="検索" href="../../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>src.models.KGModel.translation のソースコード</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/python</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="sd">&quot;&quot;&quot;TransE, TransH, TransR</span>
+
+<span class="sd">* translation models</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="c1"># noinspection PyUnresolvedReferences</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Final</span><span class="p">,</span> <span class="n">get_args</span>
+<span class="c1"># pytorch</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
+<span class="kn">from</span> <span class="nn">torch.nn</span> <span class="kn">import</span> <span class="n">functional</span> <span class="k">as</span> <span class="n">F</span>
+
+<span class="c1"># My abstract module</span>
+<span class="kn">from</span> <span class="nn">models.KGModel.kg_model</span> <span class="kn">import</span> <span class="n">KGE_ERE</span>
+
+
+<div class="viewcode-block" id="TransE"><a class="viewcode-back" href="../../../../src.models.KGModel.html#src.models.KGModel.translation.TransE">[ドキュメント]</a><span class="k">class</span> <span class="nc">TransE</span><span class="p">(</span><span class="n">KGE_ERE</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot; TransE</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entity_embedding_dim</span><span class="p">,</span> <span class="n">relation_embedding_dim</span><span class="p">,</span> <span class="n">entity_num</span><span class="p">,</span> <span class="n">relation_num</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            entity_num(int): the number of entity.</span>
+<span class="sd">            relation_num(int): リレーション数</span>
+<span class="sd">            emb_dim(int): エンベディングの次元数</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">TransE</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">entity_embedding_dim</span><span class="p">,</span> <span class="n">relation_embedding_dim</span><span class="p">,</span> <span class="n">entity_num</span><span class="p">,</span> <span class="n">relation_num</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">entity_embedding_dim</span> <span class="o">!=</span> <span class="n">relation_embedding_dim</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;TransE will not allow to separate entity_embedding_dim and relation_embedding_dim.&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">emb_dim</span> <span class="o">=</span> <span class="n">entity_embedding_dim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bias_head</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Embedding</span><span class="p">(</span><span class="n">entity_num</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">_weight</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">entity_num</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bias_tail</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Embedding</span><span class="p">(</span><span class="n">entity_num</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">_weight</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">entity_num</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+
+<div class="viewcode-block" id="TransE.init"><a class="viewcode-back" href="../../../../src.models.KGModel.html#src.models.KGModel.translation.TransE.init">[ドキュメント]</a>    <span class="k">def</span> <span class="nf">init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;init</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">pass</span></div>
+
+<div class="viewcode-block" id="TransE.forward"><a class="viewcode-back" href="../../../../src.models.KGModel.html#src.models.KGModel.translation.TransE.forward">[ドキュメント]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">triple</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;forward</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            triple(torch.Tensor): triple tensor.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            torch.Tensor: score. 学習が進むと平均的に上がる</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">tail_len</span> <span class="o">=</span> <span class="n">triple</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="mi">2</span>
+        <span class="n">head</span><span class="p">,</span> <span class="n">relation</span><span class="p">,</span> <span class="n">tail</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">triple</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tail_len</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">head_emb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">entity_embeddings</span><span class="p">(</span><span class="n">head</span><span class="p">)</span>
+        <span class="n">relation_emb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">relation_embeddings</span><span class="p">(</span><span class="n">relation</span><span class="p">)</span>
+        <span class="n">tail_emb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">entity_embeddings</span><span class="p">(</span><span class="n">tail</span><span class="p">)</span>
+        <span class="n">bias_head</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_head</span><span class="p">(</span><span class="n">head</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">bias_tail</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_tail</span><span class="p">(</span><span class="n">tail</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">tail_len</span><span class="p">)</span>
+        <span class="c1"># shape = [batch, tail_len, emb_dim]</span>
+        <span class="n">deviations</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">=</span> <span class="n">tail_emb</span> <span class="o">-</span> <span class="p">(</span><span class="n">head_emb</span> <span class="o">+</span> <span class="n">relation_emb</span><span class="p">)</span>
+        <span class="n">score</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">deviations</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="n">bias_head</span> <span class="o">+</span> <span class="n">bias_tail</span>
+        <span class="c1"># score.shape = [batch, tail_len]</span>
+        <span class="k">return</span> <span class="n">score</span></div></div>
+
+
+<div class="viewcode-block" id="TransH"><a class="viewcode-back" href="../../../../src.models.KGModel.html#src.models.KGModel.translation.TransH">[ドキュメント]</a><span class="k">class</span> <span class="nc">TransH</span><span class="p">(</span><span class="n">KGE_ERE</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot; TransE</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entity_embedding_dim</span><span class="p">,</span> <span class="n">relation_embedding_dim</span><span class="p">,</span> <span class="n">entity_num</span><span class="p">,</span> <span class="n">relation_num</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            entity_num(int): the number of entity.</span>
+<span class="sd">            relation_num(int): リレーション数</span>
+<span class="sd">            emb_dim(int): エンベディングの次元数</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">TransH</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">entity_embedding_dim</span><span class="p">,</span> <span class="n">relation_embedding_dim</span><span class="p">,</span> <span class="n">entity_num</span><span class="p">,</span> <span class="n">relation_num</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">entity_embedding_dim</span> <span class="o">!=</span> <span class="n">relation_embedding_dim</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;TransH will not allow to separate entity_embedding_dim and relation_embedding_dim.&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">emb_dim</span> <span class="o">=</span> <span class="n">entity_embedding_dim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">wr_embeddings</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Embedding</span><span class="p">(</span><span class="n">relation_num</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">emb_dim</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bias_head</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Embedding</span><span class="p">(</span><span class="n">entity_num</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">_weight</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">entity_num</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bias_tail</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Embedding</span><span class="p">(</span><span class="n">entity_num</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">_weight</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">entity_num</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+
+<div class="viewcode-block" id="TransH.init"><a class="viewcode-back" href="../../../../src.models.KGModel.html#src.models.KGModel.translation.TransH.init">[ドキュメント]</a>    <span class="k">def</span> <span class="nf">init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;init</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">pass</span></div>
+
+<div class="viewcode-block" id="TransH.forward"><a class="viewcode-back" href="../../../../src.models.KGModel.html#src.models.KGModel.translation.TransH.forward">[ドキュメント]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">triple</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;forward</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            triple(torch.Tensor): triple tensor.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            torch.Tensor: score. 学習が進むと平均的に上がる</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">tail_len</span> <span class="o">=</span> <span class="n">triple</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="mi">2</span>
+        <span class="n">head</span><span class="p">,</span> <span class="n">relation</span><span class="p">,</span> <span class="n">tail</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">triple</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tail_len</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">head_emb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">entity_embeddings</span><span class="p">(</span><span class="n">head</span><span class="p">)</span>
+        <span class="n">relation_emb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">relation_embeddings</span><span class="p">(</span><span class="n">relation</span><span class="p">)</span>
+        <span class="n">tail_emb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">entity_embeddings</span><span class="p">(</span><span class="n">tail</span><span class="p">)</span>
+        <span class="n">emb_w_r</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">normalize</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">wr_embeddings</span><span class="p">(</span><span class="n">relation</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">bias_head</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_head</span><span class="p">(</span><span class="n">head</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">bias_tail</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_tail</span><span class="p">(</span><span class="n">tail</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">tail_len</span><span class="p">)</span>
+        <span class="c1">#</span>
+        <span class="n">head_moved_emb</span> <span class="o">=</span> <span class="n">head_emb</span> <span class="o">+</span> <span class="n">emb_w_r</span> <span class="o">*</span> <span class="n">head_emb</span> <span class="o">*</span> <span class="n">emb_w_r</span>
+        <span class="n">tail_moved_emb</span> <span class="o">=</span> <span class="n">tail_emb</span> <span class="o">+</span> <span class="n">emb_w_r</span> <span class="o">*</span> <span class="n">tail_emb</span> <span class="o">*</span> <span class="n">emb_w_r</span>
+        <span class="c1"># shape = [batch, tail_len, emb_dim]</span>
+        <span class="n">deviations</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">=</span> <span class="n">tail_moved_emb</span> <span class="o">-</span> <span class="p">(</span><span class="n">head_moved_emb</span> <span class="o">+</span> <span class="n">relation_emb</span><span class="p">)</span>
+        <span class="n">score</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">deviations</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="n">bias_head</span> <span class="o">+</span> <span class="n">bias_tail</span>
+        <span class="c1"># score.shape = [batch, tail_len]</span>
+        <span class="k">return</span> <span class="n">score</span></div></div>
+
+
+<div class="viewcode-block" id="TransR"><a class="viewcode-back" href="../../../../src.models.KGModel.html#src.models.KGModel.translation.TransR">[ドキュメント]</a><span class="k">class</span> <span class="nc">TransR</span><span class="p">(</span><span class="n">KGE_ERE</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot; TransE</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entity_embedding_dim</span><span class="p">,</span> <span class="n">relation_embedding_dim</span><span class="p">,</span> <span class="n">entity_num</span><span class="p">,</span> <span class="n">relation_num</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            entity_num(int): the number of entity.</span>
+<span class="sd">            relation_num(int): リレーション数</span>
+<span class="sd">            emb_dim(int): エンベディングの次元数</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">TransR</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">entity_embedding_dim</span><span class="p">,</span> <span class="n">relation_embedding_dim</span><span class="p">,</span> <span class="n">entity_num</span><span class="p">,</span> <span class="n">relation_num</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">W_r</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">entity_embedding_dim</span><span class="p">,</span> <span class="n">relation_embedding_dim</span><span class="p">,</span> <span class="n">bias</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bias_head</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Embedding</span><span class="p">(</span><span class="n">entity_num</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">_weight</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">entity_num</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bias_tail</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Embedding</span><span class="p">(</span><span class="n">entity_num</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">_weight</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">entity_num</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+
+<div class="viewcode-block" id="TransR.init"><a class="viewcode-back" href="../../../../src.models.KGModel.html#src.models.KGModel.translation.TransR.init">[ドキュメント]</a>    <span class="k">def</span> <span class="nf">init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;init</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">pass</span></div>
+
+<div class="viewcode-block" id="TransR.forward"><a class="viewcode-back" href="../../../../src.models.KGModel.html#src.models.KGModel.translation.TransR.forward">[ドキュメント]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">triple</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;forward</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            triple(torch.Tensor): triple tensor.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            torch.Tensor: score. 学習が進むと平均的に上がる</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">tail_len</span> <span class="o">=</span> <span class="n">triple</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="mi">2</span>
+        <span class="n">head</span><span class="p">,</span> <span class="n">relation</span><span class="p">,</span> <span class="n">tail</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">triple</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tail_len</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">head_emb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">entity_embeddings</span><span class="p">(</span><span class="n">head</span><span class="p">)</span>
+        <span class="n">relation_emb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">relation_embeddings</span><span class="p">(</span><span class="n">relation</span><span class="p">)</span>
+        <span class="n">tail_emb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">entity_embeddings</span><span class="p">(</span><span class="n">tail</span><span class="p">)</span>
+        <span class="n">bias_head</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_head</span><span class="p">(</span><span class="n">head</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">bias_tail</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias_tail</span><span class="p">(</span><span class="n">tail</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">tail_len</span><span class="p">)</span>
+
+        <span class="n">head_W_emb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">W_r</span><span class="p">(</span><span class="n">head_emb</span><span class="p">)</span>
+        <span class="n">tail_W_emb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">W_r</span><span class="p">(</span><span class="n">tail_emb</span><span class="p">)</span>
+        <span class="c1"># shape = [batch, tail_len, entity_embedding_dim]</span>
+        <span class="n">deviations</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">=</span> <span class="n">tail_W_emb</span> <span class="o">-</span> <span class="p">(</span><span class="n">head_W_emb</span> <span class="o">+</span> <span class="n">relation_emb</span><span class="p">)</span>
+        <span class="n">score</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">deviations</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="n">bias_head</span> <span class="o">+</span> <span class="n">bias_tail</span>
+        <span class="c1"># score.shape = [batch, tail_len]</span>
+        <span class="k">return</span> <span class="n">score</span></div></div>
+
+
+<div class="viewcode-block" id="main"><a class="viewcode-back" href="../../../../src.models.KGModel.html#src.models.KGModel.translation.main">[ドキュメント]</a><span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    <span class="n">entity_num</span><span class="p">,</span> <span class="n">relation_num</span><span class="p">,</span> <span class="n">emb_dim</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">8</span>
+    <span class="n">train_triple</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span>
+        <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+    <span class="p">])</span>  <span class="c1"># batch*3</span>
+    <span class="n">batch_size</span> <span class="o">=</span> <span class="n">train_triple</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">valid_triple</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">((</span><span class="n">train_triple</span><span class="p">[:,</span> <span class="p">:</span><span class="mi">2</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">entity_num</span><span class="p">)</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="n">_transe</span> <span class="o">=</span> <span class="n">TransE</span><span class="p">(</span><span class="n">emb_dim</span><span class="p">,</span> <span class="n">emb_dim</span><span class="p">,</span> <span class="n">entity_num</span><span class="p">,</span> <span class="n">relation_num</span><span class="p">)</span>
+    <span class="n">_transh</span> <span class="o">=</span> <span class="n">TransH</span><span class="p">(</span><span class="n">emb_dim</span><span class="p">,</span> <span class="n">emb_dim</span><span class="p">,</span> <span class="n">entity_num</span><span class="p">,</span> <span class="n">relation_num</span><span class="p">)</span>
+    <span class="n">_transr</span> <span class="o">=</span> <span class="n">TransR</span><span class="p">(</span><span class="n">emb_dim</span><span class="p">,</span> <span class="n">emb_dim</span><span class="p">,</span> <span class="n">entity_num</span><span class="p">,</span> <span class="n">relation_num</span><span class="p">)</span>
+    <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">model</span> <span class="ow">in</span> <span class="p">(</span><span class="n">_transe</span><span class="p">,</span> <span class="n">_transh</span><span class="p">,</span> <span class="n">_transr</span><span class="p">):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="vm">__class__</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="p">(</span><span class="n">train_triple</span><span class="p">)</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="p">(</span><span class="n">valid_triple</span><span class="p">)</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span></div>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+    <span class="k">pass</span>
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../../index.html">KnowledgeGraphChallenge2023</a></h1>
+
+
+
+
+
+
+
+
+<h3>ナビゲーション</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../src.html">src package</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../../index.html">モジュールコード</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">クイック検索</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="検索" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2023, RyoyaKaneda.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 5.3.0</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.13</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

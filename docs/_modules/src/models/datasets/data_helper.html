@@ -1,0 +1,827 @@
+
+<!DOCTYPE html>
+
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>src.models.datasets.data_helper &#8212; KnowledgeGraphChallenge2023 v1.0 ドキュメント</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/alabaster.css" />
+    <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js"></script>
+    <script src="../../../../_static/jquery.js"></script>
+    <script src="../../../../_static/underscore.js"></script>
+    <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+    <script src="../../../../_static/doctools.js"></script>
+    <script src="../../../../_static/sphinx_highlight.js"></script>
+    <script src="../../../../_static/translations.js"></script>
+    <link rel="index" title="索引" href="../../../../genindex.html" />
+    <link rel="search" title="検索" href="../../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>src.models.datasets.data_helper のソースコード</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/python</span>
+<span class="c1"># coding: UTF-8</span>
+<span class="sd">&quot;&quot;&quot;Raw data and data helper.</span>
+
+<span class="sd">* This file defined raw data and data helper and dataloader helper.</span>
+<span class="sd">raw data class is the class of read file and set the data.</span>
+<span class="sd">data helper class is the helper class to o support special tokens.</span>
+<span class="sd">dataloader helper class is the dataclass of dataloader.</span>
+
+<span class="sd">Todo:</span>
+<span class="sd">    * Is dataloader helper really need?</span>
+<span class="sd">    * To improve data helper class</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c1"># region !import area!</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
+<span class="c1"># python</span>
+<span class="kn">from</span> <span class="nn">logging</span> <span class="kn">import</span> <span class="n">Logger</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="c1"># noinspection PyUnresolvedReferences</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Final</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">get_args</span><span class="p">,</span> <span class="n">Iterable</span>
+
+<span class="c1"># Machine learning</span>
+<span class="kn">import</span> <span class="nn">h5py</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">optuna</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="c1"># torch</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">torch.utils.data</span> <span class="kn">import</span> <span class="n">Dataset</span>
+<span class="kn">from</span> <span class="nn">torch.utils.data.dataloader</span> <span class="kn">import</span> <span class="n">DataLoader</span>
+<span class="c1"># torch geometric</span>
+<span class="kn">from</span> <span class="nn">torch_geometric.data</span> <span class="kn">import</span> <span class="n">Data</span> <span class="k">as</span> <span class="n">GeometricData</span>
+<span class="c1"># my utils</span>
+<span class="kn">from</span> <span class="nn">utils.hdf5</span> <span class="kn">import</span> <span class="n">read_one_item</span>
+<span class="kn">from</span> <span class="nn">utils.setup</span> <span class="kn">import</span> <span class="n">easy_logger</span>
+<span class="kn">from</span> <span class="nn">utils.typing</span> <span class="kn">import</span> <span class="n">ConstMeta</span>
+<span class="kn">from</span> <span class="nn">utils.utils</span> <span class="kn">import</span> <span class="n">version_check</span>
+
+<span class="c1"># endregion</span>
+
+<span class="n">PROJECT_DIR</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parents</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>
+
+<span class="n">PROCESSED_DATA_PATH</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;./data/processed/&#39;</span>
+<span class="n">EXTERNAL_DATA_PATH</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;./data/external/&#39;</span>
+
+<span class="n">KGDATA</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;KGdata&#39;</span>
+<span class="n">KGCDATA</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;KGCdata&#39;</span>
+<span class="n">KGDATA_LITERAL</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s1">&#39;FB15k-237&#39;</span><span class="p">,</span> <span class="s1">&#39;WN18RR&#39;</span><span class="p">,</span> <span class="s1">&#39;YAGO3-10&#39;</span><span class="p">,</span> <span class="s1">&#39;KGC-ALL&#39;</span><span class="p">,</span> <span class="s1">&#39;KGC-ALL-SVO&#39;</span><span class="p">]</span>
+<span class="n">KGDATA_ALL</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;FB15k-237&#39;</span><span class="p">,</span> <span class="s1">&#39;WN18RR&#39;</span><span class="p">,</span> <span class="s1">&#39;YAGO3-10&#39;</span><span class="p">,</span> <span class="s1">&#39;KGC-ALL&#39;</span><span class="p">,</span> <span class="s1">&#39;KGC-ALL-SVO&#39;</span><span class="p">)</span>
+
+<span class="n">KGDATA2FOLDER_PATH</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;FB15k-237&#39;</span><span class="p">:</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">PROCESSED_DATA_PATH</span><span class="p">,</span> <span class="n">KGDATA</span><span class="p">,</span> <span class="s1">&#39;FB15k-237&#39;</span><span class="p">),</span>
+    <span class="s1">&#39;WN18RR&#39;</span><span class="p">:</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">PROCESSED_DATA_PATH</span><span class="p">,</span> <span class="n">KGDATA</span><span class="p">,</span> <span class="s1">&#39;WN18RR&#39;</span><span class="p">),</span>
+    <span class="s1">&#39;YAGO3-10&#39;</span><span class="p">:</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">PROCESSED_DATA_PATH</span><span class="p">,</span> <span class="n">KGDATA</span><span class="p">,</span> <span class="s1">&#39;YAGO3-10&#39;</span><span class="p">),</span>
+    <span class="s1">&#39;KGC-ALL-SVO&#39;</span><span class="p">:</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">PROCESSED_DATA_PATH</span><span class="p">,</span> <span class="n">KGCDATA</span><span class="p">,</span> <span class="s1">&#39;All&#39;</span><span class="p">,</span> <span class="s1">&#39;SVO&#39;</span><span class="p">),</span>
+<span class="p">}</span>
+
+<span class="n">ENTITY</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;entity&#39;</span>
+<span class="n">RELATION</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;relation&#39;</span>
+<span class="n">TAIL</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;tail&#39;</span>
+
+
+<div class="viewcode-block" id="INFO_INDEX"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.INFO_INDEX">[ドキュメント]</a><span class="k">class</span> <span class="nc">INFO_INDEX</span><span class="p">(</span><span class="n">metaclass</span><span class="o">=</span><span class="n">ConstMeta</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Info file&#39;s index const parameters.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">ENTITIES</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;entities&#39;</span>
+    <span class="n">ENTITY_NUM</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;entity_num&#39;</span>
+    <span class="n">ENTITIES_LABEL</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;entities_label&#39;</span>
+    <span class="n">ID2COUNT_ENTITY</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;id2count_entity&#39;</span>
+    <span class="n">RELATIONS</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;relations&#39;</span>
+    <span class="n">RELATION_NUM</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;relation_num&#39;</span>
+    <span class="n">RELATIONS_LABEL</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;relations_label&#39;</span>
+    <span class="n">IS_REV_RELATION</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;id2is_reverse_relation&#39;</span>
+    <span class="n">ID2COUNT_RELATION</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;id2count_relation&#39;</span>
+
+<div class="viewcode-block" id="INFO_INDEX.ALL_INDEXES"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.INFO_INDEX.ALL_INDEXES">[ドキュメント]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">ALL_INDEXES</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;ALL INDEXES</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            tuple[str]: ALL INDEXES</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="bp">cls</span><span class="o">.</span><span class="n">ENTITY_NUM</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">RELATION_NUM</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">ENTITY_NUM</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">ENTITIES</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">ENTITIES_LABEL</span><span class="p">,</span>
+            <span class="bp">cls</span><span class="o">.</span><span class="n">ID2COUNT_ENTITY</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">RELATIONS</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">RELATIONS_LABEL</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">IS_REV_RELATION</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">ID2COUNT_RELATION</span>
+        <span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="TRAIN_INDEX"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.TRAIN_INDEX">[ドキュメント]</a><span class="k">class</span> <span class="nc">TRAIN_INDEX</span><span class="p">(</span><span class="n">metaclass</span><span class="o">=</span><span class="n">ConstMeta</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Train file&#39;s index const parameters.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">TRIPLE</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;triple&#39;</span>
+    <span class="n">TRIPLE_RAW</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;triple_raw&#39;</span>
+
+<div class="viewcode-block" id="TRAIN_INDEX.ALL_INDEXES"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.TRAIN_INDEX.ALL_INDEXES">[ドキュメント]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">ALL_INDEXES</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;ALL INDEXES</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            tuple[str]: ALL INDEXES</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="bp">cls</span><span class="o">.</span><span class="n">TRIPLE</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">TRIPLE_RAW</span>
+        <span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="DefaultTokens"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.DefaultTokens">[ドキュメント]</a><span class="k">class</span> <span class="nc">DefaultTokens</span><span class="p">(</span><span class="n">metaclass</span><span class="o">=</span><span class="n">ConstMeta</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;DefaultTokens const parameters.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">PAD_E</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;&lt;pad_e&gt;&#39;</span>
+    <span class="n">CLS_E</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;&lt;cls_e&gt;&#39;</span>
+    <span class="n">MASK_E</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;&lt;mask_e&gt;&#39;</span>
+    <span class="n">SEP_E</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;&lt;sep_e&gt;&#39;</span>
+    <span class="n">BOS_E</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;&lt;bos_e&gt;&#39;</span>
+    <span class="n">PAD_R</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;&lt;pad_r&gt;&#39;</span>
+    <span class="n">CLS_R</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;&lt;cls_r&gt;&#39;</span>
+    <span class="n">MASK_R</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;&lt;mask_r&gt;&#39;</span>
+    <span class="n">SEP_R</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;&lt;sep_r&gt;&#39;</span>
+    <span class="n">BOS_R</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;&lt;bos_r&gt;&#39;</span></div>
+
+
+<div class="viewcode-block" id="DefaultIds"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.DefaultIds">[ドキュメント]</a><span class="k">class</span> <span class="nc">DefaultIds</span><span class="p">(</span><span class="n">metaclass</span><span class="o">=</span><span class="n">ConstMeta</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;DefaultIds const parameters.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">PAD_E_DEFAULT_ID</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">CLS_E_DEFAULT_ID</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">MASK_E_DEFAULT_ID</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">2</span>
+    <span class="n">SEP_E_DEFAULT_ID</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">3</span>
+    <span class="n">BOS_E_DEFAULT_ID</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">4</span>
+    <span class="n">PAD_R_DEFAULT_ID</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">CLS_R_DEFAULT_ID</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">MASK_R_DEFAULT_ID</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">2</span>
+    <span class="n">SEP_R_DEFAULT_ID</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">3</span>
+    <span class="n">BOS_R_DEFAULT_ID</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">4</span></div>
+
+
+<div class="viewcode-block" id="DefaultTokenIds"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.DefaultTokenIds">[ドキュメント]</a><span class="k">class</span> <span class="nc">DefaultTokenIds</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;DefaultTokenIds</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+<div class="viewcode-block" id="DefaultTokenIds.default_token2ids_e"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.DefaultTokenIds.default_token2ids_e">[ドキュメント]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">default_token2ids_e</span><span class="p">():</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;default_token to ids_e</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            dict[str, int]: the key is token about entities and the value is token_id.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">DT</span> <span class="o">=</span> <span class="n">DefaultTokens</span>
+        <span class="n">DI</span> <span class="o">=</span> <span class="n">DefaultIds</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">DT</span><span class="o">.</span><span class="n">PAD_E</span><span class="p">:</span> <span class="n">DI</span><span class="o">.</span><span class="n">PAD_E_DEFAULT_ID</span><span class="p">,</span> <span class="n">DT</span><span class="o">.</span><span class="n">CLS_E</span><span class="p">:</span> <span class="n">DI</span><span class="o">.</span><span class="n">CLS_E_DEFAULT_ID</span><span class="p">,</span>
+                <span class="n">DT</span><span class="o">.</span><span class="n">MASK_E</span><span class="p">:</span> <span class="n">DI</span><span class="o">.</span><span class="n">MASK_E_DEFAULT_ID</span><span class="p">,</span> <span class="n">DT</span><span class="o">.</span><span class="n">SEP_E</span><span class="p">:</span> <span class="n">DI</span><span class="o">.</span><span class="n">SEP_E_DEFAULT_ID</span><span class="p">,</span> <span class="n">DT</span><span class="o">.</span><span class="n">BOS_E</span><span class="p">:</span> <span class="n">DI</span><span class="o">.</span><span class="n">BOS_E_DEFAULT_ID</span><span class="p">}</span></div>
+
+<div class="viewcode-block" id="DefaultTokenIds.default_token2ids_r"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.DefaultTokenIds.default_token2ids_r">[ドキュメント]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">default_token2ids_r</span><span class="p">():</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;default_token to ids_r</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            dict[str, int]: the key is token about relations and the value is token_id.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">DT</span> <span class="o">=</span> <span class="n">DefaultTokens</span>
+        <span class="n">DI</span> <span class="o">=</span> <span class="n">DefaultIds</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">DT</span><span class="o">.</span><span class="n">PAD_R</span><span class="p">:</span> <span class="n">DI</span><span class="o">.</span><span class="n">PAD_R_DEFAULT_ID</span><span class="p">,</span> <span class="n">DT</span><span class="o">.</span><span class="n">CLS_R</span><span class="p">:</span> <span class="n">DI</span><span class="o">.</span><span class="n">CLS_R_DEFAULT_ID</span><span class="p">,</span>
+                <span class="n">DT</span><span class="o">.</span><span class="n">MASK_R</span><span class="p">:</span> <span class="n">DI</span><span class="o">.</span><span class="n">MASK_R_DEFAULT_ID</span><span class="p">,</span> <span class="n">DT</span><span class="o">.</span><span class="n">SEP_R</span><span class="p">:</span> <span class="n">DI</span><span class="o">.</span><span class="n">SEP_R_DEFAULT_ID</span><span class="p">,</span> <span class="n">DT</span><span class="o">.</span><span class="n">BOS_R</span><span class="p">:</span> <span class="n">DI</span><span class="o">.</span><span class="n">BOS_R_DEFAULT_ID</span><span class="p">}</span></div>
+
+<div class="viewcode-block" id="DefaultTokenIds.default_ids2token_e"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.DefaultTokenIds.default_ids2token_e">[ドキュメント]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">default_ids2token_e</span><span class="p">():</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;default_ids to token_e</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            dict[str, int]: the key is token_id and the value is token about entities</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">value</span><span class="p">:</span> <span class="n">key</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">DefaultTokenIds</span><span class="o">.</span><span class="n">default_token2ids_e</span><span class="p">()}</span></div>
+
+<div class="viewcode-block" id="DefaultTokenIds.default_ids2token_r"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.DefaultTokenIds.default_ids2token_r">[ドキュメント]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">default_ids2token_r</span><span class="p">():</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;default_ids to token_e</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            dict[str, int]: the key is token_id and the value is token about relations.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">value</span><span class="p">:</span> <span class="n">key</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">DefaultTokenIds</span><span class="o">.</span><span class="n">default_token2ids_r</span><span class="p">()}</span></div></div>
+
+
+<span class="c1"># noinspection PyTypeChecker</span>
+<div class="viewcode-block" id="make_change_index_func"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.make_change_index_func">[ドキュメント]</a><span class="k">def</span> <span class="nf">make_change_index_func</span><span class="p">(</span><span class="n">_length</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">special_ids</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">int</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;make the function about change index by special tokens.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        _length(int): the length of before list.</span>
+<span class="sd">        special_ids(Iterable[int]): special ids.</span>
+<span class="sd">    Returns:</span>
+<span class="sd">        Callable[[int], int]: This is the function which get old index and return new index.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">tmp_list</span> <span class="o">=</span> <span class="p">[</span><span class="kc">True</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">_length</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">special_ids</span><span class="p">))]</span>
+    <span class="k">for</span> <span class="n">id_</span> <span class="ow">in</span> <span class="n">special_ids</span><span class="p">:</span> <span class="n">tmp_list</span><span class="p">[</span><span class="n">id_</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">change_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">tmp</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">tmp_list</span><span class="p">)</span> <span class="k">if</span> <span class="n">tmp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">change_list</span><span class="p">)</span> <span class="o">==</span> <span class="n">_length</span>
+    <span class="n">change_tuple</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">change_list</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">change_tuple</span><span class="p">[</span><span class="n">x</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="SpecialTokens"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.SpecialTokens">[ドキュメント]</a><span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">SpecialTokens</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;SpecialTokens</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+<div class="viewcode-block" id="SpecialTokens.default"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.SpecialTokens.default">[ドキュメント]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">default</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;return itself.</span>
+<span class="sd">        todo:</span>
+<span class="sd">            * is really need?</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">()</span></div></div>
+
+
+<div class="viewcode-block" id="SpecialPaddingTokens"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.SpecialPaddingTokens">[ドキュメント]</a><span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">SpecialPaddingTokens</span><span class="p">(</span><span class="n">SpecialTokens</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;SpecialTokens which has padding token.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">padding_token_e</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">DefaultIds</span><span class="o">.</span><span class="n">PAD_E_DEFAULT_ID</span>
+    <span class="n">padding_token_r</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">DefaultIds</span><span class="o">.</span><span class="n">PAD_R_DEFAULT_ID</span></div>
+
+
+<div class="viewcode-block" id="SpecialTokens01"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.SpecialTokens01">[ドキュメント]</a><span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">SpecialTokens01</span><span class="p">(</span><span class="n">SpecialPaddingTokens</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;SpecialTokens which has (padding, cls, mask, sep, bos) tokens par entity and relation.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">padding_token_e</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">DefaultIds</span><span class="o">.</span><span class="n">PAD_E_DEFAULT_ID</span>
+    <span class="n">padding_token_r</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">DefaultIds</span><span class="o">.</span><span class="n">PAD_R_DEFAULT_ID</span>
+    <span class="n">cls_token_e</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">DefaultIds</span><span class="o">.</span><span class="n">CLS_E_DEFAULT_ID</span>
+    <span class="n">cls_token_r</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">DefaultIds</span><span class="o">.</span><span class="n">CLS_R_DEFAULT_ID</span>
+    <span class="n">mask_token_e</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">DefaultIds</span><span class="o">.</span><span class="n">MASK_E_DEFAULT_ID</span>
+    <span class="n">mask_token_r</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">DefaultIds</span><span class="o">.</span><span class="n">MASK_R_DEFAULT_ID</span>
+    <span class="n">sep_token_e</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">DefaultIds</span><span class="o">.</span><span class="n">SEP_E_DEFAULT_ID</span>
+    <span class="n">sep_token_r</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">DefaultIds</span><span class="o">.</span><span class="n">SEP_R_DEFAULT_ID</span>
+    <span class="n">bos_token_e</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">DefaultIds</span><span class="o">.</span><span class="n">BOS_E_DEFAULT_ID</span>
+    <span class="n">bos_token_r</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">DefaultIds</span><span class="o">.</span><span class="n">BOS_R_DEFAULT_ID</span></div>
+
+
+<div class="viewcode-block" id="MyRawData"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.MyRawData">[ドキュメント]</a><span class="nd">@dataclass</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="k">class</span> <span class="nc">MyRawData</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Raw Data Class</span>
+
+<span class="sd">    * This is the class which instance has the raw data.</span>
+<span class="sd">    * Its means this instance has the same data as file.</span>
+<span class="sd">    * This class has the file paths, nums, the lists, the label lists, the reverse check lists and frequency lists.</span>
+<span class="sd">    * And also (train, valid, test) triple list as optional.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># about path</span>
+    <span class="n">info_path</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">train_path</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">valid_path</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">test_path</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="c1"># about info</span>
+    <span class="n">entity_num</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">relation_num</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">entities</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+    <span class="n">relations</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+    <span class="n">entities_label</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span>
+    <span class="n">relations_label</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span>
+    <span class="n">is_reverse_relation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">entityIdx2countFrequency</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">relationIdx2countFrequency</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="c1"># about triple</span>
+    <span class="n">train_triple</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">valid_triple</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">test_triple</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="c1"># about init</span>
+    <span class="n">_loaded_triple</span><span class="p">:</span> <span class="nb">bool</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span> <span class="n">info_path</span><span class="p">,</span> <span class="n">train_path</span><span class="p">,</span> <span class="n">valid_path</span><span class="p">,</span> <span class="n">test_path</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            info_path(str): path for &quot;info.hdf5&quot;</span>
+<span class="sd">            train_path(str):</span>
+<span class="sd">            valid_path(str):</span>
+<span class="sd">            test_path(str):</span>
+<span class="sd">            logger(Logger):</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># error or warning</span>
+        <span class="k">if</span> <span class="n">info_path</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="s2">&quot;info_path must not None.&quot;</span>
+            <span class="k">pass</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">train_path</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">logger</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;no train_path&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">valid_path</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">logger</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;no valid_path&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">test_path</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">logger</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;no test_path&quot;</span><span class="p">)</span>
+        <span class="c1"># load info.hdf5</span>
+        <span class="k">with</span> <span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="n">info_path</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">entity_num</span> <span class="o">=</span> <span class="n">f</span><span class="p">[</span><span class="n">INFO_INDEX</span><span class="o">.</span><span class="n">ENTITY_NUM</span><span class="p">][()]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">relation_num</span> <span class="o">=</span> <span class="n">f</span><span class="p">[</span><span class="n">INFO_INDEX</span><span class="o">.</span><span class="n">RELATION_NUM</span><span class="p">][()]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">entities</span> <span class="o">=</span> <span class="p">[</span><span class="n">e</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">f</span><span class="p">[</span><span class="n">INFO_INDEX</span><span class="o">.</span><span class="n">ENTITIES</span><span class="p">][:]]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">entityIdx2countFrequency</span> <span class="o">=</span> <span class="n">f</span><span class="p">[</span><span class="n">INFO_INDEX</span><span class="o">.</span><span class="n">ID2COUNT_ENTITY</span><span class="p">][:]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">entities_label</span> <span class="o">=</span> <span class="p">[</span><span class="n">e</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">f</span><span class="p">[</span><span class="n">INFO_INDEX</span><span class="o">.</span><span class="n">ENTITIES_LABEL</span><span class="p">][:]]</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">relations</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">f</span><span class="p">[</span><span class="n">INFO_INDEX</span><span class="o">.</span><span class="n">RELATIONS</span><span class="p">][:]]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">is_reverse_relation</span> <span class="o">=</span> <span class="n">f</span><span class="p">[</span><span class="n">INFO_INDEX</span><span class="o">.</span><span class="n">IS_REV_RELATION</span><span class="p">][:]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">relationIdx2countFrequency</span> <span class="o">=</span> <span class="n">f</span><span class="p">[</span><span class="n">INFO_INDEX</span><span class="o">.</span><span class="n">ID2COUNT_RELATION</span><span class="p">][:]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">relations_label</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">f</span><span class="p">[</span><span class="n">INFO_INDEX</span><span class="o">.</span><span class="n">RELATIONS_LABEL</span><span class="p">][:]]</span>
+
+        <span class="c1"># setting paths</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">train_path</span> <span class="o">=</span> <span class="n">train_path</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">valid_path</span> <span class="o">=</span> <span class="n">valid_path</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">test_path</span> <span class="o">=</span> <span class="n">test_path</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_loaded_triple</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">show_log</span><span class="p">(</span><span class="n">logger</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MyRawData.init_triple"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.MyRawData.init_triple">[ドキュメント]</a>    <span class="k">def</span> <span class="nf">init_triple</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">force_init</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;init triple</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            force_init(:obj:`bool`, optional): if True, the triple will re-init with or without init. Defaults to False.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loaded_triple</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">force_init</span><span class="p">:</span> <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_loaded_triple</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="n">_func</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">f</span><span class="p">:</span> <span class="n">f</span><span class="p">[</span><span class="n">TRAIN_INDEX</span><span class="o">.</span><span class="n">TRIPLE</span><span class="p">][:]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">train_triple</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">valid_triple</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">test_triple</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">read_one_item</span><span class="p">(</span><span class="n">_path</span><span class="p">,</span> <span class="n">_func</span><span class="p">)</span> <span class="k">if</span> <span class="n">_path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="k">for</span> <span class="n">_path</span> <span class="ow">in</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">train_path</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">valid_path</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">test_path</span><span class="p">)]</span></div>
+
+<div class="viewcode-block" id="MyRawData.show_log"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.MyRawData.show_log">[ドキュメント]</a>    <span class="k">def</span> <span class="nf">show_log</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">Logger</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;show to logger if logger is not None</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            logger(Logger): logging.logger</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">logger</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;====== Show MyRawData ======&quot;</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;entity num: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">entity_num</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;relation num: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">relation_num</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;====== Show MyRawData ======&quot;</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="fm">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">item</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;train_triple&#39;</span><span class="p">,</span> <span class="s1">&#39;valid_triple&#39;</span><span class="p">,</span> <span class="s1">&#39;test_triple&#39;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">init_triple</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="s2">&quot;not item in Data.&quot;</span>
+        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">entity_num</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">entity_num</span>
+        <span class="n">relation_num</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">relation_num</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;MyRawData: entity num=</span><span class="si">{</span><span class="n">entity_num</span><span class="si">}</span><span class="s2">, relation num=</span><span class="si">{</span><span class="n">relation_num</span><span class="si">}</span><span class="s2">&quot;</span>
+
+<div class="viewcode-block" id="MyRawData.del_all_optional"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.MyRawData.del_all_optional">[ドキュメント]</a>    <span class="k">def</span> <span class="nf">del_all_optional</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; del all optional params.</span>
+
+<span class="sd">        * del triple items for memory-friendly.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loaded_triple</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_loaded_triple</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">train_triple</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">valid_triple</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">test_triple</span></div></div>
+
+
+<div class="viewcode-block" id="MyDataHelper"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.MyDataHelper">[ドキュメント]</a><span class="nd">@dataclass</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="k">class</span> <span class="nc">MyDataHelper</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot; Data Helper class</span>
+
+<span class="sd">    * This class is the data helper class.</span>
+<span class="sd">    * This class return the items considering special tokens.</span>
+<span class="sd">    * So, you can use items with no considering  special tokens after this processed.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">_data</span><span class="p">:</span> <span class="n">MyRawData</span>
+    <span class="n">_entity_special_dicts</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span>
+    <span class="n">_relation_special_dicts</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span>
+
+    <span class="n">_processed_train_triple</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span>
+    <span class="n">_processed_valid_triple</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span>
+    <span class="n">_processed_test_triple</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">info_path</span><span class="p">,</span> <span class="n">train_path</span><span class="p">,</span> <span class="n">valid_path</span><span class="p">,</span> <span class="n">test_path</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span>
+                 <span class="n">logger</span><span class="p">:</span> <span class="n">Logger</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">entity_special_dicts</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">relation_special_dicts</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            info_path:</span>
+<span class="sd">            train_path:</span>
+<span class="sd">            valid_path:</span>
+<span class="sd">            test_path:</span>
+<span class="sd">            logger:</span>
+<span class="sd">            entity_special_dicts:</span>
+<span class="sd">            relation_special_dicts:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">:</span> <span class="n">MyRawData</span> <span class="o">=</span> <span class="n">MyRawData</span><span class="p">(</span><span class="n">info_path</span><span class="p">,</span> <span class="n">train_path</span><span class="p">,</span> <span class="n">valid_path</span><span class="p">,</span> <span class="n">test_path</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_entity_special_dicts</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">entity_special_dicts</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_relation_special_dicts</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">relation_special_dicts</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_processed_train_triple</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_processed_valid_triple</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_processed_test_triple</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">_special_token_change</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">raw_array</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">entity_index</span><span class="p">,</span> <span class="n">relation_index</span><span class="p">):</span>
+        <span class="n">entity_num</span><span class="p">,</span> <span class="n">relation_length</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">entity_num</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">relation_num</span>
+        <span class="n">entity_special_ids</span><span class="p">,</span> <span class="n">relation_special_ids</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">entity_special_ids</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">relation_special_ids</span>
+        <span class="n">_change_entity_func</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">frompyfunc</span><span class="p">(</span><span class="n">make_change_index_func</span><span class="p">(</span><span class="n">entity_num</span><span class="p">,</span> <span class="n">entity_special_ids</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">_change_relation_func</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">frompyfunc</span><span class="p">(</span><span class="n">make_change_index_func</span><span class="p">(</span><span class="n">relation_length</span><span class="p">,</span> <span class="n">relation_special_ids</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">processed_array</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">raw_array</span><span class="p">)</span>
+        <span class="n">processed_array</span><span class="p">[:,</span> <span class="n">entity_index</span><span class="p">]</span> <span class="o">=</span> <span class="n">_change_entity_func</span><span class="p">(</span><span class="n">processed_array</span><span class="p">[:,</span> <span class="n">entity_index</span><span class="p">])</span>
+        <span class="n">processed_array</span><span class="p">[:,</span> <span class="n">relation_index</span><span class="p">]</span> <span class="o">=</span> <span class="n">_change_relation_func</span><span class="p">(</span><span class="n">processed_array</span><span class="p">[:,</span> <span class="n">relation_index</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">processed_array</span>
+
+    <span class="k">def</span> <span class="nf">_processed_triple</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">triple</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_special_token_change</span><span class="p">(</span><span class="n">triple</span><span class="p">,</span> <span class="n">entity_index</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">relation_index</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
+
+    <span class="k">def</span> <span class="nf">_processed_triple_geometric</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">processed_triple</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GeometricData</span><span class="p">:</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">processed_entity_num</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">edge_index</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">processed_triple</span><span class="p">[:,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)]</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+        <span class="n">edge_attr</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">processed_triple</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">GeometricData</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">edge_index</span><span class="o">=</span><span class="n">edge_index</span><span class="p">,</span> <span class="n">edge_attr</span><span class="o">=</span><span class="n">edge_attr</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">data</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">data</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MyRawData</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;raw data.</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            MyRawData: raw data instance.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">entity_special_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;entity special ids</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            tuple[int, ...]: The tuple of entity special ids.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_entity_special_dicts</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">relation_special_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;relation special ids</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            tuple[int, ...]: The tuple of relation special ids.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_relation_special_dicts</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">processed_entity_num</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;entity&#39;s num considering special_ids</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            int: entity&#39;s num considering special_ids.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">entity_num</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_entity_special_dicts</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">processed_relation_num</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;relation&#39;s num considering special_ids</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            int: relation&#39;s num considering special_ids.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">relation_num</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_relation_special_dicts</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">processed_train_triple</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;train triple considering special_ids.</span>
+<span class="sd">        For memory-friendly, this property use cache system.</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            np.ndarray: train triple considering special_ids.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_processed_train_triple</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_processed_train_triple</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_processed_triple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">train_triple</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_processed_train_triple</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">processed_valid_triple</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;valid triple considering special_ids.</span>
+<span class="sd">        For memory-friendly, this property use cache system.</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            np.ndarray: valid triple considering special_ids.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_processed_valid_triple</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_processed_valid_triple</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_processed_triple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">valid_triple</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_processed_valid_triple</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">processed_test_triple</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;test triple considering special_ids.</span>
+<span class="sd">        For memory-friendly, this property use cache system.</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            np.ndarray: test triple considering special_ids.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_processed_test_triple</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_processed_test_triple</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_processed_triple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">test_triple</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_processed_test_triple</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">processed_train_triple_geometric</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GeometricData</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;train torch geometric triple considering special_ids.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            GeometricData: train torch geometric triple considering special_ids.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_processed_triple_geometric</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">processed_train_triple</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">processed_valid_triple_geometric</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GeometricData</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;valid torch geometric triple considering special_ids.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            GeometricData: valid torch geometric triple considering special_ids.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_processed_triple_geometric</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">processed_valid_triple</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">processed_test_triple_geometric</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GeometricData</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;test torch geometric triple considering special_ids.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            GeometricData: test torch geometric triple considering special_ids.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_processed_triple_geometric</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">processed_test_triple</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">processed_entities</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;entities considering special_ids.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            list[str]: entities considering special_ids.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">entities</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">entities</span><span class="p">[:]</span>
+        <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_entity_special_dicts</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+            <span class="n">entities</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">entities</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">processed_entities_label</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;entities label considering special_ids.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            list[str]: entities label considering special_ids.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">entities_label</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">entities_label</span><span class="p">[:]</span>
+        <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_entity_special_dicts</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+            <span class="n">entities_label</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">entities_label</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">processed_entityIdx2countFrequency</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;entityIdx2countFrequency considering special_ids.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            np.ndarray: entityIdx2countFrequency label considering special_ids.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">idx2count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">entityIdx2countFrequency</span><span class="p">[:]</span>
+        <span class="n">indexes</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="o">*</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_entity_special_dicts</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]))])</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">idx2count</span><span class="p">,</span> <span class="n">indexes</span><span class="p">,</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">indexes</span><span class="p">))</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">processed_relations</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;relations considering special_ids.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            list[str]: relations considering special_ids.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">relations</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">relations</span><span class="p">[:]</span>
+        <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_relation_special_dicts</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+            <span class="n">relations</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">relations</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">processed_relations_label</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;relations label considering special_ids.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            list[str]: relations label considering special_ids.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">relations_label</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">relations_label</span><span class="p">[:]</span>
+        <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_relation_special_dicts</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+            <span class="n">relations_label</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">relations_label</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">processed_relationIdx2countFrequency</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;relationIdx2countFrequency considering special_ids.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            np.ndarray: relationIdx2countFrequency considering special_ids.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">id2count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">relationIdx2countFrequency</span><span class="p">[:]</span>
+        <span class="n">indexes</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="o">*</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_relation_special_dicts</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]))])</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">id2count</span><span class="p">,</span> <span class="n">indexes</span><span class="p">,</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">indexes</span><span class="p">))</span>
+
+<div class="viewcode-block" id="MyDataHelper.show"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.MyDataHelper.show">[ドキュメント]</a>    <span class="k">def</span> <span class="nf">show</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">Logger</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;show params ig logger is not None.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            logger(Logger):</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            AttributeError:</span>
+
+<span class="sd">        Returns:</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">logger</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;========== Show DataHelper ==========&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">show_log</span><span class="p">(</span><span class="n">logger</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;entity_special_dicts: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_entity_special_dicts</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;relation_special_dicts: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_relation_special_dicts</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;processed entity num: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">processed_entity_num</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;processed relation num: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">processed_relation_num</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;========== Show DataHelper ==========&quot;</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">entity_num</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">processed_entity_num</span>
+        <span class="n">relation_num</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">processed_relation_num</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;MyData: entity num=</span><span class="si">{</span><span class="n">entity_num</span><span class="si">}</span><span class="s2">, relation num=</span><span class="si">{</span><span class="n">relation_num</span><span class="si">}</span><span class="s2">&quot;</span></div>
+
+
+<div class="viewcode-block" id="MyDataLoaderHelper"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.MyDataLoaderHelper">[ドキュメント]</a><span class="nd">@dataclass</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="k">class</span> <span class="nc">MyDataLoaderHelper</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;MyDataLoaderHelper</span>
+
+<span class="sd">        This class is only used for dataclass.</span>
+<span class="sd">        Is it really need?</span>
+
+<span class="sd">        Attributes:</span>
+<span class="sd">            _train_dataloader (DataLoader): train dataloader</span>
+<span class="sd">            _valid_dataloader (DataLoader): valid dataloader</span>
+<span class="sd">            _test_dataloader (DataLoader): test dataloader</span>
+<span class="sd">            _train_valid_dataloader (DataLoader): valid dataloader using train data</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">datasets</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Dataset</span><span class="p">,</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">Dataset</span><span class="p">]</span>
+    <span class="n">_train_dataloader</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DataLoader</span><span class="p">]</span>
+    <span class="n">_valid_dataloader</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DataLoader</span><span class="p">]</span>
+    <span class="n">_test_dataloader</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DataLoader</span><span class="p">]</span>
+    <span class="n">_train_valid_dataloader</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DataLoader</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">datasets</span><span class="p">,</span> <span class="n">train_dataloader</span><span class="p">,</span> <span class="n">train_valid_dataloader</span><span class="p">,</span> <span class="n">valid_dataloader</span><span class="p">,</span> <span class="n">test_dataloader</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            datasets(tuple[Dataset, Dataset, Dataset]):</span>
+<span class="sd">            train_dataloader (DataLoader):</span>
+<span class="sd">            train_valid_dataloader (DataLoader or None):</span>
+<span class="sd">            valid_dataloader (DataLoader or None):</span>
+<span class="sd">            test_dataloader (DataLoader or None):</span>
+
+<span class="sd">        Returns:</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">datasets</span> <span class="o">=</span> <span class="n">datasets</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_train_dataloader</span> <span class="o">=</span> <span class="n">train_dataloader</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_train_valid_dataloader</span> <span class="o">=</span> <span class="n">train_valid_dataloader</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_valid_dataloader</span> <span class="o">=</span> <span class="n">valid_dataloader</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_test_dataloader</span> <span class="o">=</span> <span class="n">test_dataloader</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">train_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DataLoader</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; the property of train_dataloader</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            DataLoader: train_dataloader</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">_loader</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_train_dataloader</span>
+        <span class="k">assert</span> <span class="n">_loader</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">_loader</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">train_valid_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DataLoader</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; the property of train_valid_dataloader</span>
+<span class="sd">        train_valid_dataloader is the loader_data which is formatted like valid data but is train data.</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            DataLoader: train_valid_dataloader</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">_loader</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_train_valid_dataloader</span>
+        <span class="k">assert</span> <span class="n">_loader</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">_loader</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">valid_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DataLoader</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; the property of valid_dataloader</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            DataLoader: valid_dataloader</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">_loader</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_valid_dataloader</span>
+        <span class="k">assert</span> <span class="n">_loader</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">_loader</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">test_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DataLoader</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; the property of test_dataloader</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            DataLoader: test_dataloader</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">_loader</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_test_dataloader</span>
+        <span class="k">assert</span> <span class="n">_loader</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">_loader</span></div>
+
+
+<div class="viewcode-block" id="main"><a class="viewcode-back" href="../../../../src.models.datasets.html#src.models.datasets.data_helper.main">[ドキュメント]</a><span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Main class for check its movement.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;a&quot;</span><span class="p">)</span>
+    <span class="n">SRO_FOLDER</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">PROJECT_DIR</span><span class="si">}</span><span class="s2">/data/processed/KGCdata/All/SRO&quot;</span>
+    <span class="n">SRO_ALL_INFO_FILE</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">SRO_FOLDER</span><span class="si">}</span><span class="s2">/info.hdf5&quot;</span>
+    <span class="n">SRO_ALL_TRAIN_FILE</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">SRO_FOLDER</span><span class="si">}</span><span class="s2">/train.hdf5&quot;</span>
+    <span class="n">logger</span> <span class="o">=</span> <span class="n">easy_logger</span><span class="p">(</span><span class="n">console_level</span><span class="o">=</span><span class="s1">&#39;debug&#39;</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">PROJECT_DIR</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">version_check</span><span class="p">(</span><span class="n">torch</span><span class="p">,</span> <span class="n">pd</span><span class="p">,</span> <span class="n">optuna</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">)</span>
+    <span class="n">data_helper</span> <span class="o">=</span> <span class="n">MyDataHelper</span><span class="p">(</span><span class="n">SRO_ALL_INFO_FILE</span><span class="p">,</span> <span class="n">SRO_ALL_TRAIN_FILE</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span>
+                               <span class="n">entity_special_dicts</span><span class="o">=</span><span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="s1">&#39;&lt;pad&gt;&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">:</span> <span class="s1">&#39;cls&#39;</span><span class="p">},</span>
+                               <span class="n">relation_special_dicts</span><span class="o">=</span><span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="s1">&#39;&lt;pad&gt;&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">:</span> <span class="s1">&#39;cls&#39;</span><span class="p">},</span>
+                               <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">data_helper</span><span class="o">.</span><span class="n">processed_train_triple_geometric</span><span class="p">)</span></div>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+    <span class="k">pass</span>
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../../index.html">KnowledgeGraphChallenge2023</a></h1>
+
+
+
+
+
+
+
+
+<h3>ナビゲーション</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../src.html">src package</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../../index.html">モジュールコード</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">クイック検索</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="検索" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2023, RyoyaKaneda.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 5.3.0</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.13</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

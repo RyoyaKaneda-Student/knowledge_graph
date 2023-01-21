@@ -4,10 +4,18 @@ src.models.KGModel package
 Submodules
 ----------
 
-src.models.KGModel.ConvE module
+src.models.KGModel.conve module
 -------------------------------
 
-.. automodule:: src.models.KGModel.ConvE
+.. automodule:: src.models.KGModel.conve
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+src.models.KGModel.kg\_model module
+-----------------------------------
+
+.. automodule:: src.models.KGModel.kg_model
    :members:
    :undoc-members:
    :show-inheritance:
@@ -20,18 +28,18 @@ src.models.KGModel.kg\_story\_transformer module
    :undoc-members:
    :show-inheritance:
 
-src.models.KGModel.model module
--------------------------------
+src.models.KGModel.linear module
+--------------------------------
 
-.. automodule:: src.models.KGModel.model
+.. automodule:: src.models.KGModel.linear
    :members:
    :undoc-members:
    :show-inheritance:
 
-src.models.KGModel.transe module
---------------------------------
+src.models.KGModel.translation module
+-------------------------------------
 
-.. automodule:: src.models.KGModel.transe
+.. automodule:: src.models.KGModel.translation
    :members:
    :undoc-members:
    :show-inheritance:

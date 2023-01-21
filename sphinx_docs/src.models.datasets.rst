@@ -12,10 +12,10 @@ src.models.datasets.data\_helper module
    :undoc-members:
    :show-inheritance:
 
-src.models.datasets.datasets module
------------------------------------
+src.models.datasets.datasets\_for\_story module
+-----------------------------------------------
 
-.. automodule:: src.models.datasets.datasets
+.. automodule:: src.models.datasets.datasets_for_story
    :members:
    :undoc-members:
    :show-inheritance:
