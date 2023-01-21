@@ -14,7 +14,7 @@ Please change some parts depending on your environment.
 
 1. Clone these repositories.
 2. Change directory. ex)`cd knowledge_graph`
-3. bash run `docker build -n ${image-name} -f ./docker/Dockerfile .`. 
+3. bash run `docker build -t ${image-name} -f ./docker/Dockerfile .`. 
 If you use linux with no gpu, this may be not work, so you change `pyproject.toml` and `Dockerfile`. 
 Additionally, I do not have a Windows environment, so if you are in that environment, please make changes accordingly.
 4. docker run with these folders. ex)`docker run --rm -it -v .:/var/www/ ${image-name} bash`

@@ -1,0 +1,843 @@
+
+<!DOCTYPE html>
+
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+    <title>src.models.KGModel package &#8212; KnowledgeGraphChallenge2023 v1.0 ドキュメント</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/translations.js"></script>
+    <link rel="index" title="索引" href="genindex.html" />
+    <link rel="search" title="検索" href="search.html" />
+    <link rel="next" title="src.models.datasets package" href="src.models.datasets.html" />
+    <link rel="prev" title="src.models package" href="src.models.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="src-models-kgmodel-package">
+<h1>src.models.KGModel package<a class="headerlink" href="#src-models-kgmodel-package" title="この見出しへのパーマリンク">¶</a></h1>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="この見出しへのパーマリンク">¶</a></h2>
+</section>
+<section id="module-src.models.KGModel.conve">
+<span id="src-models-kgmodel-conve-module"></span><h2>src.models.KGModel.conve module<a class="headerlink" href="#module-src.models.KGModel.conve" title="この見出しへのパーマリンク">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.conve.ConvE">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.conve.</span></span><span class="sig-name descname"><span class="pre">ConvE</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entity_num</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_num</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">special_tokens</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/conve.html#ConvE"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.conve.ConvE" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <code class="xref py py-class docutils literal notranslate"><span class="pre">KGE_ERTails</span></code></p>
+<ul class="simple">
+<li><p>This is almost same as  this urls&lt;<a class="reference external" href="https://github.com/TimDettmers/ConvE">https://github.com/TimDettmers/ConvE</a>&gt;</p></li>
+<li><p>&quot;Convolutional 2D Knowledge Graph Embeddings&quot;</p></li>
+</ul>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.conve.ConvE.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/conve.html#ConvE.forward"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.conve.ConvE.forward" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>Forward function</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.conve.ConvE.init">
+<span class="sig-name descname"><span class="pre">init</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/conve.html#ConvE.init"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.conve.ConvE.init" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>init weight</p>
+<p>Returns:</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-src.models.KGModel.kg_model">
+<span id="src-models-kgmodel-kg-model-module"></span><h2>src.models.KGModel.kg_model module<a class="headerlink" href="#module-src.models.KGModel.kg_model" title="この見出しへのパーマリンク">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.Complex">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.kg_model.</span></span><span class="sig-name descname"><span class="pre">Complex</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entity_num</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_num</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">special_tokens</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#Complex"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.Complex" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <a class="reference internal" href="#src.models.KGModel.kg_model.KGE_ERTails" title="src.models.KGModel.kg_model.KGE_ERTails"><code class="xref py py-class docutils literal notranslate"><span class="pre">KGE_ERTails</span></code></a></p>
+<p>Complex. This is all tail version.</p>
+<ul class="simple">
+<li><p>This is almost same as this urls&lt;<a class="reference external" href="https://github.com/TimDettmers/ConvE">https://github.com/TimDettmers/ConvE</a>&gt;</p></li>
+<li><p>&quot;Convolutional 2D Knowledge Graph Embeddings&quot;</p></li>
+</ul>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.Complex.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#Complex.forward"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.Complex.forward" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>Forward function.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.Complex.init">
+<span class="sig-name descname"><span class="pre">init</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#Complex.init"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.Complex.init" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>init embeddings.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.DistMult">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.kg_model.</span></span><span class="sig-name descname"><span class="pre">DistMult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entity_num</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_num</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">special_tokens</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#DistMult"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.DistMult" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <a class="reference internal" href="#src.models.KGModel.kg_model.KGE_ERTails" title="src.models.KGModel.kg_model.KGE_ERTails"><code class="xref py py-class docutils literal notranslate"><span class="pre">KGE_ERTails</span></code></a></p>
+<p>DistMult. This is all tail version.</p>
+<ul class="simple">
+<li><p>This is almost same as this urls&lt;<a class="reference external" href="https://github.com/TimDettmers/ConvE">https://github.com/TimDettmers/ConvE</a>&gt;</p></li>
+<li><p>&quot;Convolutional 2D Knowledge Graph Embeddings&quot;</p></li>
+</ul>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.DistMult.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#DistMult.forward"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.DistMult.forward" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>Forward function.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.DistMult.init">
+<span class="sig-name descname"><span class="pre">init</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#DistMult.init"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.DistMult.init" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>init embeddings.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.KGE_ERE">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.kg_model.</span></span><span class="sig-name descname"><span class="pre">KGE_ERE</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entity_embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_entities</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_relations</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">special_tokens</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#KGE_ERE"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.KGE_ERE" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<p>The abstract model of knowledge graph.</p>
+<ul class="simple">
+<li><p>This model's input is batch * [head, relation, tail].</p></li>
+<li><p>This model return prediction as score.</p></li>
+</ul>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.KGE_ERE.forward">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#KGE_ERE.forward"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.KGE_ERE.forward" title="この定義へのパーマリンク">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">パラメータ</dt>
+<dd class="field-odd"><p><strong>x</strong> (<em>torch.Tensor</em>) -- x.shape is (batch * 3).</p>
+</dd>
+<dt class="field-even">戻り値</dt>
+<dd class="field-even"><p>The shape is (batch * entity_size).</p>
+</dd>
+<dt class="field-odd">戻り値の型</dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.KGE_ERE.init">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">init</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#KGE_ERE.init"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.KGE_ERE.init" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.KGE_ERTails">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.kg_model.</span></span><span class="sig-name descname"><span class="pre">KGE_ERTails</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entity_embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entity_num</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_num</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">special_tokens</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#KGE_ERTails"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.KGE_ERTails" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<p>The abstract model of knowledge graph.</p>
+<ul class="simple">
+<li><p>This model's input is batch * [head, relation].</p></li>
+<li><p>This model return all tail prediction as score.</p></li>
+</ul>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.KGE_ERTails.forward">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#KGE_ERTails.forward"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.KGE_ERTails.forward" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>input is batch * [entity, relation], return all tail prediction as score.</p>
+<dl class="field-list simple">
+<dt class="field-odd">パラメータ</dt>
+<dd class="field-odd"><p><strong>x</strong> (<em>torch.Tensor</em>) -- The tuple of entity and relation. The shape is (batch * 2).</p>
+</dd>
+<dt class="field-even">戻り値</dt>
+<dd class="field-even"><p>The shape is (batch * entity_size).</p>
+</dd>
+<dt class="field-odd">戻り値の型</dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.KGE_ERTails.init">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">init</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#KGE_ERTails.init"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.KGE_ERTails.init" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>init parameters.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.MlpMixE">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.kg_model.</span></span><span class="sig-name descname"><span class="pre">MlpMixE</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entity_num</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_num</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#MlpMixE"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.MlpMixE" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <a class="reference internal" href="#src.models.KGModel.kg_model.TransformerVer2E" title="src.models.KGModel.kg_model.TransformerVer2E"><code class="xref py py-class docutils literal notranslate"><span class="pre">TransformerVer2E</span></code></a></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.MlpMixE.encoding">
+<span class="sig-name descname"><span class="pre">encoding</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#MlpMixE.encoding"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.MlpMixE.encoding" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.TransformerVer2E">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.kg_model.</span></span><span class="sig-name descname"><span class="pre">TransformerVer2E</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entity_num</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_num</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">special_tokens</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#TransformerVer2E"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.TransformerVer2E" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <a class="reference internal" href="#src.models.KGModel.kg_model.KGE_ERTails" title="src.models.KGModel.kg_model.KGE_ERTails"><code class="xref py py-class docutils literal notranslate"><span class="pre">KGE_ERTails</span></code></a></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.TransformerVer2E.encoding">
+<span class="sig-name descname"><span class="pre">encoding</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#TransformerVer2E.encoding"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.TransformerVer2E.encoding" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.TransformerVer2E.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#TransformerVer2E.forward"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.TransformerVer2E.forward" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>input is batch * [entity, relation], return all tail prediction as score.</p>
+<dl class="field-list simple">
+<dt class="field-odd">パラメータ</dt>
+<dd class="field-odd"><p><strong>x</strong> (<em>torch.Tensor</em>) -- The tuple of entity and relation. The shape is (batch * 2).</p>
+</dd>
+<dt class="field-even">戻り値</dt>
+<dd class="field-even"><p>The shape is (batch * entity_size).</p>
+</dd>
+<dt class="field-odd">戻り値の型</dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.TransformerVer2E.get_cls_emb_e">
+<span class="sig-name descname"><span class="pre">get_cls_emb_e</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#TransformerVer2E.get_cls_emb_e"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.TransformerVer2E.get_cls_emb_e" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.TransformerVer2E.get_emb_e">
+<span class="sig-name descname"><span class="pre">get_emb_e</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">e1</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#TransformerVer2E.get_emb_e"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.TransformerVer2E.get_emb_e" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.TransformerVer2E.get_emb_rel">
+<span class="sig-name descname"><span class="pre">get_emb_rel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rel</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#TransformerVer2E.get_emb_rel"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.TransformerVer2E.get_emb_rel" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.TransformerVer2E.init">
+<span class="sig-name descname"><span class="pre">init</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#TransformerVer2E.init"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.TransformerVer2E.init" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>init parameters.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.TransformerVer2E.mlp_block">
+<span class="sig-name descname"><span class="pre">mlp_block</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#TransformerVer2E.mlp_block"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.TransformerVer2E.mlp_block" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.TransformerVer3E">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.kg_model.</span></span><span class="sig-name descname"><span class="pre">TransformerVer3E</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entity_num</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_num</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_helper</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#TransformerVer3E"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.TransformerVer3E" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <a class="reference internal" href="#src.models.KGModel.kg_model.KGE_ERTails" title="src.models.KGModel.kg_model.KGE_ERTails"><code class="xref py py-class docutils literal notranslate"><span class="pre">KGE_ERTails</span></code></a></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.TransformerVer3E.add_cls">
+<span class="sig-name descname"><span class="pre">add_cls</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">_tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cls_token</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#TransformerVer3E.add_cls"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.TransformerVer3E.add_cls" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.TransformerVer3E.combination_node_attr">
+<span class="sig-name descname"><span class="pre">combination_node_attr</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">neighbor_node</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">neighbor_attr</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#TransformerVer3E.combination_node_attr"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.TransformerVer3E.combination_node_attr" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.TransformerVer3E.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#TransformerVer3E.forward"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.TransformerVer3E.forward" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>input is batch * [entity, relation], return all tail prediction as score.</p>
+<dl class="field-list simple">
+<dt class="field-odd">パラメータ</dt>
+<dd class="field-odd"><p><strong>x</strong> (<em>torch.Tensor</em>) -- The tuple of entity and relation. The shape is (batch * 2).</p>
+</dd>
+<dt class="field-even">戻り値</dt>
+<dd class="field-even"><p>The shape is (batch * entity_size).</p>
+</dd>
+<dt class="field-odd">戻り値の型</dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.TransformerVer3E.get_cls_emb_e">
+<span class="sig-name descname"><span class="pre">get_cls_emb_e</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#TransformerVer3E.get_cls_emb_e"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.TransformerVer3E.get_cls_emb_e" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.TransformerVer3E.get_cls_emb_r">
+<span class="sig-name descname"><span class="pre">get_cls_emb_r</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#TransformerVer3E.get_cls_emb_r"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.TransformerVer3E.get_cls_emb_r" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.TransformerVer3E.get_emb_e">
+<span class="sig-name descname"><span class="pre">get_emb_e</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">e1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#TransformerVer3E.get_emb_e"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.TransformerVer3E.get_emb_e" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.TransformerVer3E.get_emb_rel">
+<span class="sig-name descname"><span class="pre">get_emb_rel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rel</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#TransformerVer3E.get_emb_rel"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.TransformerVer3E.get_emb_rel" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.TransformerVer3E.init">
+<span class="sig-name descname"><span class="pre">init</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#TransformerVer3E.init"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.TransformerVer3E.init" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>init parameters.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.TransformerVer3E_1">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.kg_model.</span></span><span class="sig-name descname"><span class="pre">TransformerVer3E_1</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entity_num</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_num</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_helper</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#TransformerVer3E_1"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.TransformerVer3E_1" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <a class="reference internal" href="#src.models.KGModel.kg_model.TransformerVer3E" title="src.models.KGModel.kg_model.TransformerVer3E"><code class="xref py py-class docutils literal notranslate"><span class="pre">TransformerVer3E</span></code></a></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.TransformerVer3E_1.combination_node_attr">
+<span class="sig-name descname"><span class="pre">combination_node_attr</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">neighbor_node</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">neighbor_attr</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#TransformerVer3E_1.combination_node_attr"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.TransformerVer3E_1.combination_node_attr" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_model.main">
+<span class="sig-prename descclassname"><span class="pre">src.models.KGModel.kg_model.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_model.html#main"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_model.main" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="module-src.models.KGModel.kg_story_transformer">
+<span id="src-models-kgmodel-kg-story-transformer-module"></span><h2>src.models.KGModel.kg_story_transformer module<a class="headerlink" href="#module-src.models.KGModel.kg_story_transformer" title="この見出しへのパーマリンク">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.kg_story_transformer.</span></span><span class="sig-name descname"><span class="pre">KgStoryTransformer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_entity</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_relations</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">special_tokens</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<ul class="simple">
+<li><p>get head, relation, tail embedding.</p></li>
+<li><p>get triple embedding by using head, relation, tail embedding.</p></li>
+<li><p>get activated embedding by using Transformer.</p></li>
+<li><p>pred head, relation, tail item by using triple embedding.</p></li>
+</ul>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer.assert_check">
+<span class="sig-name descname"><span class="pre">assert_check</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer.assert_check"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer.assert_check" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer.get_head_pred">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_head_pred</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer.get_head_pred"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer.get_head_pred" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer.get_relation_pred">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_relation_pred</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer.get_relation_pred"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer.get_relation_pred" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer.get_tail_pred">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_tail_pred</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer.get_tail_pred"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer.get_tail_pred" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer.get_triple_embedding">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_triple_embedding</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">emb_head</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">emb_rel</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">emb_tail</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer.get_triple_embedding"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer.get_triple_embedding" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer.init">
+<span class="sig-name descname"><span class="pre">init</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer.init"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer.init" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer00">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.kg_story_transformer.</span></span><span class="sig-name descname"><span class="pre">KgStoryTransformer00</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_entity</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_relations</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">special_tokens</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer00"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer00" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <a class="reference internal" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer" title="src.models.KGModel.kg_story_transformer.KgStoryTransformer"><code class="xref py py-class docutils literal notranslate"><span class="pre">KgStoryTransformer</span></code></a></p>
+<ul class="simple">
+<li><p>get head, relation, tail embedding.</p></li>
+<li><p>weighted sum 3 embedding, and it is triple embedding.</p></li>
+<li><p>get activated embedding by using Transformer.</p></li>
+<li><p>after embedding activation for head, relation, tail.</p></li>
+<li><p>pred head, relation, tail item by these embeddings.</p></li>
+</ul>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer00.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">triple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask_head_filter</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask_relation_filter</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask_tail_filter</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer00.forward"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer00.forward" title="この定義へのパーマリンク">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">パラメータ</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>triple</strong> (<em>torch.Tensor</em>) -- </p></li>
+<li><p><strong>mask_head_filter</strong> (<em>torch.Tensor</em>) -- </p></li>
+<li><p><strong>mask_relation_filter</strong> (<em>torch.Tensor</em>) -- </p></li>
+<li><p><strong>mask_tail_filter</strong> (<em>torch.Tensor</em>) -- </p></li>
+</ul>
+</dd>
+<dt class="field-even">戻り値の型</dt>
+<dd class="field-even"><p>tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer00.get_emb_head">
+<span class="sig-name descname"><span class="pre">get_emb_head</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer00.get_emb_head"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer00.get_emb_head" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer00.get_emb_relation">
+<span class="sig-name descname"><span class="pre">get_emb_relation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer00.get_emb_relation"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer00.get_emb_relation" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer00.get_emb_tail">
+<span class="sig-name descname"><span class="pre">get_emb_tail</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer00.get_emb_tail"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer00.get_emb_tail" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer00.get_head_pred">
+<span class="sig-name descname"><span class="pre">get_head_pred</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer00.get_head_pred"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer00.get_head_pred" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer00.get_relation_pred">
+<span class="sig-name descname"><span class="pre">get_relation_pred</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer00.get_relation_pred"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer00.get_relation_pred" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer00.get_tail_pred">
+<span class="sig-name descname"><span class="pre">get_tail_pred</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer00.get_tail_pred"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer00.get_tail_pred" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer00.get_triple_embedding">
+<span class="sig-name descname"><span class="pre">get_triple_embedding</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">head</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tail</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer00.get_triple_embedding"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer00.get_triple_embedding" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer01">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.kg_story_transformer.</span></span><span class="sig-name descname"><span class="pre">KgStoryTransformer01</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_entity</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_relations</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">special_tokens</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer01"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer01" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <a class="reference internal" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer00" title="src.models.KGModel.kg_story_transformer.KgStoryTransformer00"><code class="xref py py-class docutils literal notranslate"><span class="pre">KgStoryTransformer00</span></code></a></p>
+<ul class="simple">
+<li><p>Changed from 00.</p></li>
+<li><p>--- ---</p></li>
+<li><p>Original get_emb_head function: return entity embedding.</p></li>
+<li><p>This model:  return ACTIVATE entity embedding by using feedfoward.</p></li>
+<li><p>--- ---</p></li>
+</ul>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer01.get_emb_head">
+<span class="sig-name descname"><span class="pre">get_emb_head</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer01.get_emb_head"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer01.get_emb_head" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer0102">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.kg_story_transformer.</span></span><span class="sig-name descname"><span class="pre">KgStoryTransformer0102</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_entity</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_relations</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">special_tokens</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer0102"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer0102" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <a class="reference internal" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer01" title="src.models.KGModel.kg_story_transformer.KgStoryTransformer01"><code class="xref py py-class docutils literal notranslate"><span class="pre">KgStoryTransformer01</span></code></a>, <a class="reference internal" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer02" title="src.models.KGModel.kg_story_transformer.KgStoryTransformer02"><code class="xref py py-class docutils literal notranslate"><span class="pre">KgStoryTransformer02</span></code></a></p>
+<ul class="simple">
+<li><p>Changed from 00.</p></li>
+<li><p>--- ---</p></li>
+<li><p>Original get_emb_head function: return entity embedding.</p></li>
+<li><p>This model:  return ACTIVATE entity embedding by using feedfoward.</p></li>
+<li><p>---</p></li>
+<li><p>Original estimation method, vector distance</p></li>
+<li><p>This model, onehot</p></li>
+<li><p>--- ---</p></li>
+</ul>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer02">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.kg_story_transformer.</span></span><span class="sig-name descname"><span class="pre">KgStoryTransformer02</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_entity</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_relations</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">special_tokens</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer02"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer02" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <a class="reference internal" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer00" title="src.models.KGModel.kg_story_transformer.KgStoryTransformer00"><code class="xref py py-class docutils literal notranslate"><span class="pre">KgStoryTransformer00</span></code></a></p>
+<ul class="simple">
+<li><p>Changed from 00.</p></li>
+<li><p>--- ---</p></li>
+<li><p>Original estimation method: vector distance</p></li>
+<li><p>This model: onehot</p></li>
+<li><p>--- ---</p></li>
+</ul>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer02.get_head_pred">
+<span class="sig-name descname"><span class="pre">get_head_pred</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer02.get_head_pred"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer02.get_head_pred" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer02.get_relation_pred">
+<span class="sig-name descname"><span class="pre">get_relation_pred</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer02.get_relation_pred"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer02.get_relation_pred" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer02.get_tail_pred">
+<span class="sig-name descname"><span class="pre">get_tail_pred</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer02.get_tail_pred"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer02.get_tail_pred" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer03">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.kg_story_transformer.</span></span><span class="sig-name descname"><span class="pre">KgStoryTransformer03</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_entity</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_relations</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">special_tokens</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer03"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer03" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <a class="reference internal" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer02" title="src.models.KGModel.kg_story_transformer.KgStoryTransformer02"><code class="xref py py-class docutils literal notranslate"><span class="pre">KgStoryTransformer02</span></code></a></p>
+<p>KgStoryTransformer0102</p>
+<ul class="simple">
+<li><p>Changed from 00.</p></li>
+<li><p>--- ---</p></li>
+<li><p>Original get_triple_embedding function: return sum of embeddings.</p></li>
+<li><p>This model:  return cat and activate embeddings.</p></li>
+<li><p>---</p></li>
+<li><p>Original estimation method: vector distance.</p></li>
+<li><p>This model: onehot.</p></li>
+<li><p>--- ---</p></li>
+</ul>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer03.get_triple_embedding">
+<span class="sig-name descname"><span class="pre">get_triple_embedding</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">head</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tail</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer03.get_triple_embedding"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer03.get_triple_embedding" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer03preInit">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.kg_story_transformer.</span></span><span class="sig-name descname"><span class="pre">KgStoryTransformer03preInit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_entity</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_relations</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">special_tokens</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer03preInit"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer03preInit" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <a class="reference internal" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer03" title="src.models.KGModel.kg_story_transformer.KgStoryTransformer03"><code class="xref py py-class docutils literal notranslate"><span class="pre">KgStoryTransformer03</span></code></a>, <a class="reference internal" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformerLabelInit" title="src.models.KGModel.kg_story_transformer.KgStoryTransformerLabelInit"><code class="xref py py-class docutils literal notranslate"><span class="pre">KgStoryTransformerLabelInit</span></code></a></p>
+<p>KgStoryTransformer03 and pre init by bert model.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformer03preInit.init">
+<span class="sig-name descname"><span class="pre">init</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformer03preInit.init"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer03preInit.init" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>change entity embeddings by labels.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformerLabelInit">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.kg_story_transformer.</span></span><span class="sig-name descname"><span class="pre">KgStoryTransformerLabelInit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_entity</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_relations</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">special_tokens</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformerLabelInit"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformerLabelInit" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <a class="reference internal" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformer" title="src.models.KGModel.kg_story_transformer.KgStoryTransformer"><code class="xref py py-class docutils literal notranslate"><span class="pre">KgStoryTransformer</span></code></a>, <code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></p>
+<p>This is the option method for inheritance.</p>
+<ul class="simple">
+<li><p>Entity embedding is pre-set according to the natural language of the label by init function.</p></li>
+</ul>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.kg_story_transformer.KgStoryTransformerLabelInit.init">
+<span class="sig-name descname"><span class="pre">init</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/kg_story_transformer.html#KgStoryTransformerLabelInit.init"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.kg_story_transformer.KgStoryTransformerLabelInit.init" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-src.models.KGModel.linear">
+<span id="src-models-kgmodel-linear-module"></span><h2>src.models.KGModel.linear module<a class="headerlink" href="#module-src.models.KGModel.linear" title="この見出しへのパーマリンク">¶</a></h2>
+<p>Distmult</p>
+<ul class="simple">
+<li><p>linear models</p></li>
+</ul>
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.linear.ComplEx">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.linear.</span></span><span class="sig-name descname"><span class="pre">ComplEx</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entity_embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entity_num</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_num</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/linear.html#ComplEx"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.linear.ComplEx" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <code class="xref py py-class docutils literal notranslate"><span class="pre">KGE_ERE</span></code></p>
+<p>TransE</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.linear.ComplEx.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">triple</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/linear.html#ComplEx.forward"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.linear.ComplEx.forward" title="この定義へのパーマリンク">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">パラメータ</dt>
+<dd class="field-odd"><p><strong>triple</strong> (<em>torch.Tensor</em>) -- triple tensor.</p>
+</dd>
+<dt class="field-even">戻り値</dt>
+<dd class="field-even"><p>score. 学習が進むと平均的に上がる</p>
+</dd>
+<dt class="field-odd">戻り値の型</dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.linear.ComplEx.init">
+<span class="sig-name descname"><span class="pre">init</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/linear.html#ComplEx.init"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.linear.ComplEx.init" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.linear.DistMult">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.linear.</span></span><span class="sig-name descname"><span class="pre">DistMult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entity_embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entity_num</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_num</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/linear.html#DistMult"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.linear.DistMult" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <code class="xref py py-class docutils literal notranslate"><span class="pre">KGE_ERE</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.linear.DistMult.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">triple</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/src/models/KGModel/linear.html#DistMult.forward"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.linear.DistMult.forward" title="この定義へのパーマリンク">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">パラメータ</dt>
+<dd class="field-odd"><p><strong>x</strong> (<em>torch.Tensor</em>) -- x.shape is (batch * 3).</p>
+</dd>
+<dt class="field-even">戻り値</dt>
+<dd class="field-even"><p>The shape is (batch * entity_size).</p>
+</dd>
+<dt class="field-odd">戻り値の型</dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.linear.DistMult.init">
+<span class="sig-name descname"><span class="pre">init</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/linear.html#DistMult.init"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.linear.DistMult.init" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.linear.HolE">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.linear.</span></span><span class="sig-name descname"><span class="pre">HolE</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entity_embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entity_num</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_num</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/linear.html#HolE"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.linear.HolE" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <code class="xref py py-class docutils literal notranslate"><span class="pre">KGE_ERE</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.linear.HolE.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">triple</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/src/models/KGModel/linear.html#HolE.forward"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.linear.HolE.forward" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.linear.HolE.init">
+<span class="sig-name descname"><span class="pre">init</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/linear.html#HolE.init"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.linear.HolE.init" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.linear.Rescal">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.linear.</span></span><span class="sig-name descname"><span class="pre">Rescal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entity_embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entity_num</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_num</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/linear.html#Rescal"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.linear.Rescal" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <code class="xref py py-class docutils literal notranslate"><span class="pre">KGE_ERE</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.linear.Rescal.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">triple</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="reference internal" href="_modules/src/models/KGModel/linear.html#Rescal.forward"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.linear.Rescal.forward" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.linear.Rescal.init">
+<span class="sig-name descname"><span class="pre">init</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/linear.html#Rescal.init"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.linear.Rescal.init" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.models.KGModel.linear.main">
+<span class="sig-prename descclassname"><span class="pre">src.models.KGModel.linear.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/linear.html#main"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.linear.main" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="module-src.models.KGModel.translation">
+<span id="src-models-kgmodel-translation-module"></span><h2>src.models.KGModel.translation module<a class="headerlink" href="#module-src.models.KGModel.translation" title="この見出しへのパーマリンク">¶</a></h2>
+<p>TransE, TransH, TransR</p>
+<ul class="simple">
+<li><p>translation models</p></li>
+</ul>
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.translation.TransE">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.translation.</span></span><span class="sig-name descname"><span class="pre">TransE</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entity_embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entity_num</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_num</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/translation.html#TransE"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.translation.TransE" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <code class="xref py py-class docutils literal notranslate"><span class="pre">KGE_ERE</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.translation.TransE.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">triple</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/translation.html#TransE.forward"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.translation.TransE.forward" title="この定義へのパーマリンク">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">パラメータ</dt>
+<dd class="field-odd"><p><strong>triple</strong> (<em>torch.Tensor</em>) -- triple tensor.</p>
+</dd>
+<dt class="field-even">戻り値</dt>
+<dd class="field-even"><p>score. 学習が進むと平均的に上がる</p>
+</dd>
+<dt class="field-odd">戻り値の型</dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.translation.TransE.init">
+<span class="sig-name descname"><span class="pre">init</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/translation.html#TransE.init"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.translation.TransE.init" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.translation.TransH">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.translation.</span></span><span class="sig-name descname"><span class="pre">TransH</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entity_embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entity_num</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_num</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/translation.html#TransH"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.translation.TransH" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <code class="xref py py-class docutils literal notranslate"><span class="pre">KGE_ERE</span></code></p>
+<p>TransE</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.translation.TransH.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">triple</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/translation.html#TransH.forward"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.translation.TransH.forward" title="この定義へのパーマリンク">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">パラメータ</dt>
+<dd class="field-odd"><p><strong>triple</strong> (<em>torch.Tensor</em>) -- triple tensor.</p>
+</dd>
+<dt class="field-even">戻り値</dt>
+<dd class="field-even"><p>score. 学習が進むと平均的に上がる</p>
+</dd>
+<dt class="field-odd">戻り値の型</dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.translation.TransH.init">
+<span class="sig-name descname"><span class="pre">init</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/translation.html#TransH.init"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.translation.TransH.init" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.models.KGModel.translation.TransR">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.models.KGModel.translation.</span></span><span class="sig-name descname"><span class="pre">TransR</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entity_embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_embedding_dim</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entity_num</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relation_num</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/translation.html#TransR"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.translation.TransR" title="この定義へのパーマリンク">¶</a></dt>
+<dd><p>ベースクラス: <code class="xref py py-class docutils literal notranslate"><span class="pre">KGE_ERE</span></code></p>
+<p>TransE</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.translation.TransR.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">triple</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/translation.html#TransR.forward"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.translation.TransR.forward" title="この定義へのパーマリンク">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">パラメータ</dt>
+<dd class="field-odd"><p><strong>triple</strong> (<em>torch.Tensor</em>) -- triple tensor.</p>
+</dd>
+<dt class="field-even">戻り値</dt>
+<dd class="field-even"><p>score. 学習が進むと平均的に上がる</p>
+</dd>
+<dt class="field-odd">戻り値の型</dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.models.KGModel.translation.TransR.init">
+<span class="sig-name descname"><span class="pre">init</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/translation.html#TransR.init"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.translation.TransR.init" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.models.KGModel.translation.main">
+<span class="sig-prename descclassname"><span class="pre">src.models.KGModel.translation.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/models/KGModel/translation.html#main"><span class="viewcode-link"><span class="pre">[ソース]</span></span></a><a class="headerlink" href="#src.models.KGModel.translation.main" title="この定義へのパーマリンク">¶</a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="module-src.models.KGModel">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-src.models.KGModel" title="この見出しへのパーマリンク">¶</a></h2>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">KnowledgeGraphChallenge2023</a></h1>
+
+
+
+
+
+
+
+
+<h3>ナビゲーション</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="src.html">src package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="src.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="src.const.html">src.const package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data.html">src.data package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.features.html">src.features package</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="src.models.html">src.models package</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="src.models.html#subpackages">Subpackages</a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#submodules">Submodules</a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#module-src.models.predict_model">src.models.predict_model module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#module-src.models.pytorch_geometric">src.models.pytorch_geometric module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#module-src.models">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.test.html">src.test package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.utils.html">src.utils package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.visualization.html">src.visualization package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="src.html#module-src.run">src.run module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="src.html#module-src.run_for_KGC">src.run_for_KGC module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="src.html#module-src">Module contents</a></li>
+</ul>
+</li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+  <li><a href="src.html">src package</a><ul>
+  <li><a href="src.models.html">src.models package</a><ul>
+      <li>Previous: <a href="src.models.html" title="前の章へ">src.models package</a></li>
+      <li>Next: <a href="src.models.datasets.html" title="次の章へ">src.models.datasets package</a></li>
+  </ul></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">クイック検索</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="検索" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2023, RyoyaKaneda.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 5.3.0</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.13</a>
+      
+      |
+      <a href="_sources/src.models.KGModel.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

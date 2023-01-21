@@ -7,6 +7,7 @@ Subpackages
 .. toctree::
    :maxdepth: 4
 
+   src.const
    src.data
    src.features
    src.models
@@ -16,6 +17,14 @@ Subpackages
 
 Submodules
 ----------
+
+src.run module
+--------------
+
+.. automodule:: src.run
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
 src.run\_for\_KGC module
 ------------------------

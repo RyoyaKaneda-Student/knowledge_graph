@@ -1,0 +1,985 @@
+
+<!DOCTYPE html>
+
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>src.run_for_KGC &#8212; KnowledgeGraphChallenge2023 v1.0 ドキュメント</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/alabaster.css" />
+    <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+    <script src="../../_static/jquery.js"></script>
+    <script src="../../_static/underscore.js"></script>
+    <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+    <script src="../../_static/doctools.js"></script>
+    <script src="../../_static/sphinx_highlight.js"></script>
+    <script src="../../_static/translations.js"></script>
+    <link rel="index" title="索引" href="../../genindex.html" />
+    <link rel="search" title="検索" href="../../search.html" />
+   
+  <link rel="stylesheet" href="../../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>src.run_for_KGC のソースコード</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/python</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="sd">&quot;&quot;&quot;run script for Knowledge Graph Challenge</span>
+
+<span class="sd">* This script is the script about Knowledge Graph Challenge.</span>
+<span class="sd">* Define data, define model, define parameters, and run train.</span>
+
+<span class="sd">Todo:</span>
+<span class="sd">    * 色々</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="c1"># ========== python ==========</span>
+<span class="kn">from</span> <span class="nn">argparse</span> <span class="kn">import</span> <span class="n">Namespace</span>
+<span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">chain</span>
+<span class="kn">from</span> <span class="nn">logging</span> <span class="kn">import</span> <span class="n">Logger</span>
+<span class="kn">from</span> <span class="nn">operator</span> <span class="kn">import</span> <span class="n">itemgetter</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Final</span><span class="p">,</span> <span class="n">cast</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="c1"># Machine learning</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">h5py</span>
+<span class="kn">import</span> <span class="nn">optuna</span>
+<span class="c1"># torch</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">torch.nn</span> <span class="kn">import</span> <span class="n">CrossEntropyLoss</span>
+<span class="kn">from</span> <span class="nn">torch.utils.data</span> <span class="kn">import</span> <span class="n">Dataset</span>
+<span class="kn">from</span> <span class="nn">torch.utils.data.dataloader</span> <span class="kn">import</span> <span class="n">DataLoader</span>
+<span class="kn">from</span> <span class="nn">torch.utils.tensorboard.writer</span> <span class="kn">import</span> <span class="n">SummaryWriter</span>
+<span class="c1"># torch ignite</span>
+<span class="kn">from</span> <span class="nn">ignite.contrib.handlers.tqdm_logger</span> <span class="kn">import</span> <span class="n">ProgressBar</span>
+<span class="kn">from</span> <span class="nn">ignite.engine</span> <span class="kn">import</span> <span class="n">Engine</span>
+<span class="kn">from</span> <span class="nn">ignite.handlers</span> <span class="kn">import</span> <span class="n">Checkpoint</span>
+<span class="kn">from</span> <span class="nn">ignite.metrics</span> <span class="kn">import</span> <span class="n">Average</span><span class="p">,</span> <span class="n">Accuracy</span>
+
+<span class="c1"># My const words about words used as tags</span>
+<span class="kn">from</span> <span class="nn">models.KGModel.kg_story_transformer</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ALL_WEIGHT_LIST</span><span class="p">,</span> <span class="n">HEAD_MASKED_LM</span><span class="p">,</span> <span class="n">TAIL_MASKED_LM</span><span class="p">,</span> <span class="n">RELATION_MASKED_LM</span><span class="p">,</span> <span class="p">)</span>
+<span class="c1"># My Models</span>
+<span class="kn">from</span> <span class="nn">models.KGModel.kg_story_transformer</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">KgStoryTransformer01</span><span class="p">,</span> <span class="n">KgStoryTransformer02</span><span class="p">,</span> <span class="n">KgStoryTransformer03</span><span class="p">,</span> <span class="n">KgStoryTransformer03preInit</span><span class="p">,</span>
+    <span class="n">KgStoryTransformer00</span><span class="p">,</span> <span class="n">KgStoryTransformer</span><span class="p">)</span>
+<span class="kn">from</span> <span class="nn">models.datasets.data_helper</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">MyDataHelper</span><span class="p">,</span> <span class="n">DefaultTokens</span><span class="p">,</span> <span class="n">DefaultIds</span><span class="p">,</span> <span class="n">SpecialTokens01</span> <span class="k">as</span> <span class="n">SpecialTokens</span><span class="p">,</span> <span class="n">MyDataLoaderHelper</span><span class="p">,</span> <span class="p">)</span>
+<span class="kn">from</span> <span class="nn">models.datasets.datasets_for_story</span> <span class="kn">import</span> <span class="n">add_bos</span><span class="p">,</span> <span class="n">StoryTriple</span><span class="p">,</span> <span class="n">StoryTripleForValid</span>
+<span class="kn">from</span> <span class="nn">models.utilLoss.focal_loss</span> <span class="kn">import</span> <span class="n">FocalLoss</span><span class="p">,</span> <span class="n">GAMMA</span>
+<span class="kn">from</span> <span class="nn">models.utilLoss.utils</span> <span class="kn">import</span> <span class="n">LossFnName</span>
+<span class="c1"># My utils</span>
+<span class="kn">from</span> <span class="nn">utils.typing</span> <span class="kn">import</span> <span class="n">ConstMeta</span>
+<span class="kn">from</span> <span class="nn">utils.error</span> <span class="kn">import</span> <span class="n">UnderDevelopmentError</span>
+<span class="kn">from</span> <span class="nn">utils.torch</span> <span class="kn">import</span> <span class="n">save_model</span><span class="p">,</span> <span class="n">torch_fix_seed</span><span class="p">,</span> <span class="n">DeviceName</span>
+<span class="kn">from</span> <span class="nn">utils.torch_ignite</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">set_write_model_param_function</span><span class="p">,</span> <span class="n">set_start_epoch_function</span><span class="p">,</span> <span class="n">set_end_epoch_function</span><span class="p">,</span>
+    <span class="n">set_valid_function</span><span class="p">,</span> <span class="n">training_with_ignite</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">utils.utils</span> <span class="kn">import</span> <span class="n">version_check</span>
+<span class="c1"># My const words about file direction and title</span>
+<span class="kn">from</span> <span class="nn">const.const_values</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">PROJECT_DIR</span><span class="p">,</span>
+    <span class="n">ALL_TITLE_LIST</span><span class="p">,</span> <span class="n">SRO_ALL_TRAIN_FILE</span><span class="p">,</span> <span class="n">SRO_ALL_INFO_FILE</span><span class="p">,</span> <span class="n">TITLE2SRO_FILE090</span><span class="p">,</span> <span class="n">TITLE2SRO_FILE075</span><span class="p">,</span> <span class="n">ABOUT_KILL_WORDS</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="c1"># My const words about words used as tags</span>
+<span class="kn">from</span> <span class="nn">const.const_values</span> <span class="kn">import</span> <span class="p">(</span><span class="n">CPU</span><span class="p">,</span> <span class="n">MODEL</span><span class="p">,</span> <span class="n">LOSS</span><span class="p">,</span> <span class="n">PARAMS</span><span class="p">,</span> <span class="n">LR</span><span class="p">,</span>
+                                <span class="n">DATA_HELPER</span><span class="p">,</span> <span class="n">DATASETS</span><span class="p">,</span> <span class="n">DATA_LOADERS</span><span class="p">,</span> <span class="n">TRAIN_RETURNS</span><span class="p">,</span>
+                                <span class="n">STORY_LOSS</span><span class="p">,</span> <span class="n">RELATION_LOSS</span><span class="p">,</span> <span class="n">OBJECT_LOSS</span><span class="p">,</span>
+                                <span class="n">STORY_ACCURACY</span><span class="p">,</span> <span class="n">RELATION_ACCURACY</span><span class="p">,</span> <span class="n">ENTITY_ACCURACY</span><span class="p">,</span>
+                                <span class="n">STORY_ANS</span><span class="p">,</span> <span class="n">RELATION_ANS</span><span class="p">,</span> <span class="n">OBJECT_ANS</span><span class="p">,</span>
+                                <span class="n">STORY_PRED</span><span class="p">,</span> <span class="n">RELATION_PRED</span><span class="p">,</span> <span class="n">ENTITY_PRED</span><span class="p">,</span>
+                                <span class="n">PRE_TRAIN_SCALER_TAG_GETTER</span><span class="p">,</span> <span class="n">PRE_VALID_SCALER_TAG_GETTER</span><span class="p">,</span>
+                                <span class="n">PRE_TRAIN_MODEL_WEIGHT_TAG_GETTER</span><span class="p">,</span>
+                                <span class="n">METRIC_NAMES</span><span class="p">)</span>
+<span class="c1"># My const value about torch ignite</span>
+<span class="kn">from</span> <span class="nn">utils.torch_ignite</span> <span class="kn">import</span> <span class="p">(</span><span class="n">TRAINER</span><span class="p">,</span> <span class="n">EVALUATOR</span><span class="p">,</span> <span class="n">GOOD_LOSS_CHECKPOINTE</span><span class="p">,</span> <span class="n">LAST_CHECKPOINTE</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="ModelVersion"><a class="viewcode-back" href="../../src.html#src.run_for_KGC.ModelVersion">[ドキュメント]</a><span class="k">class</span> <span class="nc">ModelVersion</span><span class="p">(</span><span class="n">metaclass</span><span class="o">=</span><span class="n">ConstMeta</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Model Versions</span>
+
+<span class="sd">    * This is only const value class.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">V01</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;01&#39;</span>
+    <span class="n">V02</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;02&#39;</span>
+    <span class="n">V03</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;03&#39;</span>
+    <span class="n">V03a</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;03a&#39;</span>
+
+<div class="viewcode-block" id="ModelVersion.ALL_LIST"><a class="viewcode-back" href="../../src.html#src.run_for_KGC.ModelVersion.ALL_LIST">[ドキュメント]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">ALL_LIST</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;All list of this const values.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            tuple[str, ...]: (01, 02, 03, 03a).</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">V01</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">V02</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">V03</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">V03a</span></div></div>
+
+
+<div class="viewcode-block" id="setup_parser"><a class="viewcode-back" href="../../src.html#src.run_for_KGC.setup_parser">[ドキュメント]</a><span class="k">def</span> <span class="nf">setup_parser</span><span class="p">(</span><span class="n">args</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Namespace</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;make parser function</span>
+
+<span class="sd">    * My first-setup function needs the function which make and return parser.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        args(:obj:`Sequence[str]`, optional): args list or None. Default to None.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Namespace: your args instance.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">import</span> <span class="nn">argparse</span>  <span class="c1"># 1. argparseをインポート</span>
+    <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s1">&#39;This is make and training source code for KGC.&#39;</span><span class="p">)</span>
+    <span class="n">paa</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span>
+    <span class="n">paa</span><span class="p">(</span><span class="s1">&#39;--notebook&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;if use notebook, use this argument.&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">)</span>
+    <span class="n">paa</span><span class="p">(</span><span class="s1">&#39;--console-level&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;log level on console&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s1">&#39;debug&#39;</span><span class="p">,</span> <span class="n">choices</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;info&#39;</span><span class="p">,</span> <span class="s1">&#39;debug&#39;</span><span class="p">])</span>
+    <span class="n">paa</span><span class="p">(</span><span class="s1">&#39;--logfile&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;the path of saving log&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s1">&#39;log/test.log&#39;</span><span class="p">)</span>
+    <span class="n">paa</span><span class="p">(</span><span class="s1">&#39;--param-file&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;the path of saving param&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s1">&#39;log/param.pkl&#39;</span><span class="p">)</span>
+    <span class="n">paa</span><span class="p">(</span><span class="s1">&#39;--device-name&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="n">DeviceName</span><span class="o">.</span><span class="n">ALL_INFO</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">DeviceName</span><span class="o">.</span><span class="n">CPU</span><span class="p">,</span> <span class="n">choices</span><span class="o">=</span><span class="n">DeviceName</span><span class="o">.</span><span class="n">ALL_LIST</span><span class="p">)</span>
+    <span class="n">paa</span><span class="p">(</span><span class="s1">&#39;--train-anyway&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;It will not be reproducible, but it could be faster.&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">)</span>
+    <span class="c1"># save dir setting</span>
+    <span class="n">parser_group01</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">add_argument_group</span><span class="p">(</span><span class="s1">&#39;dir and path&#39;</span><span class="p">,</span> <span class="s1">&#39;There are the setting of training setting dir or path.&#39;</span><span class="p">)</span>
+    <span class="n">paa1</span> <span class="o">=</span> <span class="n">parser_group01</span><span class="o">.</span><span class="n">add_argument</span>
+    <span class="n">paa1</span><span class="p">(</span><span class="s1">&#39;--tensorboard-dir&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s1">&#39;log/tensorboard/&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;tensorboard direction&#39;</span><span class="p">)</span>
+    <span class="n">paa1</span><span class="p">(</span><span class="s1">&#39;--checkpoint-dir&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s1">&#39;log/checkpoint/&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;tensorboard direction&#39;</span><span class="p">)</span>
+    <span class="n">paa1</span><span class="p">(</span><span class="s1">&#39;--model-path&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;model path&#39;</span><span class="p">)</span>
+    <span class="n">paa1</span><span class="p">(</span><span class="s1">&#39;--resume-from-checkpoint&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;if use checkpoint, use this argument.&#39;</span><span class="p">)</span>
+    <span class="n">paa1</span><span class="p">(</span><span class="s1">&#39;--resume-from-last-point&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;if use checkpoint, use this argument.&#39;</span><span class="p">)</span>
+    <span class="n">paa1</span><span class="p">(</span><span class="s1">&#39;--only-load-trainer-evaluator&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">,</span>
+         <span class="n">help</span><span class="o">=</span><span class="s1">&#39;load only mode. not training. use it for valid model.&#39;</span><span class="p">,</span> <span class="p">)</span>
+    <span class="n">paa1</span><span class="p">(</span><span class="s1">&#39;--resume-checkpoint-path&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;if use checkpoint, use this argument.&#39;</span><span class="p">)</span>
+    <span class="c1"># use title setting</span>
+    <span class="n">parser_group02</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">add_argument_group</span><span class="p">(</span><span class="s1">&#39;use title setting&#39;</span><span class="p">,</span> <span class="s1">&#39;There are the setting of training title.&#39;</span><span class="p">)</span>
+    <span class="n">paa2</span> <span class="o">=</span> <span class="n">parser_group02</span><span class="o">.</span><span class="n">add_argument</span>
+    <span class="n">paa2</span><span class="p">(</span><span class="s1">&#39;--pre-train&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;Put on if you are doing pre-training&quot;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">)</span>
+    <span class="n">paa2</span><span class="p">(</span><span class="s1">&#39;--train-valid-test&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">)</span>
+    <span class="n">paa2</span><span class="p">(</span><span class="s1">&#39;--only-train&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">)</span>
+    <span class="n">paa2</span><span class="p">(</span><span class="s1">&#39;--use-for-challenge100&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">)</span>
+    <span class="n">paa2</span><span class="p">(</span><span class="s1">&#39;--use-for-challenge090&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">)</span>
+    <span class="n">paa2</span><span class="p">(</span><span class="s1">&#39;--use-for-challenge075&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">)</span>
+    <span class="n">paa2</span><span class="p">(</span><span class="s1">&#39;--use-title&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39; or &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ALL_TITLE_LIST</span><span class="p">),</span> <span class="nb">type</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span> <span class="n">choices</span><span class="o">=</span><span class="n">ALL_TITLE_LIST</span><span class="p">)</span>
+    <span class="c1"># optuna setting</span>
+    <span class="n">parser_group03</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">add_argument_group</span><span class="p">(</span><span class="s1">&#39;optuna setting&#39;</span><span class="p">,</span> <span class="s1">&#39;There are the setting of optuna.&#39;</span><span class="p">)</span>
+    <span class="n">paa3</span> <span class="o">=</span> <span class="n">parser_group03</span><span class="o">.</span><span class="n">add_argument</span>
+    <span class="n">paa3</span><span class="p">(</span><span class="s1">&#39;--do-optuna&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;do optuna&quot;</span><span class="p">)</span>
+    <span class="n">paa3</span><span class="p">(</span><span class="s1">&#39;--optuna-file&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;optuna file&#39;</span><span class="p">)</span>
+    <span class="n">paa3</span><span class="p">(</span><span class="s1">&#39;--study-name&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;optuna study-name&#39;</span><span class="p">)</span>
+    <span class="n">paa3</span><span class="p">(</span><span class="s1">&#39;--n-trials&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;optuna n-trials&#39;</span><span class="p">)</span>
+    <span class="c1"># special num count</span>
+    <span class="n">parser_group04</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">add_argument_group</span><span class="p">(</span><span class="s1">&#39;special token setting&#39;</span><span class="p">,</span> <span class="s1">&#39;There are the setting of special token.&#39;</span><span class="p">)</span>
+    <span class="n">paa4</span> <span class="o">=</span> <span class="n">parser_group04</span><span class="o">.</span><span class="n">add_argument</span>
+    <span class="n">paa4</span><span class="p">(</span><span class="s1">&#39;--story-special-num&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;story special num&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+    <span class="n">paa4</span><span class="p">(</span><span class="s1">&#39;--relation-special-num&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;relation special num&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+    <span class="n">paa4</span><span class="p">(</span><span class="s1">&#39;--entity-special-num&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;entity special num&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+    <span class="c1"># e special</span>
+    <span class="n">parser_group041</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">add_argument_group</span><span class="p">(</span>
+        <span class="s1">&#39;special (tail) embedding token setting&#39;</span><span class="p">,</span> <span class="s1">&#39;There are the setting of special (tail) embedding token setting.&#39;</span><span class="p">)</span>
+    <span class="n">paa41</span> <span class="o">=</span> <span class="n">parser_group041</span><span class="o">.</span><span class="n">add_argument</span>
+    <span class="n">paa41</span><span class="p">(</span><span class="s1">&#39;--padding-token-e&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;padding&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">DefaultIds</span><span class="o">.</span><span class="n">PAD_E_DEFAULT_ID</span><span class="p">)</span>
+    <span class="n">paa41</span><span class="p">(</span><span class="s1">&#39;--cls-token-e&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;cls&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">DefaultIds</span><span class="o">.</span><span class="n">CLS_E_DEFAULT_ID</span><span class="p">)</span>
+    <span class="n">paa41</span><span class="p">(</span><span class="s1">&#39;--mask-token-e&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;mask&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">DefaultIds</span><span class="o">.</span><span class="n">MASK_E_DEFAULT_ID</span><span class="p">)</span>
+    <span class="n">paa41</span><span class="p">(</span><span class="s1">&#39;--sep-token-e&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;sep&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">DefaultIds</span><span class="o">.</span><span class="n">SEP_E_DEFAULT_ID</span><span class="p">)</span>
+    <span class="n">paa41</span><span class="p">(</span><span class="s1">&#39;--bos-token-e&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;bos&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">DefaultIds</span><span class="o">.</span><span class="n">BOS_E_DEFAULT_ID</span><span class="p">)</span>
+    <span class="c1"># r special</span>
+    <span class="n">parser_group042</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">add_argument_group</span><span class="p">(</span>
+        <span class="s1">&#39;special (tail) embedding token setting&#39;</span><span class="p">,</span> <span class="s1">&#39;There are the setting of special relation embedding token setting.&#39;</span><span class="p">)</span>
+    <span class="n">paa42</span> <span class="o">=</span> <span class="n">parser_group042</span><span class="o">.</span><span class="n">add_argument</span>
+    <span class="n">paa42</span><span class="p">(</span><span class="s1">&#39;--padding-token-r&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;padding&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">DefaultIds</span><span class="o">.</span><span class="n">PAD_R_DEFAULT_ID</span><span class="p">)</span>
+    <span class="n">paa42</span><span class="p">(</span><span class="s1">&#39;--cls-token-r&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;cls&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">DefaultIds</span><span class="o">.</span><span class="n">CLS_R_DEFAULT_ID</span><span class="p">)</span>
+    <span class="n">paa42</span><span class="p">(</span><span class="s1">&#39;--mask-token-r&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;mask&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">DefaultIds</span><span class="o">.</span><span class="n">MASK_R_DEFAULT_ID</span><span class="p">)</span>
+    <span class="n">paa42</span><span class="p">(</span><span class="s1">&#39;--sep-token-r&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;sep&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">DefaultIds</span><span class="o">.</span><span class="n">SEP_R_DEFAULT_ID</span><span class="p">)</span>
+    <span class="n">paa42</span><span class="p">(</span><span class="s1">&#39;--bos-token-r&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;bos&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">DefaultIds</span><span class="o">.</span><span class="n">BOS_R_DEFAULT_ID</span><span class="p">)</span>
+    <span class="c1"># story</span>
+    <span class="n">parser_group043</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">add_argument_group</span><span class="p">(</span>
+        <span class="s1">&#39;special (tail) embedding token setting&#39;</span><span class="p">,</span> <span class="s1">&#39;There are the setting of special (head) embedding token setting.&#39;</span><span class="p">)</span>
+    <span class="n">paa43</span> <span class="o">=</span> <span class="n">parser_group043</span><span class="o">.</span><span class="n">add_argument</span>
+    <span class="n">paa43</span><span class="p">(</span><span class="s1">&#39;--padding-token-s&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;padding&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">DefaultIds</span><span class="o">.</span><span class="n">PAD_E_DEFAULT_ID</span><span class="p">)</span>
+    <span class="n">paa43</span><span class="p">(</span><span class="s1">&#39;--cls-token-s&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;cls&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">DefaultIds</span><span class="o">.</span><span class="n">CLS_E_DEFAULT_ID</span><span class="p">)</span>
+    <span class="n">paa43</span><span class="p">(</span><span class="s1">&#39;--mask-token-s&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;mask&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">DefaultIds</span><span class="o">.</span><span class="n">MASK_E_DEFAULT_ID</span><span class="p">)</span>
+    <span class="n">paa43</span><span class="p">(</span><span class="s1">&#39;--sep-token-s&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;sep&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">DefaultIds</span><span class="o">.</span><span class="n">SEP_E_DEFAULT_ID</span><span class="p">)</span>
+    <span class="n">paa43</span><span class="p">(</span><span class="s1">&#39;--bos-token-s&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;bos&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">DefaultIds</span><span class="o">.</span><span class="n">BOS_E_DEFAULT_ID</span><span class="p">)</span>
+    <span class="c1"># model</span>
+    <span class="n">parser_group05</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">add_argument_group</span><span class="p">(</span><span class="s1">&#39;model setting&#39;</span><span class="p">,</span> <span class="s1">&#39;There are the setting of model params.&#39;</span><span class="p">)</span>
+    <span class="n">paa5</span> <span class="o">=</span> <span class="n">parser_group05</span><span class="o">.</span><span class="n">add_argument</span>
+    <span class="n">paa5</span><span class="p">(</span><span class="s1">&#39;--model-version&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span> <span class="n">choices</span><span class="o">=</span><span class="n">ModelVersion</span><span class="o">.</span><span class="n">ALL_LIST</span><span class="p">(),</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;model version.&#39;</span><span class="p">)</span>
+    <span class="n">paa5</span><span class="p">(</span><span class="s1">&#39;--embedding-dim&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;The embedding dimension. Default: 128&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">128</span><span class="p">)</span>
+    <span class="n">paa5</span><span class="p">(</span><span class="s1">&#39;--entity-embedding-dim&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;The embedding dimension. Default: 128&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">128</span><span class="p">)</span>
+    <span class="n">paa5</span><span class="p">(</span><span class="s1">&#39;--relation-embedding-dim&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;The embedding dimension. Default: 128&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">128</span><span class="p">)</span>
+    <span class="n">paa5</span><span class="p">(</span><span class="s1">&#39;--separate-head-and-tail&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+         <span class="n">help</span><span class="o">=</span><span class="s1">&#39;If True, it head Embedding and tail Embedding are different.&#39;</span><span class="p">)</span>
+    <span class="n">paa5</span><span class="p">(</span><span class="s1">&#39;--batch-size&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;batch size&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+    <span class="n">paa5</span><span class="p">(</span><span class="s1">&#39;--max-len&#39;</span><span class="p">,</span> <span class="n">metavar</span><span class="o">=</span><span class="s1">&#39;MAX-LENGTH&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;max length of 1 batch. default: 256&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">256</span><span class="p">)</span>
+    <span class="n">paa5</span><span class="p">(</span><span class="s1">&#39;--no-use-pe&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;to check pe(position encoding) power, we have to make no pe model&#39;</span><span class="p">)</span>
+    <span class="n">paa5</span><span class="p">(</span><span class="s1">&#39;--init-embedding-using-bert&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">,</span>
+         <span class="n">help</span><span class="o">=</span><span class="s1">&#39;if it is set and the model is 03a, it will be pre_init by bert&#39;</span><span class="p">)</span>
+    <span class="c1"># mask percent</span>
+    <span class="n">parser_group051</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">add_argument_group</span><span class="p">(</span>
+        <span class="s1">&#39;model setting of mask-percent&#39;</span><span class="p">,</span> <span class="s1">&#39;MUST mask-mask + mask-random + mask-nomask == 1.00.&#39;</span><span class="p">)</span>
+    <span class="n">paa51</span> <span class="o">=</span> <span class="n">parser_group051</span><span class="o">.</span><span class="n">add_argument</span>
+    <span class="n">paa51</span><span class="p">(</span><span class="s1">&#39;--mask-percent&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;default: 0.15&#39;</span><span class="p">,</span> <span class="n">metavar</span><span class="o">=</span><span class="s1">&#39;mask-rate&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">0.15</span><span class="p">)</span>
+    <span class="n">paa51</span><span class="p">(</span><span class="s1">&#39;--mask-mask-percent&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;default: 0.80&#39;</span><span class="p">,</span> <span class="n">metavar</span><span class="o">=</span><span class="s1">&#39;mask-rate&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">0.80</span><span class="p">)</span>
+    <span class="n">paa51</span><span class="p">(</span><span class="s1">&#39;--mask-random-percent&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;default: 0.10&#39;</span><span class="p">,</span> <span class="n">metavar</span><span class="o">=</span><span class="s1">&#39;random-rate&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">0.10</span><span class="p">)</span>
+    <span class="n">paa51</span><span class="p">(</span><span class="s1">&#39;--mask-nomask-percent&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;default: 0.10&#39;</span><span class="p">,</span> <span class="n">metavar</span><span class="o">=</span><span class="s1">&#39;nomask-rate&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">0.10</span><span class="p">)</span>
+    <span class="c1"># transformer</span>
+    <span class="n">parser_group052</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">add_argument_group</span><span class="p">(</span>
+        <span class="s1">&#39;model setting of transformer&#39;</span><span class="p">,</span> <span class="s1">&#39;There are the setting of transformer params in model.&#39;</span><span class="p">)</span>
+    <span class="n">paa52</span> <span class="o">=</span> <span class="n">parser_group052</span><span class="o">.</span><span class="n">add_argument</span>
+    <span class="n">paa52</span><span class="p">(</span><span class="s1">&#39;--nhead&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">metavar</span><span class="o">=</span><span class="s1">&#39;N&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;nhead. Default: 4.&#39;</span><span class="p">)</span>
+    <span class="n">paa52</span><span class="p">(</span><span class="s1">&#39;--num-layers&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">metavar</span><span class="o">=</span><span class="s1">&#39;NUM&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;num layers. Default: 4.&#39;</span><span class="p">)</span>
+    <span class="n">paa52</span><span class="p">(</span><span class="s1">&#39;--dim-feedforward&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">1028</span><span class="p">,</span> <span class="n">metavar</span><span class="o">=</span><span class="s1">&#39;DIM&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;dim of feedforward. Default: 1028.&#39;</span><span class="p">)</span>
+    <span class="n">paa52</span><span class="p">(</span><span class="s1">&#39;--transformer-drop&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">metavar</span><span class="o">=</span><span class="s1">&#39;DROP_RATE&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;transformer-drop. Default: 0.1.&#39;</span><span class="p">)</span>
+    <span class="n">paa52</span><span class="p">(</span><span class="s1">&#39;--position-encoder-drop&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">metavar</span><span class="o">=</span><span class="s1">&#39;DROP_RATE&#39;</span><span class="p">,</span>
+          <span class="n">help</span><span class="o">=</span><span class="s1">&#39;position-encoder-drop. Default: 0.1.&#39;</span><span class="p">)</span>
+    <span class="c1"># optimizer</span>
+    <span class="n">parser_group06</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">add_argument_group</span><span class="p">(</span><span class="s1">&#39;model optimizer setting&#39;</span><span class="p">,</span>
+                                               <span class="s1">&#39;There are the setting of model optimizer params.&#39;</span><span class="p">)</span>
+    <span class="n">paa6</span> <span class="o">=</span> <span class="n">parser_group06</span><span class="o">.</span><span class="n">add_argument</span>
+    <span class="n">paa6</span><span class="p">(</span><span class="s1">&#39;--lr&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">0.003</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;learning rate (default: 0.003)&#39;</span><span class="p">)</span>
+    <span class="n">paa6</span><span class="p">(</span><span class="s1">&#39;--lr-story&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;learning rate (default: same as --lr)&#39;</span><span class="p">)</span>
+    <span class="n">paa6</span><span class="p">(</span><span class="s1">&#39;--lr-relation&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;learning rate (default: same as --lr)&#39;</span><span class="p">)</span>
+    <span class="n">paa6</span><span class="p">(</span><span class="s1">&#39;--lr-entity&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;learning rate (default: same as --lr)&#39;</span><span class="p">)</span>
+    <span class="n">paa6</span><span class="p">(</span><span class="s1">&#39;--loss-function&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span> <span class="n">choices</span><span class="o">=</span><span class="n">LossFnName</span><span class="o">.</span><span class="n">ALL_LIST</span><span class="p">(),</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;loss function (default: CrossEntropyLoss)&#39;</span><span class="p">)</span>
+    <span class="n">paa6</span><span class="p">(</span><span class="s1">&#39;--loss-weight-story&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">1.</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;loss-weight-story&#39;</span><span class="p">)</span>
+    <span class="n">paa6</span><span class="p">(</span><span class="s1">&#39;--loss-weight-relation&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">1.</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;loss-weight-relation&#39;</span><span class="p">)</span>
+    <span class="n">paa6</span><span class="p">(</span><span class="s1">&#39;--loss-weight-entity&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">1.</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;loss-weight-entity&#39;</span><span class="p">)</span>
+    <span class="n">paa6</span><span class="p">(</span><span class="s1">&#39;--epoch&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;max epoch&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+    <span class="n">paa6</span><span class="p">(</span><span class="s1">&#39;--valid-interval&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;valid-interval&#39;</span><span class="p">,</span> <span class="p">)</span>
+    <span class="c1"># if focal loss, this is need.</span>
+    <span class="n">parser_group061</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">add_argument_group</span><span class="p">(</span><span class="s1">&#39;focal loss setting&#39;</span><span class="p">,</span>
+                                                <span class="s1">&#39;There are the setting of focal loss.&#39;</span><span class="p">)</span>
+    <span class="n">paa61</span> <span class="o">=</span> <span class="n">parser_group061</span><span class="o">.</span><span class="n">add_argument</span>
+    <span class="n">paa61</span><span class="p">(</span><span class="s1">&#39;--gamma&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;gamma&#39;</span><span class="p">)</span>
+
+    <span class="n">args</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">(</span><span class="n">args</span><span class="o">=</span><span class="n">args</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">args</span></div>
+
+
+<div class="viewcode-block" id="get_all_tokens"><a class="viewcode-back" href="../../src.html#src.run_for_KGC.get_all_tokens">[ドキュメント]</a><span class="k">def</span> <span class="nf">get_all_tokens</span><span class="p">(</span><span class="n">args</span><span class="p">:</span> <span class="n">Namespace</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;get all_tokens</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        args(Namespace):</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        tuple[tuple[int, int], tuple[int, int], tuple[int, int], tuple[int, int], tuple[int, int]]:</span>
+<span class="sd">            (</span>
+<span class="sd">                (pad_token_e, pad_token_r), (cls_token_e, cls_token_r), (mask_token_e, mask_token_r),</span>
+<span class="sd">                (sep_token_e, sep_token_r), (bos_token_e, bos_token_r)</span>
+<span class="sd">            )</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">pad_token_e</span><span class="p">,</span> <span class="n">pad_token_r</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">padding_token_e</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">padding_token_r</span>
+    <span class="n">cls_token_e</span><span class="p">,</span> <span class="n">cls_token_r</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">cls_token_e</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">cls_token_r</span>
+    <span class="n">mask_token_e</span><span class="p">,</span> <span class="n">mask_token_r</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">mask_token_e</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">mask_token_r</span>
+    <span class="n">sep_token_e</span><span class="p">,</span> <span class="n">sep_token_r</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">sep_token_e</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">sep_token_r</span>
+    <span class="n">bos_token_e</span><span class="p">,</span> <span class="n">bos_token_r</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">bos_token_e</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">bos_token_r</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="p">(</span><span class="n">pad_token_e</span><span class="p">,</span> <span class="n">pad_token_r</span><span class="p">),</span> <span class="p">(</span><span class="n">cls_token_e</span><span class="p">,</span> <span class="n">cls_token_r</span><span class="p">),</span> <span class="p">(</span><span class="n">mask_token_e</span><span class="p">,</span> <span class="n">mask_token_r</span><span class="p">),</span>
+        <span class="p">(</span><span class="n">sep_token_e</span><span class="p">,</span> <span class="n">sep_token_r</span><span class="p">),</span> <span class="p">(</span><span class="n">bos_token_e</span><span class="p">,</span> <span class="n">bos_token_r</span><span class="p">)</span>
+    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="pre_training"><a class="viewcode-back" href="../../src.html#src.run_for_KGC.pre_training">[ドキュメント]</a><span class="k">def</span> <span class="nf">pre_training</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">hyper_params</span><span class="p">,</span> <span class="n">data_helper</span><span class="p">,</span> <span class="n">data_loaders</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">logger</span><span class="p">,</span> <span class="n">summary_writer</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;pre training function.</span>
+
+<span class="sd">    * main part of my train.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        args(Namespace): args.</span>
+<span class="sd">        hyper_params(tuple): hyper parameters.</span>
+<span class="sd">        data_helper(MyDataHelper): MyDataHelper instance.</span>
+<span class="sd">        data_loaders(MyDataLoaderHelper): MyDataLoaderHelper instance. It has .train_dataloader and .valid_dataloader.</span>
+<span class="sd">        model(KgStoryTransformer): model.</span>
+<span class="sd">        summary_writer(SummaryWriter): tensorboard&#39;s SummaryWriter instance. if it is None, don&#39;t write to tensorboard.</span>
+<span class="sd">        logger(Logger): logging.Logger.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: keys=(MODEL, TRAINER, EVALUATOR, (CHECKPOINTER_GOOD_LOSS, CHECKPOINTER_LAST))</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="p">(</span><span class="n">lr</span><span class="p">,</span> <span class="n">lr_story</span><span class="p">,</span> <span class="n">lr_relation</span><span class="p">,</span> <span class="n">lr_entity</span><span class="p">,</span>
+     <span class="n">loss_fn_name</span><span class="p">,</span> <span class="n">loss_weight_story</span><span class="p">,</span> <span class="n">loss_weight_relation</span><span class="p">,</span> <span class="n">loss_weight_entity</span><span class="p">,</span> <span class="n">other_params</span><span class="p">)</span> <span class="o">=</span> <span class="n">hyper_params</span>
+    <span class="n">do_weight_loss</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">device</span>
+    <span class="n">max_len</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">max_len</span>
+    <span class="n">max_epoch</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">epoch</span>
+    <span class="n">mask_token_e</span><span class="p">,</span> <span class="n">mask_token_r</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">mask_token_e</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">mask_token_r</span>
+    <span class="n">checkpoint_dir</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">checkpoint_dir</span>
+    <span class="n">resume_checkpoint_path</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">resume_checkpoint_path</span>
+    <span class="n">is_resume_from_checkpoint</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">resume_from_checkpoint</span>
+    <span class="n">is_resume_from_last_point</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">resume_from_last_point</span>
+
+    <span class="n">non_blocking</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="c1"># optional function</span>
+    <span class="k">def</span> <span class="nf">cpu_deep_copy_or_none</span><span class="p">(</span><span class="n">_tensor</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;return deep copied tensor or None.</span>
+
+<span class="sd">        * deep clone to cpu from gpu. However, if _tensor is None, return None.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            _tensor(Optional[torch.Tensor]): Tensor or None item.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Optional[torch.Tensor]: If input is None, return None. else return clone tensor(device=cpu)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">_tensor</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">CPU</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">non_blocking</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span> <span class="k">if</span> <span class="n">_tensor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+
+    <span class="c1"># mask percents</span>
+    <span class="n">mask_percent</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">mask_percent</span>
+    <span class="n">mask_mask_percent</span> <span class="o">=</span> <span class="n">mask_percent</span> <span class="o">*</span> <span class="n">args</span><span class="o">.</span><span class="n">mask_mask_percent</span>
+    <span class="n">mask_nomask_percent</span> <span class="o">=</span> <span class="n">mask_percent</span> <span class="o">*</span> <span class="n">args</span><span class="o">.</span><span class="n">mask_nomask_percent</span>
+    <span class="n">mask_random_percent</span> <span class="o">=</span> <span class="n">mask_percent</span> <span class="o">*</span> <span class="n">args</span><span class="o">.</span><span class="n">mask_random_percent</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">mask_percent</span><span class="si">=}</span><span class="s2">, </span><span class="si">{</span><span class="n">mask_mask_percent</span><span class="si">=}</span><span class="s2">, </span><span class="si">{</span><span class="n">mask_nomask_percent</span><span class="si">=}</span><span class="s2">, </span><span class="si">{</span><span class="n">mask_random_percent</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">mask_mask_percent</span> <span class="o">+</span> <span class="n">mask_nomask_percent</span> <span class="o">+</span> <span class="n">mask_random_percent</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">mask_percent</span><span class="p">)</span> <span class="o">==</span> <span class="mf">1.</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;mask_mask_percent + mask_nomask_percent + mask_random_percent + (1 - mask_percent) must be 1.0&quot;</span><span class="p">)</span>
+
+    <span class="c1"># optional function</span>
+    <span class="c1"># noinspection PyTypeChecker</span>
+    <span class="k">def</span> <span class="nf">mask_function</span><span class="p">(</span><span class="n">_random_all</span><span class="p">,</span> <span class="n">_value</span><span class="p">,</span> <span class="n">_mask_token</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot; Mask by mask_token</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            _random_all(torch.Tensor): random values. All parameters are within 0.0 ~ 1.0.</span>
+<span class="sd">            _value(torch.Tensor): Correct value.</span>
+<span class="sd">            _mask_token(int): mask token</span>
+<span class="sd">            weights(torch.Tensor): the weight of random values frequency.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            tuple[torch.Tensor, torch.Tensor, torch.Tensor]</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">_mask_filter</span> <span class="o">=</span> <span class="n">_random_all</span> <span class="o">&lt;</span> <span class="n">mask_percent</span>
+        <span class="n">_mask_ans</span> <span class="o">=</span> <span class="n">_value</span><span class="p">[</span><span class="n">_mask_filter</span><span class="p">]</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+        <span class="n">_mask_value</span> <span class="o">=</span> <span class="n">_value</span><span class="p">[</span><span class="n">_mask_filter</span><span class="p">]</span>
+
+        <span class="n">_random</span> <span class="o">=</span> <span class="n">_random_all</span><span class="p">[</span><span class="n">_mask_filter</span><span class="p">]</span>
+        <span class="n">_mask_random_filter</span> <span class="o">=</span> <span class="n">_random</span> <span class="o">&lt;</span> <span class="n">mask_random_percent</span>
+        <span class="n">_mask_mask_filter</span> <span class="o">=</span> <span class="n">_random</span> <span class="o">&gt;=</span> <span class="p">(</span><span class="n">mask_nomask_percent</span> <span class="o">+</span> <span class="n">mask_random_percent</span><span class="p">)</span>
+        <span class="n">_mask_value</span><span class="p">[</span><span class="n">_mask_random_filter</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">multinomial</span><span class="p">(</span>
+            <span class="n">weights</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">count_nonzero</span><span class="p">(</span><span class="n">_mask_random_filter</span><span class="p">)</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span> <span class="n">replacement</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">_mask_value</span><span class="p">[</span><span class="n">_mask_mask_filter</span><span class="p">]</span> <span class="o">=</span> <span class="n">_mask_token</span>
+        <span class="k">return</span> <span class="n">_mask_filter</span><span class="p">,</span> <span class="n">_mask_ans</span><span class="p">,</span> <span class="n">_mask_value</span>
+
+    <span class="n">entity_num</span><span class="p">,</span> <span class="n">relation_num</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_helper</span><span class="o">.</span><span class="n">processed_entities</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_helper</span><span class="o">.</span><span class="n">processed_relations</span><span class="p">)</span>
+    <span class="n">train</span> <span class="o">=</span> <span class="n">data_loaders</span><span class="o">.</span><span class="n">train_dataloader</span>
+    <span class="n">valid</span> <span class="o">=</span> <span class="n">data_loaders</span><span class="o">.</span><span class="n">valid_dataloader</span> <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">train_valid_test</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">train_triple</span> <span class="o">=</span> <span class="n">train</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">triple</span>
+    <span class="c1"># count frequency list</span>
+    <span class="n">head_index2count</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">train_triple</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">minlength</span><span class="o">=</span><span class="n">entity_num</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">relation_index2count</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">train_triple</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">minlength</span><span class="o">=</span><span class="n">relation_num</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">tail_index2count</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">train_triple</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span> <span class="n">minlength</span><span class="o">=</span><span class="n">entity_num</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+
+    <span class="c1"># optimizer setting</span>
+    <span class="n">modules</span> <span class="o">=</span> <span class="p">{</span><span class="n">_name</span><span class="p">:</span> <span class="n">_module</span> <span class="k">for</span> <span class="n">_name</span><span class="p">,</span> <span class="n">_module</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">named_children</span><span class="p">()}</span>
+    <span class="k">del</span> <span class="n">modules</span><span class="p">[</span><span class="n">HEAD_MASKED_LM</span><span class="p">],</span> <span class="n">modules</span><span class="p">[</span><span class="n">RELATION_MASKED_LM</span><span class="p">],</span> <span class="n">modules</span><span class="p">[</span><span class="n">TAIL_MASKED_LM</span><span class="p">]</span>
+    <span class="n">opt</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Adam</span><span class="p">([</span>
+                               <span class="p">{</span><span class="n">PARAMS</span><span class="p">:</span> <span class="n">_module</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="n">LR</span><span class="p">:</span> <span class="n">lr</span><span class="p">}</span> <span class="k">for</span> <span class="n">_name</span><span class="p">,</span> <span class="n">_module</span> <span class="ow">in</span> <span class="n">modules</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+                           <span class="p">]</span> <span class="o">+</span> <span class="p">[</span>
+                               <span class="p">{</span><span class="n">PARAMS</span><span class="p">:</span> <span class="n">model</span><span class="o">.</span><span class="n">head_maskdlm</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="n">LR</span><span class="p">:</span> <span class="n">lr_story</span><span class="p">},</span>
+                               <span class="p">{</span><span class="n">PARAMS</span><span class="p">:</span> <span class="n">model</span><span class="o">.</span><span class="n">relation_maskdlm</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="n">LR</span><span class="p">:</span> <span class="n">lr_relation</span><span class="p">},</span>
+                               <span class="p">{</span><span class="n">PARAMS</span><span class="p">:</span> <span class="n">model</span><span class="o">.</span><span class="n">tail_maskdlm</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="n">LR</span><span class="p">:</span> <span class="n">lr_entity</span><span class="p">},</span>
+                           <span class="p">])</span>
+    <span class="c1"># loss function setting</span>
+    <span class="n">gamma</span> <span class="o">=</span> <span class="n">other_params</span><span class="p">[</span><span class="n">GAMMA</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">do_weight_loss</span><span class="p">:</span>
+        <span class="n">loss_fn_entity</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">loss_fn_relation</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">raise</span> <span class="n">UnderDevelopmentError</span><span class="p">(</span><span class="s2">&quot;todo&quot;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">loss_fn_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">LossFnName</span><span class="o">.</span><span class="n">ALL_LIST</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;The loss name </span><span class="si">{</span><span class="n">loss_fn_name</span><span class="si">}</span><span class="s2"> is not defined.&quot;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">loss_fn_name</span> <span class="o">==</span> <span class="n">LossFnName</span><span class="o">.</span><span class="n">CROSS_ENTROPY_LOSS</span><span class="p">:</span>
+            <span class="n">loss_fn_entity</span> <span class="o">=</span> <span class="n">CrossEntropyLoss</span><span class="p">(</span><span class="n">weight</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">entity_num</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">))</span>
+            <span class="n">loss_fn_relation</span> <span class="o">=</span> <span class="n">CrossEntropyLoss</span><span class="p">(</span><span class="n">weight</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">relation_num</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">))</span>
+        <span class="k">elif</span> <span class="n">loss_fn_name</span> <span class="o">==</span> <span class="n">LossFnName</span><span class="o">.</span><span class="n">FOCAL_LOSS</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">gamma</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span> <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;gamma must not None&quot;</span><span class="p">)</span>
+            <span class="n">loss_fn_entity</span> <span class="o">=</span> <span class="n">FocalLoss</span><span class="p">(</span><span class="n">weight</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">entity_num</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">),</span> <span class="n">gamma</span><span class="o">=</span><span class="n">gamma</span><span class="p">)</span>
+            <span class="n">loss_fn_relation</span> <span class="o">=</span> <span class="n">FocalLoss</span><span class="p">(</span><span class="n">weight</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">relation_num</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">),</span> <span class="n">gamma</span><span class="o">=</span><span class="n">gamma</span><span class="p">)</span>
+
+    <span class="c1"># main train step</span>
+    <span class="c1"># noinspection PyTypeChecker</span>
+    <span class="k">def</span> <span class="nf">train_step</span><span class="p">(</span><span class="n">_</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;train step</span>
+
+<span class="sd">        * changing study parameter by this function.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">train</span><span class="p">()</span>
+        <span class="n">triple</span> <span class="o">=</span> <span class="n">batch</span>
+        <span class="n">batch_size</span> <span class="o">=</span> <span class="n">triple</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">assert</span> <span class="n">triple</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">max_len</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+        <span class="c1"># train start</span>
+        <span class="n">opt</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+        <span class="n">triple</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">=</span> <span class="n">triple</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">non_blocking</span><span class="p">)</span>
+
+        <span class="n">mask_filter_story</span><span class="p">,</span> <span class="n">mask_ans_story</span><span class="p">,</span> <span class="n">mask_value_story</span> <span class="o">=</span> <span class="n">mask_function</span><span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">max_len</span><span class="p">)),</span> <span class="n">triple</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">mask_token_e</span><span class="p">,</span> <span class="n">head_index2count</span><span class="p">)</span>
+        <span class="n">mask_filter_relation</span><span class="p">,</span> <span class="n">mask_ans_relation</span><span class="p">,</span> <span class="n">mask_value_relation</span> <span class="o">=</span> <span class="n">mask_function</span><span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">max_len</span><span class="p">)),</span> <span class="n">triple</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">mask_token_r</span><span class="p">,</span> <span class="n">relation_index2count</span><span class="p">)</span>
+        <span class="n">mask_filter_object</span><span class="p">,</span> <span class="n">mask_ans_object</span><span class="p">,</span> <span class="n">mask_value_object</span> <span class="o">=</span> <span class="n">mask_function</span><span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">max_len</span><span class="p">)),</span> <span class="n">triple</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">2</span><span class="p">],</span> <span class="n">mask_token_e</span><span class="p">,</span> <span class="n">tail_index2count</span><span class="p">)</span>
+
+        <span class="n">triple</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">][</span><span class="n">mask_filter_story</span><span class="p">]</span> <span class="o">=</span> <span class="n">mask_value_story</span>
+        <span class="n">triple</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">1</span><span class="p">][</span><span class="n">mask_filter_relation</span><span class="p">]</span> <span class="o">=</span> <span class="n">mask_value_relation</span>
+        <span class="n">triple</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">2</span><span class="p">][</span><span class="n">mask_filter_object</span><span class="p">]</span> <span class="o">=</span> <span class="n">mask_value_object</span>
+
+        <span class="n">_</span><span class="p">,</span> <span class="p">(</span><span class="n">story_pred</span><span class="p">,</span> <span class="n">relation_pred</span><span class="p">,</span> <span class="n">entity_pred</span><span class="p">)</span> <span class="o">=</span> \
+            <span class="n">model</span><span class="p">(</span><span class="n">triple</span><span class="p">,</span> <span class="n">mask_filter_story</span><span class="p">,</span> <span class="n">mask_filter_relation</span><span class="p">,</span> <span class="n">mask_filter_object</span><span class="p">)</span>
+
+        <span class="n">loss</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">story_loss</span><span class="p">,</span> <span class="n">relation_loss</span><span class="p">,</span> <span class="n">object_loss</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">mask_ans_story</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">story_loss</span> <span class="o">=</span> <span class="n">loss_fn_entity</span><span class="p">(</span><span class="n">story_pred</span><span class="p">,</span> <span class="n">mask_ans_story</span><span class="p">)</span>
+            <span class="n">loss</span> <span class="o">+=</span> <span class="n">story_loss</span> <span class="o">*</span> <span class="n">loss_weight_story</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">mask_ans_relation</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">relation_loss</span> <span class="o">=</span> <span class="n">loss_fn_relation</span><span class="p">(</span><span class="n">relation_pred</span><span class="p">,</span> <span class="n">mask_ans_relation</span><span class="p">)</span>
+            <span class="n">loss</span> <span class="o">+=</span> <span class="n">relation_loss</span> <span class="o">*</span> <span class="n">loss_weight_relation</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">mask_ans_object</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">object_loss</span> <span class="o">=</span> <span class="n">loss_fn_entity</span><span class="p">(</span><span class="n">entity_pred</span><span class="p">,</span> <span class="n">mask_ans_object</span><span class="p">)</span>
+            <span class="n">loss</span> <span class="o">+=</span> <span class="n">object_loss</span> <span class="o">*</span> <span class="n">loss_weight_entity</span>
+
+        <span class="n">loss</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>
+        <span class="n">opt</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
+
+        <span class="c1"># return values</span>
+        <span class="n">return_dict</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">STORY_ANS</span><span class="p">:</span> <span class="n">cpu_deep_copy_or_none</span><span class="p">(</span><span class="n">mask_ans_story</span><span class="p">),</span>
+            <span class="n">RELATION_ANS</span><span class="p">:</span> <span class="n">cpu_deep_copy_or_none</span><span class="p">(</span><span class="n">mask_ans_relation</span><span class="p">),</span>
+            <span class="n">OBJECT_ANS</span><span class="p">:</span> <span class="n">cpu_deep_copy_or_none</span><span class="p">(</span><span class="n">mask_ans_object</span><span class="p">),</span>
+            <span class="n">STORY_PRED</span><span class="p">:</span> <span class="n">cpu_deep_copy_or_none</span><span class="p">(</span><span class="n">story_pred</span><span class="p">),</span>
+            <span class="n">RELATION_PRED</span><span class="p">:</span> <span class="n">cpu_deep_copy_or_none</span><span class="p">(</span><span class="n">relation_pred</span><span class="p">),</span>
+            <span class="n">ENTITY_PRED</span><span class="p">:</span> <span class="n">cpu_deep_copy_or_none</span><span class="p">(</span><span class="n">entity_pred</span><span class="p">),</span>
+            <span class="n">STORY_LOSS</span><span class="p">:</span> <span class="n">cpu_deep_copy_or_none</span><span class="p">(</span><span class="n">story_loss</span><span class="p">),</span>
+            <span class="n">RELATION_LOSS</span><span class="p">:</span> <span class="n">cpu_deep_copy_or_none</span><span class="p">(</span><span class="n">relation_loss</span><span class="p">),</span>
+            <span class="n">OBJECT_LOSS</span><span class="p">:</span> <span class="n">cpu_deep_copy_or_none</span><span class="p">(</span><span class="n">object_loss</span><span class="p">),</span>
+            <span class="n">LOSS</span><span class="p">:</span> <span class="n">cpu_deep_copy_or_none</span><span class="p">(</span><span class="n">loss</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">return_dict</span>
+
+    <span class="c1"># main valid step</span>
+    <span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
+    <span class="k">def</span> <span class="nf">valid_step</span><span class="p">(</span><span class="n">_</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;valid step</span>
+
+<span class="sd">        * valid model by valid data.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+        <span class="n">triple</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">non_blocking</span><span class="p">)</span>
+        <span class="n">valid_filter</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">non_blocking</span><span class="p">)</span>
+        <span class="c1"># triple.shape == (batch, max_len, 3)</span>
+        <span class="c1"># valid_filter.shape == (batch, max_len)</span>
+
+        <span class="n">valid_ans_story</span> <span class="o">=</span> <span class="n">triple</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">][</span><span class="n">valid_filter</span><span class="p">]</span>
+        <span class="n">valid_ans_relation</span> <span class="o">=</span> <span class="n">triple</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">1</span><span class="p">][</span><span class="n">valid_filter</span><span class="p">]</span>
+        <span class="n">valid_ans_object</span> <span class="o">=</span> <span class="n">triple</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">2</span><span class="p">][</span><span class="n">valid_filter</span><span class="p">]</span>
+
+        <span class="n">triple_for_valid</span> <span class="o">=</span> <span class="n">triple</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+        <span class="n">triple_for_valid</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">][</span><span class="n">valid_filter</span><span class="p">]</span> <span class="o">=</span> <span class="n">mask_token_e</span>
+        <span class="n">_</span><span class="p">,</span> <span class="p">(</span><span class="n">story_pred</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">)</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">triple_for_valid</span><span class="p">,</span> <span class="n">valid_filter</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="n">triple_for_valid</span> <span class="o">=</span> <span class="n">triple</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+        <span class="n">triple_for_valid</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">1</span><span class="p">][</span><span class="n">valid_filter</span><span class="p">]</span> <span class="o">=</span> <span class="n">mask_token_r</span>
+        <span class="n">_</span><span class="p">,</span> <span class="p">(</span><span class="n">_</span><span class="p">,</span> <span class="n">relation_pred</span><span class="p">,</span> <span class="n">_</span><span class="p">)</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">triple_for_valid</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">valid_filter</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="n">triple_for_valid</span> <span class="o">=</span> <span class="n">triple</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+        <span class="n">triple_for_valid</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">2</span><span class="p">][</span><span class="n">valid_filter</span><span class="p">]</span> <span class="o">=</span> <span class="n">mask_token_e</span>
+        <span class="n">_</span><span class="p">,</span> <span class="p">(</span><span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">entity_pred</span><span class="p">)</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">triple_for_valid</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">valid_filter</span><span class="p">)</span>
+
+        <span class="n">loss</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">story_loss</span><span class="p">,</span> <span class="n">relation_loss</span><span class="p">,</span> <span class="n">object_loss</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">valid_ans_story</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">story_loss</span> <span class="o">=</span> <span class="n">loss_fn_entity</span><span class="p">(</span><span class="n">story_pred</span><span class="p">,</span> <span class="n">valid_ans_story</span><span class="p">)</span>
+            <span class="n">loss</span> <span class="o">+=</span> <span class="n">story_loss</span>  <span class="c1"># * valid_ans_story</span>
+            <span class="n">relation_loss</span> <span class="o">=</span> <span class="n">loss_fn_relation</span><span class="p">(</span><span class="n">relation_pred</span><span class="p">,</span> <span class="n">valid_ans_relation</span><span class="p">)</span>
+            <span class="n">loss</span> <span class="o">+=</span> <span class="n">relation_loss</span>  <span class="c1"># * valid_ans_relation</span>
+            <span class="n">object_loss</span> <span class="o">=</span> <span class="n">loss_fn_entity</span><span class="p">(</span><span class="n">entity_pred</span><span class="p">,</span> <span class="n">valid_ans_object</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">object_loss</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span> <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;error&quot;</span><span class="p">)</span>
+            <span class="n">loss</span> <span class="o">+=</span> <span class="n">object_loss</span>  <span class="c1"># * valid_ans_object</span>
+
+        <span class="c1"># return dict</span>
+        <span class="n">return_dict</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">STORY_ANS</span><span class="p">:</span> <span class="n">cpu_deep_copy_or_none</span><span class="p">(</span><span class="n">valid_ans_story</span><span class="p">),</span>
+            <span class="n">RELATION_ANS</span><span class="p">:</span> <span class="n">cpu_deep_copy_or_none</span><span class="p">(</span><span class="n">valid_ans_relation</span><span class="p">),</span>
+            <span class="n">OBJECT_ANS</span><span class="p">:</span> <span class="n">cpu_deep_copy_or_none</span><span class="p">(</span><span class="n">valid_ans_object</span><span class="p">),</span>
+            <span class="n">STORY_PRED</span><span class="p">:</span> <span class="n">cpu_deep_copy_or_none</span><span class="p">(</span><span class="n">story_pred</span><span class="p">),</span>
+            <span class="n">RELATION_PRED</span><span class="p">:</span> <span class="n">cpu_deep_copy_or_none</span><span class="p">(</span><span class="n">relation_pred</span><span class="p">),</span>
+            <span class="n">ENTITY_PRED</span><span class="p">:</span> <span class="n">cpu_deep_copy_or_none</span><span class="p">(</span><span class="n">entity_pred</span><span class="p">),</span>
+            <span class="n">LOSS</span><span class="p">:</span> <span class="n">cpu_deep_copy_or_none</span><span class="p">(</span><span class="n">loss</span><span class="p">),</span>
+            <span class="n">STORY_LOSS</span><span class="p">:</span> <span class="n">cpu_deep_copy_or_none</span><span class="p">(</span><span class="n">story_loss</span><span class="p">),</span>
+            <span class="n">RELATION_LOSS</span><span class="p">:</span> <span class="n">cpu_deep_copy_or_none</span><span class="p">(</span><span class="n">relation_loss</span><span class="p">),</span>
+            <span class="n">OBJECT_LOSS</span><span class="p">:</span> <span class="n">cpu_deep_copy_or_none</span><span class="p">(</span><span class="n">object_loss</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">return_dict</span>
+
+    <span class="k">def</span> <span class="nf">set_engine_metrix</span><span class="p">(</span><span class="n">_step</span><span class="p">:</span> <span class="n">Callable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Engine</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;This is the function to set engine and metrix.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            _step(Callable): step function.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            tuple[Engine, dict]: Engine and matrix dict.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">_engine</span> <span class="o">=</span> <span class="n">Engine</span><span class="p">(</span><span class="n">_step</span><span class="p">)</span>
+        <span class="n">ProgressBar</span><span class="p">()</span><span class="o">.</span><span class="n">attach</span><span class="p">(</span><span class="n">_engine</span><span class="p">)</span>
+        <span class="c1"># loss and average of trainer</span>
+        <span class="n">_matrix</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">LOSS</span><span class="p">:</span> <span class="n">Average</span><span class="p">(</span><span class="n">itemgetter</span><span class="p">(</span><span class="n">LOSS</span><span class="p">)),</span>
+            <span class="n">STORY_LOSS</span><span class="p">:</span> <span class="n">Average</span><span class="p">(</span><span class="n">itemgetter</span><span class="p">(</span><span class="n">STORY_LOSS</span><span class="p">)),</span>
+            <span class="n">RELATION_LOSS</span><span class="p">:</span> <span class="n">Average</span><span class="p">(</span><span class="n">itemgetter</span><span class="p">(</span><span class="n">RELATION_LOSS</span><span class="p">)),</span>
+            <span class="n">OBJECT_LOSS</span><span class="p">:</span> <span class="n">Average</span><span class="p">(</span><span class="n">itemgetter</span><span class="p">(</span><span class="n">OBJECT_LOSS</span><span class="p">)),</span>
+            <span class="n">STORY_ACCURACY</span><span class="p">:</span> <span class="n">Accuracy</span><span class="p">(</span><span class="n">itemgetter</span><span class="p">(</span><span class="n">STORY_PRED</span><span class="p">,</span> <span class="n">STORY_ANS</span><span class="p">)),</span>
+            <span class="n">RELATION_ACCURACY</span><span class="p">:</span> <span class="n">Accuracy</span><span class="p">(</span><span class="n">itemgetter</span><span class="p">(</span><span class="n">RELATION_PRED</span><span class="p">,</span> <span class="n">RELATION_ANS</span><span class="p">)),</span>
+            <span class="n">ENTITY_ACCURACY</span><span class="p">:</span> <span class="n">Accuracy</span><span class="p">(</span><span class="n">itemgetter</span><span class="p">(</span><span class="n">ENTITY_PRED</span><span class="p">,</span> <span class="n">OBJECT_ANS</span><span class="p">))</span>
+        <span class="p">}</span>
+        <span class="p">[</span><span class="n">_value</span><span class="o">.</span><span class="n">attach</span><span class="p">(</span><span class="n">_engine</span><span class="p">,</span> <span class="n">_key</span><span class="p">)</span> <span class="k">for</span> <span class="n">_key</span><span class="p">,</span> <span class="n">_value</span> <span class="ow">in</span> <span class="n">_matrix</span><span class="o">.</span><span class="n">items</span><span class="p">()]</span>
+
+        <span class="k">return</span> <span class="n">_engine</span><span class="p">,</span> <span class="n">_matrix</span>
+
+    <span class="n">model</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">trainer</span><span class="p">,</span> <span class="n">trainer_matrix</span> <span class="o">=</span> <span class="n">set_engine_metrix</span><span class="p">(</span><span class="n">train_step</span><span class="p">)</span>
+    <span class="n">evaluator</span><span class="p">,</span> <span class="n">evaluator_matrix</span> <span class="o">=</span> <span class="n">set_engine_metrix</span><span class="p">(</span><span class="n">valid_step</span><span class="p">)</span> <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">train_valid_test</span> <span class="k">else</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="n">_kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">summary_writer</span><span class="o">=</span><span class="n">summary_writer</span><span class="p">,</span> <span class="n">metric_names</span><span class="o">=</span><span class="n">METRIC_NAMES</span><span class="p">,</span> <span class="n">param_names</span><span class="o">=</span><span class="n">ALL_WEIGHT_LIST</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">)</span>
+    <span class="n">set_start_epoch_function</span><span class="p">(</span><span class="n">trainer</span><span class="p">,</span> <span class="n">optional_func</span><span class="o">=</span><span class="n">train</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">shuffle_per_1scene</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">)</span>
+    <span class="n">set_end_epoch_function</span><span class="p">(</span><span class="n">trainer</span><span class="p">,</span> <span class="n">PRE_TRAIN_SCALER_TAG_GETTER</span><span class="p">,</span> <span class="o">**</span><span class="n">_kwargs</span><span class="p">)</span>
+    <span class="n">set_valid_function</span><span class="p">(</span><span class="n">trainer</span><span class="p">,</span> <span class="n">evaluator</span><span class="p">,</span> <span class="n">valid</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">valid_interval</span><span class="p">,</span> <span class="n">PRE_VALID_SCALER_TAG_GETTER</span><span class="p">,</span> <span class="o">**</span><span class="n">_kwargs</span><span class="p">)</span>
+    <span class="n">set_write_model_param_function</span><span class="p">(</span>
+        <span class="n">trainer</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">PRE_TRAIN_MODEL_WEIGHT_TAG_GETTER</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">_key</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">_key</span><span class="p">)</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">_kwargs</span><span class="p">)</span>
+
+    <span class="c1"># Interrupt</span>
+    <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">only_load_trainer_evaluator</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;load trainer and evaluator. then end&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">MODEL</span><span class="p">:</span> <span class="n">model</span><span class="p">,</span> <span class="n">TRAINER</span><span class="p">:</span> <span class="n">trainer</span><span class="p">,</span> <span class="n">EVALUATOR</span><span class="p">:</span> <span class="n">evaluator</span><span class="p">,</span>
+                <span class="n">GOOD_LOSS_CHECKPOINTE</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="n">LAST_CHECKPOINTE</span><span class="p">:</span> <span class="kc">None</span><span class="p">}</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">good_checkpoint</span><span class="p">,</span> <span class="n">last_checkpoint</span><span class="p">,</span> <span class="n">dict_</span> <span class="o">=</span> <span class="n">training_with_ignite</span><span class="p">(</span>
+            <span class="n">model</span><span class="p">,</span> <span class="n">opt</span><span class="p">,</span> <span class="n">max_epoch</span><span class="p">,</span> <span class="n">trainer</span><span class="p">,</span> <span class="n">evaluator</span><span class="p">,</span> <span class="n">checkpoint_dir</span><span class="p">,</span>
+            <span class="n">resume_checkpoint_path</span><span class="p">,</span> <span class="n">is_resume_from_checkpoint</span><span class="p">,</span> <span class="n">is_resume_from_last_point</span><span class="p">,</span>
+            <span class="n">train</span><span class="o">=</span><span class="n">train</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="n">non_blocking</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">MODEL</span><span class="p">:</span> <span class="n">model</span><span class="p">,</span> <span class="n">TRAINER</span><span class="p">:</span> <span class="n">trainer</span><span class="p">,</span> <span class="n">EVALUATOR</span><span class="p">:</span> <span class="n">evaluator</span><span class="p">,</span>
+                <span class="n">GOOD_LOSS_CHECKPOINTE</span><span class="p">:</span> <span class="n">good_checkpoint</span><span class="p">,</span> <span class="n">LAST_CHECKPOINTE</span><span class="p">:</span> <span class="n">last_checkpoint</span><span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="make_get_data_helper"><a class="viewcode-back" href="../../src.html#src.run_for_KGC.make_get_data_helper">[ドキュメント]</a><span class="k">def</span> <span class="nf">make_get_data_helper</span><span class="p">(</span><span class="n">args</span><span class="p">:</span> <span class="n">Namespace</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">Logger</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;make and get data_helper</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        args(Namespace): args</span>
+<span class="sd">        logger(Logger): logging.Logger</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        MyDataHelper: MyDataHelper()</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">use_title</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">use_title</span>
+    <span class="p">((</span><span class="n">pad_token_e</span><span class="p">,</span> <span class="n">pad_token_r</span><span class="p">),</span> <span class="p">(</span><span class="n">cls_token_e</span><span class="p">,</span> <span class="n">cls_token_r</span><span class="p">),</span> <span class="p">(</span><span class="n">mask_token_e</span><span class="p">,</span> <span class="n">mask_token_r</span><span class="p">),</span>
+     <span class="p">(</span><span class="n">sep_token_e</span><span class="p">,</span> <span class="n">sep_token_r</span><span class="p">),</span> <span class="p">(</span><span class="n">bos_token_e</span><span class="p">,</span> <span class="n">bos_token_r</span><span class="p">))</span> <span class="o">=</span> <span class="n">get_all_tokens</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
+    <span class="n">is_090</span><span class="p">,</span> <span class="n">is_075</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">use_for_challenge090</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">use_for_challenge075</span>
+    <span class="k">if</span> <span class="n">is_090</span> <span class="ow">or</span> <span class="n">is_075</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">args</span><span class="o">.</span><span class="n">only_train</span><span class="p">:</span> <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;If use for challenge, --only-train must True&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">use_title</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span> <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;--use-title must not None.&quot;</span><span class="p">)</span>
+
+    <span class="n">train_file</span> <span class="o">=</span> <span class="n">TITLE2SRO_FILE090</span><span class="p">[</span><span class="n">use_title</span><span class="p">]</span> <span class="k">if</span> <span class="n">is_090</span> <span class="k">else</span> <span class="n">TITLE2SRO_FILE075</span><span class="p">[</span>
+        <span class="n">use_title</span><span class="p">]</span> <span class="k">if</span> <span class="n">is_075</span> <span class="k">else</span> <span class="n">SRO_ALL_TRAIN_FILE</span>
+    <span class="n">entity_special_dicts</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">pad_token_e</span><span class="p">:</span> <span class="n">DefaultTokens</span><span class="o">.</span><span class="n">PAD_E</span><span class="p">,</span> <span class="n">cls_token_e</span><span class="p">:</span> <span class="n">DefaultTokens</span><span class="o">.</span><span class="n">CLS_E</span><span class="p">,</span> <span class="n">mask_token_e</span><span class="p">:</span> <span class="n">DefaultTokens</span><span class="o">.</span><span class="n">MASK_E</span><span class="p">,</span>
+        <span class="n">sep_token_e</span><span class="p">:</span> <span class="n">DefaultTokens</span><span class="o">.</span><span class="n">SEP_E</span><span class="p">,</span> <span class="n">bos_token_e</span><span class="p">:</span> <span class="n">DefaultTokens</span><span class="o">.</span><span class="n">BOS_E</span>
+    <span class="p">}</span>
+    <span class="n">relation_special_dicts</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">pad_token_r</span><span class="p">:</span> <span class="n">DefaultTokens</span><span class="o">.</span><span class="n">PAD_R</span><span class="p">,</span> <span class="n">cls_token_r</span><span class="p">:</span> <span class="n">DefaultTokens</span><span class="o">.</span><span class="n">CLS_R</span><span class="p">,</span> <span class="n">mask_token_r</span><span class="p">:</span> <span class="n">DefaultTokens</span><span class="o">.</span><span class="n">MASK_R</span><span class="p">,</span>
+        <span class="n">sep_token_r</span><span class="p">:</span> <span class="n">DefaultTokens</span><span class="o">.</span><span class="n">SEP_R</span><span class="p">,</span> <span class="n">bos_token_r</span><span class="p">:</span> <span class="n">DefaultTokens</span><span class="o">.</span><span class="n">BOS_R</span>
+    <span class="p">}</span>
+    <span class="n">data_helper</span> <span class="o">=</span> <span class="n">MyDataHelper</span><span class="p">(</span><span class="n">SRO_ALL_INFO_FILE</span><span class="p">,</span> <span class="n">train_file</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">,</span>
+                               <span class="n">entity_special_dicts</span><span class="o">=</span><span class="n">entity_special_dicts</span><span class="p">,</span> <span class="n">relation_special_dicts</span><span class="o">=</span><span class="n">relation_special_dicts</span><span class="p">)</span>
+    <span class="n">data_helper</span><span class="o">.</span><span class="n">show</span><span class="p">(</span><span class="n">logger</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">data_helper</span></div>
+
+
+<div class="viewcode-block" id="make_get_datasets"><a class="viewcode-back" href="../../src.html#src.run_for_KGC.make_get_datasets">[ドキュメント]</a><span class="k">def</span> <span class="nf">make_get_datasets</span><span class="p">(</span><span class="n">args</span><span class="p">:</span> <span class="n">Namespace</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">data_helper</span><span class="p">:</span> <span class="n">MyDataHelper</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">Logger</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;make and get datasets</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        args(Namespace): args</span>
+<span class="sd">        data_helper(MyDataHelper): data_helper</span>
+<span class="sd">        logger(Logger): logger</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        tuple[Dataset, Dataset, Dataset]: dataset_train, dataset_valid, dataset_test</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># get from args</span>
+    <span class="p">((</span><span class="n">pad_token_e</span><span class="p">,</span> <span class="n">pad_token_r</span><span class="p">),</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="p">(</span><span class="n">sep_token_e</span><span class="p">,</span> <span class="n">sep_token_r</span><span class="p">),</span> <span class="p">(</span><span class="n">bos_token_e</span><span class="p">,</span> <span class="n">bos_token_r</span><span class="p">))</span> <span class="o">=</span> <span class="n">get_all_tokens</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
+    <span class="n">entity_special_num</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">entity_special_num</span>
+    <span class="n">max_len</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">max_len</span>
+    <span class="n">train_valid_test</span><span class="p">,</span> <span class="n">only_train</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">train_valid_test</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">only_train</span>
+    <span class="c1"># get from data_helper</span>
+    <span class="n">entities</span><span class="p">,</span> <span class="n">relations</span> <span class="o">=</span> <span class="n">data_helper</span><span class="o">.</span><span class="n">processed_entities</span><span class="p">,</span> <span class="n">data_helper</span><span class="o">.</span><span class="n">processed_relations</span>
+    <span class="n">triple</span> <span class="o">=</span> <span class="n">data_helper</span><span class="o">.</span><span class="n">processed_train_triple</span>
+    <span class="c1"># Check the number of data before including special tokens, as you will need them when creating the validation data.</span>
+    <span class="n">len_of_default_triple</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">triple</span><span class="p">)</span>
+    <span class="c1"># add bos token in triples</span>
+    <span class="n">triple</span> <span class="o">=</span> <span class="n">add_bos</span><span class="p">(</span><span class="n">triple</span><span class="p">,</span> <span class="n">bos_token_e</span><span class="p">,</span> <span class="n">bos_token_r</span><span class="p">,</span> <span class="n">bos_token_e</span><span class="p">)</span>
+    <span class="n">dataset_train</span><span class="p">,</span> <span class="n">dataset_valid</span><span class="p">,</span> <span class="n">dataset_test</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">train_valid_test</span><span class="p">:</span>
+        <span class="c1"># These words cannot be left out in the search for the criminal.</span>
+        <span class="n">kill_entity</span><span class="p">,</span> <span class="n">notKill_entity</span><span class="p">,</span> <span class="n">beKilled_entity</span> <span class="o">=</span> <span class="p">[</span><span class="n">entities</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">_entity</span><span class="p">)</span> <span class="k">for</span> <span class="n">_entity</span> <span class="ow">in</span> <span class="n">ABOUT_KILL_WORDS</span><span class="p">]</span>
+        <span class="c1"># Filters to detect words essential for training.</span>
+        <span class="n">cannot_valid_filter</span> <span class="o">=</span> <span class="p">(</span><span class="n">triple</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">entity_special_num</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="n">triple</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">==</span> <span class="n">kill_entity</span><span class="p">)</span> <span class="o">|</span> \
+                              <span class="p">(</span><span class="n">triple</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">==</span> <span class="n">notKill_entity</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="n">triple</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">==</span> <span class="n">beKilled_entity</span><span class="p">)</span>
+        <span class="n">cannot_valid_filter</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">cannot_valid_filter</span><span class="p">)</span>
+        <span class="c1"># Filters to detect words essential for training.</span>
+        <span class="n">prob</span> <span class="o">=</span> <span class="p">(</span><span class="o">~</span><span class="n">cannot_valid_filter</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+        <span class="n">valid_test_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">triple</span><span class="p">)),</span> <span class="n">size</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="mf">0.1</span> <span class="o">*</span> <span class="n">len_of_default_triple</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span>
+                <span class="n">p</span><span class="o">=</span><span class="p">(</span><span class="n">prob</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">prob</span><span class="p">)),</span> <span class="n">replace</span><span class="o">=</span><span class="kc">False</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="n">valid_indices</span><span class="p">,</span> <span class="n">test_indices</span> <span class="o">=</span> <span class="n">valid_test_indices</span><span class="p">[</span><span class="mi">0</span><span class="p">::</span><span class="mi">2</span><span class="p">],</span> <span class="n">valid_test_indices</span><span class="p">[</span><span class="mi">1</span><span class="p">::</span><span class="mi">2</span><span class="p">]</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">valid_indices</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">test_indices</span><span class="p">)</span>
+
+        <span class="n">valid_test_filter</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">triple</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+        <span class="n">test_filter</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">triple</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+        <span class="n">valid_filter</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">triple</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+        <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">_filter</span><span class="p">,</span> <span class="n">_indices</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span> <span class="k">for</span> <span class="n">_filter</span><span class="p">,</span> <span class="n">_indices</span> <span class="ow">in</span> <span class="p">[</span>
+            <span class="p">(</span><span class="n">valid_test_filter</span><span class="p">,</span> <span class="n">valid_test_indices</span><span class="p">),</span> <span class="p">(</span><span class="n">test_filter</span><span class="p">,</span> <span class="n">test_indices</span><span class="p">),</span> <span class="p">(</span><span class="n">valid_filter</span><span class="p">,</span> <span class="n">valid_indices</span><span class="p">)</span>
+        <span class="p">]]</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">valid_test_filter</span><span class="p">,</span> <span class="p">(</span><span class="n">test_filter</span> <span class="o">|</span> <span class="n">valid_filter</span><span class="p">))</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">count_nonzero</span><span class="p">(</span><span class="n">test_filter</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">count_nonzero</span><span class="p">(</span><span class="n">valid_filter</span><span class="p">)</span> <span class="o">==</span> <span class="n">np</span><span class="o">.</span><span class="n">count_nonzero</span><span class="p">(</span><span class="n">valid_test_filter</span><span class="p">)</span>
+
+        <span class="n">triple_train</span><span class="p">,</span> <span class="n">triple_valid</span><span class="p">,</span> <span class="n">triple_test</span> <span class="o">=</span> <span class="n">triple</span><span class="p">[</span><span class="o">~</span><span class="n">valid_test_filter</span><span class="p">],</span> <span class="n">triple</span><span class="p">[</span><span class="o">~</span><span class="n">test_filter</span><span class="p">],</span> <span class="n">triple</span>
+        <span class="n">valid_filter</span> <span class="o">=</span> <span class="n">valid_filter</span><span class="p">[</span><span class="o">~</span><span class="n">test_filter</span><span class="p">]</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">count_nonzero</span><span class="p">(</span><span class="n">test_filter</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">count_nonzero</span><span class="p">(</span><span class="n">valid_filter</span><span class="p">)</span> <span class="o">==</span> <span class="n">np</span><span class="o">.</span><span class="n">count_nonzero</span><span class="p">(</span><span class="n">valid_test_filter</span><span class="p">)</span>
+
+        <span class="c1"># region debug area</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;----- show all triple(no remove) -----&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">30</span><span class="p">):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;example: </span><span class="si">{</span><span class="n">entities</span><span class="p">[</span><span class="n">triple</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">0</span><span class="p">]]</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">relations</span><span class="p">[</span><span class="n">triple</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">1</span><span class="p">]]</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">entities</span><span class="p">[</span><span class="n">triple</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">2</span><span class="p">]]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;----- show train triple -----&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">30</span><span class="p">):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;example: &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">entities</span><span class="p">[</span><span class="n">triple_train</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">0</span><span class="p">]]</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">relations</span><span class="p">[</span><span class="n">triple_train</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">1</span><span class="p">]]</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">entities</span><span class="p">[</span><span class="n">triple_train</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">2</span><span class="p">]]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;----- show example -----&quot;</span><span class="p">)</span>
+        <span class="c1"># endregion</span>
+
+        <span class="c1"># region debug area2</span>
+        <span class="n">entities_label</span><span class="p">,</span> <span class="n">relations_label</span> <span class="o">=</span> <span class="n">data_helper</span><span class="o">.</span><span class="n">processed_entities_label</span><span class="p">,</span> <span class="n">data_helper</span><span class="o">.</span><span class="n">processed_relations_label</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;----- show all triple(no remove) label-----&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">30</span><span class="p">):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;example: &quot;</span>
+                         <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">entities_label</span><span class="p">[</span><span class="n">triple</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">0</span><span class="p">]]</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">relations_label</span><span class="p">[</span><span class="n">triple</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">1</span><span class="p">]]</span><span class="si">}</span><span class="s2">, &quot;</span>
+                         <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">entities_label</span><span class="p">[</span><span class="n">triple</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">2</span><span class="p">]]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;----- show example -----&quot;</span><span class="p">)</span>
+        <span class="c1"># endregion</span>
+
+        <span class="n">dataset_train</span> <span class="o">=</span> <span class="n">StoryTriple</span><span class="p">(</span><span class="n">triple_train</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">triple_train</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">bos_token_e</span><span class="p">)[</span><span class="mi">0</span><span class="p">],</span> <span class="n">max_len</span><span class="p">,</span>
+                                    <span class="n">pad_token_e</span><span class="p">,</span> <span class="n">pad_token_r</span><span class="p">,</span> <span class="n">pad_token_e</span><span class="p">,</span>
+                                    <span class="n">sep_token_e</span><span class="p">,</span> <span class="n">sep_token_r</span><span class="p">,</span> <span class="n">sep_token_e</span><span class="p">)</span>
+        <span class="n">dataset_valid</span> <span class="o">=</span> <span class="n">StoryTripleForValid</span><span class="p">(</span><span class="n">triple_valid</span><span class="p">,</span>
+                                            <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">triple_valid</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">bos_token_e</span><span class="p">)[</span><span class="mi">0</span><span class="p">],</span> <span class="n">valid_filter</span><span class="p">,</span> <span class="n">max_len</span><span class="p">,</span>
+                                            <span class="n">pad_token_e</span><span class="p">,</span> <span class="n">pad_token_r</span><span class="p">,</span> <span class="n">pad_token_e</span><span class="p">,</span>
+                                            <span class="n">sep_token_e</span><span class="p">,</span> <span class="n">sep_token_r</span><span class="p">,</span> <span class="n">sep_token_e</span><span class="p">)</span>
+        <span class="n">dataset_test</span> <span class="o">=</span> <span class="n">StoryTripleForValid</span><span class="p">(</span><span class="n">triple_test</span><span class="p">,</span>
+                                           <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">triple_test</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">bos_token_e</span><span class="p">)[</span><span class="mi">0</span><span class="p">],</span> <span class="n">test_filter</span><span class="p">,</span> <span class="n">max_len</span><span class="p">,</span>
+                                           <span class="n">pad_token_e</span><span class="p">,</span> <span class="n">pad_token_r</span><span class="p">,</span> <span class="n">pad_token_e</span><span class="p">,</span>
+                                           <span class="n">sep_token_e</span><span class="p">,</span> <span class="n">sep_token_r</span><span class="p">,</span> <span class="n">sep_token_e</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">only_train</span><span class="p">:</span>
+        <span class="n">dataset_train</span> <span class="o">=</span> <span class="n">StoryTriple</span><span class="p">(</span><span class="n">triple</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">triple</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">bos_token_e</span><span class="p">)[</span><span class="mi">0</span><span class="p">],</span> <span class="n">max_len</span><span class="p">,</span>
+                                    <span class="n">pad_token_e</span><span class="p">,</span> <span class="n">pad_token_r</span><span class="p">,</span> <span class="n">pad_token_e</span><span class="p">,</span>
+                                    <span class="n">sep_token_e</span><span class="p">,</span> <span class="n">sep_token_r</span><span class="p">,</span> <span class="n">sep_token_e</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Either --train-valid-test or --only-train is required.&quot;</span><span class="p">)</span>
+        <span class="k">pass</span>
+
+    <span class="k">return</span> <span class="n">dataset_train</span><span class="p">,</span> <span class="n">dataset_valid</span><span class="p">,</span> <span class="n">dataset_test</span></div>
+
+
+<div class="viewcode-block" id="make_get_model"><a class="viewcode-back" href="../../src.html#src.run_for_KGC.make_get_model">[ドキュメント]</a><span class="k">def</span> <span class="nf">make_get_model</span><span class="p">(</span><span class="n">args</span><span class="p">:</span> <span class="n">Namespace</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">data_helper</span><span class="p">:</span> <span class="n">MyDataHelper</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">Logger</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;make and get model</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        args(Namespace): args</span>
+<span class="sd">        data_helper(MyDataHelper): data_helper</span>
+<span class="sd">        logger(Logger): logger</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        KgStoryTransformer: KgStoryTransformer</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># get from args</span>
+
+    <span class="n">all_tokens</span> <span class="o">=</span> <span class="p">[</span><span class="n">_t</span> <span class="k">for</span> <span class="n">_t</span> <span class="ow">in</span> <span class="n">chain</span><span class="o">.</span><span class="n">from_iterable</span><span class="p">(</span><span class="n">get_all_tokens</span><span class="p">(</span><span class="n">args</span><span class="p">))]</span>
+    <span class="c1"># get from data_helper</span>
+    <span class="n">num_entities</span><span class="p">,</span> <span class="n">num_relations</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_helper</span><span class="o">.</span><span class="n">processed_entities</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_helper</span><span class="o">.</span><span class="n">processed_relations</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;----- make_model start -----&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="s1">&#39;model_version&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">args</span> <span class="ow">or</span> <span class="n">args</span><span class="o">.</span><span class="n">model_version</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="k">pass</span>
+    <span class="n">version_</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">model_version</span>
+
+    <span class="c1"># noinspection PyTypeChecker</span>
+    <span class="n">Model_</span><span class="p">:</span> <span class="n">KgStoryTransformer</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="kc">None</span> <span class="k">if</span> <span class="n">version_</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ModelVersion</span><span class="o">.</span><span class="n">ALL_LIST</span><span class="p">()</span>
+        <span class="k">else</span> <span class="n">KgStoryTransformer01</span> <span class="k">if</span> <span class="n">version_</span> <span class="o">==</span> <span class="n">ModelVersion</span><span class="o">.</span><span class="n">V01</span>
+        <span class="k">else</span> <span class="n">KgStoryTransformer02</span> <span class="k">if</span> <span class="n">version_</span> <span class="o">==</span> <span class="n">ModelVersion</span><span class="o">.</span><span class="n">V02</span>
+        <span class="k">else</span> <span class="n">KgStoryTransformer03</span> <span class="k">if</span> <span class="n">version_</span> <span class="o">==</span> <span class="n">ModelVersion</span><span class="o">.</span><span class="n">V03</span>
+        <span class="k">else</span> <span class="n">KgStoryTransformer03preInit</span> <span class="k">if</span> <span class="n">version_</span> <span class="o">==</span> <span class="n">ModelVersion</span><span class="o">.</span><span class="n">V03a</span>
+        <span class="k">else</span> <span class="n">KgStoryTransformer00</span>
+    <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">Model_</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span> <span class="k">raise</span> <span class="sa">f</span><span class="s2">&quot;model-version &#39;</span><span class="si">{</span><span class="n">version_</span><span class="si">}</span><span class="s2">&#39; is not defined.&quot;</span>
+
+    <span class="n">model</span> <span class="o">=</span> <span class="n">Model_</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">num_entities</span><span class="p">,</span> <span class="n">num_relations</span><span class="p">,</span> <span class="n">special_tokens</span><span class="o">=</span><span class="n">SpecialTokens</span><span class="p">(</span><span class="o">*</span><span class="n">all_tokens</span><span class="p">))</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">assert_check</span><span class="p">()</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">data_helper</span><span class="o">=</span><span class="n">data_helper</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">model</span></div>
+
+
+<div class="viewcode-block" id="make_get_dataloader"><a class="viewcode-back" href="../../src.html#src.run_for_KGC.make_get_dataloader">[ドキュメント]</a><span class="k">def</span> <span class="nf">make_get_dataloader</span><span class="p">(</span><span class="n">args</span><span class="p">:</span> <span class="n">Namespace</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">datasets</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Dataset</span><span class="p">,</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">Dataset</span><span class="p">],</span> <span class="n">logger</span><span class="p">:</span> <span class="n">Logger</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;make and get dataloader</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        args(Namespace): use &quot;batch_size&quot; in args.</span>
+<span class="sd">        datasets(tuple[Dataset, Dataset, Dataset]): dataset_train, dataset_valid and dataset_test</span>
+<span class="sd">        logger(Logger): logging.Logger</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        MyDataLoaderHelper: the dataclasses which has dataloader.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">batch_size</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">batch_size</span>
+    <span class="n">train_dataset</span><span class="p">,</span> <span class="n">valid_dataset</span><span class="p">,</span> <span class="n">test_dataset</span> <span class="o">=</span> <span class="n">datasets</span>
+    <span class="n">dataloader_train</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">train_dataset</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">DataLoader</span><span class="p">(</span>
+        <span class="n">train_dataset</span><span class="p">,</span> <span class="n">shuffle</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">pin_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">dataloader_valid</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">valid_dataset</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">DataLoader</span><span class="p">(</span>
+        <span class="n">valid_dataset</span><span class="p">,</span> <span class="n">shuffle</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">pin_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">dataloader_test</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">test_dataset</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">DataLoader</span><span class="p">(</span>
+        <span class="n">test_dataset</span><span class="p">,</span> <span class="n">shuffle</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">pin_memory</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">data_loaders</span> <span class="o">=</span> <span class="n">MyDataLoaderHelper</span><span class="p">(</span><span class="n">datasets</span><span class="p">,</span> <span class="n">dataloader_train</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">dataloader_valid</span><span class="p">,</span> <span class="n">dataloader_test</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">dataloader_train</span><span class="si">=}</span><span class="s2">, </span><span class="si">{</span><span class="n">dataloader_valid</span><span class="si">=}</span><span class="s2">, </span><span class="si">{</span><span class="n">dataloader_test</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">data_loaders</span></div>
+
+
+<div class="viewcode-block" id="do_train_test_ect"><a class="viewcode-back" href="../../src.html#src.run_for_KGC.do_train_test_ect">[ドキュメント]</a><span class="k">def</span> <span class="nf">do_train_test_ect</span><span class="p">(</span><span class="n">args</span><span class="p">:</span> <span class="n">Namespace</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">data_helper</span><span class="p">,</span> <span class="n">data_loaders</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">Logger</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;do train test ect</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        args(Namespace): args</span>
+<span class="sd">        data_helper(MyDataHelper): data_helper</span>
+<span class="sd">        data_loaders(MyDataLoaderHelper): data_loaders</span>
+<span class="sd">        model(KgStoryTransformer): model</span>
+<span class="sd">        logger(Logger): logger</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: Keys=(MODEL, TRAINER, EVALUATOR, CHECKPOINTER_LAST, CHECKPOINTER_GOOD_LOSS)</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Now we are ready to start except for the hyper parameters.</span>
+    <span class="n">summary_writer</span> <span class="o">=</span> <span class="n">SummaryWriter</span><span class="p">(</span><span class="n">log_dir</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">tensorboard_dir</span><span class="p">)</span> <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">tensorboard_dir</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">train_returns</span> <span class="o">=</span> <span class="p">{</span><span class="n">MODEL</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="n">TRAINER</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="n">EVALUATOR</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="n">LAST_CHECKPOINTE</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="n">GOOD_LOSS_CHECKPOINTE</span><span class="p">:</span> <span class="kc">None</span><span class="p">}</span>
+
+    <span class="c1"># default mode</span>
+    <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">pre_train</span><span class="p">:</span>
+        <span class="c1"># setting hyper parameter</span>
+        <span class="n">hyper_params</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">args</span><span class="o">.</span><span class="n">lr</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">lr_story</span> <span class="ow">or</span> <span class="n">args</span><span class="o">.</span><span class="n">lr</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">lr_relation</span> <span class="ow">or</span> <span class="n">args</span><span class="o">.</span><span class="n">lr</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">lr_entity</span> <span class="ow">or</span> <span class="n">args</span><span class="o">.</span><span class="n">lr</span><span class="p">,</span>
+            <span class="n">args</span><span class="o">.</span><span class="n">loss_function</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">loss_weight_story</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">loss_weight_relation</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">loss_weight_story</span><span class="p">,</span>
+            <span class="p">{</span><span class="n">GAMMA</span><span class="p">:</span> <span class="n">args</span><span class="o">.</span><span class="n">gamma</span><span class="p">}</span>
+        <span class="p">)</span>
+        <span class="c1"># setting path</span>
+        <span class="n">model_path</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">model_path</span>
+        <span class="k">if</span> <span class="n">model_path</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span> <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;model path must not None&quot;</span><span class="p">)</span>
+        <span class="c1"># training.</span>
+        <span class="n">train_returns</span> <span class="o">=</span> <span class="n">pre_training</span><span class="p">(</span>
+            <span class="n">args</span><span class="p">,</span> <span class="n">hyper_params</span><span class="p">,</span> <span class="n">data_helper</span><span class="p">,</span> <span class="n">data_loaders</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">summary_writer</span><span class="o">=</span><span class="n">summary_writer</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">)</span>
+        <span class="c1"># check the output of the training.</span>
+        <span class="n">good_checkpoint</span><span class="p">,</span> <span class="n">last_checkpoint</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">train_returns</span><span class="o">.</span><span class="n">get</span><span class="p">,</span> <span class="p">(</span><span class="n">GOOD_LOSS_CHECKPOINTE</span><span class="p">,</span> <span class="n">LAST_CHECKPOINTE</span><span class="p">))</span>
+        <span class="n">checkpoint_</span> <span class="o">=</span> <span class="n">last_checkpoint</span><span class="o">.</span><span class="n">last_checkpoint</span> <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">only_train</span> <span class="k">else</span> <span class="n">good_checkpoint</span><span class="o">.</span><span class="n">last_checkpoint</span>
+        <span class="n">Checkpoint</span><span class="o">.</span><span class="n">load_objects</span><span class="p">(</span><span class="n">to_load</span><span class="o">=</span><span class="p">{</span><span class="n">MODEL</span><span class="p">:</span> <span class="n">model</span><span class="p">},</span> <span class="n">checkpoint</span><span class="o">=</span><span class="n">checkpoint_</span><span class="p">)</span>
+        <span class="c1"># re-save as cpu model</span>
+        <span class="n">save_model</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">model_path</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;good model path: </span><span class="si">{</span><span class="n">good_checkpoint</span><span class="o">.</span><span class="n">last_checkpoint</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;last model path: </span><span class="si">{</span><span class="n">last_checkpoint</span><span class="o">.</span><span class="n">last_checkpoint</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;load checkpoint path: </span><span class="si">{</span><span class="n">checkpoint_</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;save model path: </span><span class="si">{</span><span class="n">args</span><span class="o">.</span><span class="n">model_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="c1"># if checking the trained items, use this mode.</span>
+    <span class="k">elif</span> <span class="n">args</span><span class="o">.</span><span class="n">only_load_trainer_evaluator</span><span class="p">:</span>
+        <span class="n">hyper_params</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.</span><span class="p">,</span> <span class="mf">0.</span><span class="p">,</span> <span class="mf">0.</span><span class="p">,</span> <span class="mf">0.</span><span class="p">,</span> <span class="n">LossFnName</span><span class="o">.</span><span class="n">CROSS_ENTROPY_LOSS</span><span class="p">,</span> <span class="mf">1.</span><span class="p">,</span> <span class="mf">1.</span><span class="p">,</span> <span class="mf">1.</span><span class="p">)</span>
+        <span class="n">train_returns</span> <span class="o">=</span> <span class="n">pre_training</span><span class="p">(</span>
+            <span class="n">args</span><span class="p">,</span> <span class="n">hyper_params</span><span class="p">,</span> <span class="n">data_helper</span><span class="p">,</span> <span class="n">data_loaders</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">summary_writer</span><span class="o">=</span><span class="n">summary_writer</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">train_returns</span></div>
+
+
+<div class="viewcode-block" id="main_function"><a class="viewcode-back" href="../../src.html#src.run_for_KGC.main_function">[ドキュメント]</a><span class="k">def</span> <span class="nf">main_function</span><span class="p">(</span><span class="n">args</span><span class="p">:</span> <span class="n">Namespace</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">Logger</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;main function</span>
+
+<span class="sd">    * First, load data and make datahelper</span>
+<span class="sd">    * Second, make datasets and dataloader.</span>
+<span class="sd">    * Third, make model by setting hyper parameters.</span>
+<span class="sd">    * Forth, Do train. if only load trained model or data, do nothing.</span>
+<span class="sd">    * Finally, return data and trained model.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        args(Namespace): args</span>
+<span class="sd">        logger(Logger): logging.Logger</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: keys=(MODEL, DATA_HELPER, DATASETS, DATA_LOADERS, TRAIN_RETURNS)</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># load raw data and make datahelper. Support for special-tokens by datahelper.</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;----- make datahelper start. -----&#39;</span><span class="p">)</span>
+    <span class="n">data_helper</span> <span class="o">=</span> <span class="n">make_get_data_helper</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;----- make datahelper complete. -----&#39;</span><span class="p">)</span>
+    <span class="c1"># make dataset.</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;----- make datasets start. -----&#39;</span><span class="p">)</span>
+    <span class="n">datasets</span> <span class="o">=</span> <span class="n">make_get_datasets</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">data_helper</span><span class="o">=</span><span class="n">data_helper</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;----- make datasets complete. -----&#39;</span><span class="p">)</span>
+    <span class="c1"># make dataloader.</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;----- make dataloader start. -----&#39;</span><span class="p">)</span>
+    <span class="n">data_loaders</span> <span class="o">=</span> <span class="n">make_get_dataloader</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">datasets</span><span class="o">=</span><span class="n">datasets</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;----- make dataloader complete. -----&#39;</span><span class="p">)</span>
+    <span class="c1"># make model</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;----- make model start -----&#39;</span><span class="p">)</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">make_get_model</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">data_helper</span><span class="o">=</span><span class="n">data_helper</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;----- make model complete. -----&#39;</span><span class="p">)</span>
+    <span class="c1"># train test ect</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;----- do train start -----&#39;</span><span class="p">)</span>
+    <span class="n">train_returns</span> <span class="o">=</span> <span class="n">do_train_test_ect</span><span class="p">(</span>
+        <span class="n">args</span><span class="p">,</span> <span class="n">data_helper</span><span class="o">=</span><span class="n">data_helper</span><span class="p">,</span> <span class="n">data_loaders</span><span class="o">=</span><span class="n">data_loaders</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;----- do train complete -----&#39;</span><span class="p">)</span>
+    <span class="c1"># return some value</span>
+    <span class="k">return</span> <span class="p">{</span><span class="n">MODEL</span><span class="p">:</span> <span class="n">model</span><span class="p">,</span> <span class="n">DATA_HELPER</span><span class="p">:</span> <span class="n">data_helper</span><span class="p">,</span> <span class="n">DATASETS</span><span class="p">:</span> <span class="n">datasets</span><span class="p">,</span>
+            <span class="n">DATA_LOADERS</span><span class="p">:</span> <span class="n">data_loaders</span><span class="p">,</span> <span class="n">TRAIN_RETURNS</span><span class="p">:</span> <span class="n">train_returns</span><span class="p">}</span></div>
+
+
+<span class="n">SEED</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="mi">42</span>
+
+
+<div class="viewcode-block" id="main"><a class="viewcode-back" href="../../src.html#src.run_for_KGC.main">[ドキュメント]</a><span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">args</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;main</span>
+
+<span class="sd">    * Set Seed, set parser, save parser parameter and do main_function.</span>
+<span class="sd">    * This function itself do nothing. Only call main_function.</span>
+<span class="sd">    * If some error in main_function, this function saves the parameters for the moment and exits.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        args(:obj:`Sequence[str]`, optional): args list or None. Default to None.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span> <span class="nn">utils.setup</span> <span class="kn">import</span> <span class="n">setup</span><span class="p">,</span> <span class="n">save_param</span>
+    <span class="n">torch_fix_seed</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="n">SEED</span><span class="p">)</span>
+    <span class="n">args</span><span class="p">,</span> <span class="n">logger</span><span class="p">,</span> <span class="n">device</span> <span class="o">=</span> <span class="n">setup</span><span class="p">(</span><span class="n">setup_parser</span><span class="p">,</span> <span class="n">PROJECT_DIR</span><span class="p">,</span> <span class="n">parser_args</span><span class="o">=</span><span class="n">args</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">train_anyway</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;This process do not have reproducible.&quot;</span><span class="p">)</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">backends</span><span class="o">.</span><span class="n">cudnn</span><span class="o">.</span><span class="n">benchmark</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">version_check</span><span class="p">(</span><span class="n">torch</span><span class="p">,</span> <span class="n">np</span><span class="p">,</span> <span class="n">pd</span><span class="p">,</span> <span class="n">h5py</span><span class="p">,</span> <span class="n">optuna</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">args</span><span class="o">.</span><span class="n">project_dir</span> <span class="o">=</span> <span class="n">PROJECT_DIR</span>
+        <span class="n">args</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">logger</span>
+        <span class="n">args</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">device</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="nb">vars</span><span class="p">(</span><span class="n">args</span><span class="p">))</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;process id = </span><span class="si">{</span><span class="n">args</span><span class="o">.</span><span class="n">pid</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">save_param</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
+        <span class="n">main_function</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">)</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">save_param</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
+        <span class="k">pass</span></div>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+    <span class="k">pass</span>
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../index.html">KnowledgeGraphChallenge2023</a></h1>
+
+
+
+
+
+
+
+
+<h3>ナビゲーション</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../src.html">src package</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../index.html">Documentation overview</a><ul>
+  <li><a href="../index.html">モジュールコード</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">クイック検索</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="検索" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2023, RyoyaKaneda.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 5.3.0</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.13</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

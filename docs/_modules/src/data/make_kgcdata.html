@@ -1,0 +1,939 @@
+
+<!DOCTYPE html>
+
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>src.data.make_kgcdata &#8212; KnowledgeGraphChallenge2023 v1.0 ドキュメント</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css" />
+    <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js"></script>
+    <script src="../../../_static/jquery.js"></script>
+    <script src="../../../_static/underscore.js"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+    <script src="../../../_static/doctools.js"></script>
+    <script src="../../../_static/sphinx_highlight.js"></script>
+    <script src="../../../_static/translations.js"></script>
+    <link rel="index" title="索引" href="../../../genindex.html" />
+    <link rel="search" title="検索" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>src.data.make_kgcdata のソースコード</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/python</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="sd">&quot;&quot;&quot;Change and save the data using Knowledge Graph Challenge.</span>
+
+<span class="sd">* This file is used for changing and saving the data of Knowledge Graph Challenge for useful.</span>
+
+<span class="sd">Todo:</span>
+<span class="sd">    * なんか色々あるきがする. Maybe I have many problem, but I can&#39;t write by my words.</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="c1"># ========== python ==========</span>
+<span class="kn">from</span> <span class="nn">logging</span> <span class="kn">import</span> <span class="n">Logger</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span> <span class="nn">urllib.parse</span> <span class="kn">import</span> <span class="n">quote</span><span class="p">,</span> <span class="n">unquote</span>
+<span class="c1"># noinspection PyUnresolvedReferences</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Final</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">get_args</span><span class="p">,</span> <span class="n">cast</span>
+<span class="kn">import</span> <span class="nn">h5py</span>
+<span class="kn">from</span> <span class="nn">h5py</span> <span class="kn">import</span> <span class="n">Group</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">rdflib</span>
+<span class="kn">from</span> <span class="nn">rdflib</span> <span class="kn">import</span> <span class="n">Graph</span><span class="p">,</span> <span class="n">URIRef</span><span class="p">,</span> <span class="n">Namespace</span><span class="p">,</span> <span class="n">RDF</span><span class="p">,</span> <span class="n">RDFS</span>
+<span class="kn">from</span> <span class="nn">rdflib.namespace</span> <span class="kn">import</span> <span class="n">DefinedNamespace</span><span class="p">,</span> <span class="n">NamespaceManager</span>
+<span class="kn">from</span> <span class="nn">rdflib.term</span> <span class="kn">import</span> <span class="n">Node</span>
+<span class="c1"># my data</span>
+<span class="kn">from</span> <span class="nn">models.datasets.data_helper</span> <span class="kn">import</span> <span class="n">INFO_INDEX</span><span class="p">,</span> <span class="n">TRAIN_INDEX</span>
+<span class="kn">from</span> <span class="nn">utils.hdf5</span> <span class="kn">import</span> <span class="n">del_data_if_exist</span><span class="p">,</span> <span class="n">str_list_for_hdf5</span>
+<span class="kn">from</span> <span class="nn">utils.setup</span> <span class="kn">import</span> <span class="n">setup_logger</span>
+<span class="kn">from</span> <span class="nn">utils.typing</span> <span class="kn">import</span> <span class="n">ConstMeta</span>
+<span class="kn">from</span> <span class="nn">utils.utils</span> <span class="kn">import</span> <span class="n">get_pure_path</span>
+<span class="c1"># get PROJECT_DIR</span>
+<span class="kn">from</span> <span class="nn">const.const_values</span> <span class="kn">import</span> <span class="n">PROJECT_DIR</span>
+
+
+<span class="n">DATA_FOLDER_PATH</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">PROJECT_DIR</span><span class="si">}</span><span class="s2">/data/external/KGRC-RDF&quot;</span>
+<span class="n">WRITE1_FILE_PATH</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">PROJECT_DIR</span><span class="si">}</span><span class="s2">/data/external/KGCdata/story_list.hdf5&quot;</span>
+<span class="n">WRITE2_SVO_INFO_FILE</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">title</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">PROJECT_DIR</span><span class="si">}</span><span class="s2">/data/processed/KGCdata/</span><span class="si">{</span><span class="n">title</span><span class="si">}</span><span class="s2">/SVO/info.hdf5&quot;</span>
+<span class="n">WRITE2_SVO_TRAIN_FILE</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">title</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">PROJECT_DIR</span><span class="si">}</span><span class="s2">/data/processed/KGCdata/</span><span class="si">{</span><span class="n">title</span><span class="si">}</span><span class="s2">/SVO/train.hdf5&quot;</span>
+<span class="n">WRITE2_SRO_INFO_FILE</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">title</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">PROJECT_DIR</span><span class="si">}</span><span class="s2">/data/processed/KGCdata/</span><span class="si">{</span><span class="n">title</span><span class="si">}</span><span class="s2">/SRO/info.hdf5&quot;</span>
+<span class="n">WRITE2_SRO_TRAIN_FILE</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">title</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">PROJECT_DIR</span><span class="si">}</span><span class="s2">/data/processed/KGCdata/</span><span class="si">{</span><span class="n">title</span><span class="si">}</span><span class="s2">/SRO/train.hdf5&quot;</span>
+
+<span class="n">URL_DATA</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s2">&quot;http://kgc.knowledge-graph.jp/data&quot;</span>
+<span class="n">URL_PREDICATE</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s2">&quot;http://kgc.knowledge-graph.jp/data/predicate/&quot;</span>
+<span class="n">PREFIX_PREDICATE</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;word.predicate&#39;</span>
+
+<span class="n">KGC_TYPE</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;kgc:type&#39;</span>
+<span class="n">KGC_LABEL</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;kgc:label&#39;</span>
+
+<span class="n">logger</span><span class="p">:</span> <span class="n">Logger</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<div class="viewcode-block" id="KGC"><a class="viewcode-back" href="../../../src.data.html#src.data.make_kgcdata.KGC">[ドキュメント]</a><span class="k">class</span> <span class="nc">KGC</span><span class="p">(</span><span class="n">DefinedNamespace</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Knowledge Graph Challenge&#39;s Namespaces.</span>
+
+<span class="sd">    * The word &quot;from&quot; and &quot;if&quot; are Reserved words in Python, So use not just words but function.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">source</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">ActionOption</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">Not</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">RelationBetweenScene</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">SceneObjectProperty</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">SceneProperty</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">TargetObjProperty</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">adjunct</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">around</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">at_the_same_time</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">because</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">can</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">canNot</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="c1"># from: URIRef</span>
+    <span class="n">hasPart</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">hasPredicate</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">hasProperty</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">how</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="c1"># if: URIRef</span>
+    <span class="n">infoReceiver</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">infoSource</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">left</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">middle</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">near</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">next_to</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">ofPart</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">ofWhole</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">on</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">opposite</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">orTarget</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">otherwise</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">right</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">subject</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">then</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">therefore</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">to</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">what</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">when</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">when_during</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">where</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">whom</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">why</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">LocationProperty</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">time</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">AbstractTime</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">Action</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">Animal</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">CanAction</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">CanNotAction</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">NotAction</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">OFobj</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">ORobj</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">Object</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">PhysicalObject</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">Person</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">Place</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">Property</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">Scene</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">Situation</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">Statement</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">Talk</span><span class="p">:</span> <span class="n">URIRef</span>
+    <span class="n">Thought</span><span class="p">:</span> <span class="n">URIRef</span>
+
+    <span class="n">_NS</span> <span class="o">=</span> <span class="n">Namespace</span><span class="p">(</span><span class="s2">&quot;http://kgc.knowledge-graph.jp/ontology/kgc.owl#&quot;</span><span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">URIRef</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;URIRef Item(the word &quot;from&quot; can&#39;t use naturally)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_NS</span><span class="p">[</span><span class="s1">&#39;from&#39;</span><span class="p">]</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">if_</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">URIRef</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;URIRef Item(the word &quot;if&quot; can&#39;t use naturally)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_NS</span><span class="p">[</span><span class="s1">&#39;if&#39;</span><span class="p">]</span></div>
+
+
+<span class="n">ALL_RELATION</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;rdf:type&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:subject&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:ActionOption&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:Not&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:RelationBetweenScene&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:SceneObjectProperty&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;kgc:SceneProperty&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:TargetObjProperty&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:adjunct&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:around&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:at_the_same_time&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;kgc:because&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:can&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:canNot&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:from&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:hasPart&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:hasPredicate&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:hasProperty&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:how&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;kgc:if&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:infoReceiver&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:infoSource&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:left&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:middle&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:near&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:next_to&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:ofPart&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;kgc:ofWhole&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:on&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:opposite&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:orTarget&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:otherwise&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:right&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:subject&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:then&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;kgc:therefore&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:to&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:what&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:when&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:when_during&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:where&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:whom&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:why&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;kgc:LocationProperty&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:time&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:AbstractTime&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:Action&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:Animal&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:CanAction&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;kgc:CanNotAction&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:NotAction&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:OFobj&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:ORobj&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:Object&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:PhysicalObject&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;kgc:Person&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:Place&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:Property&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:Scene&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:Situation&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:Statement&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:Talk&#39;</span><span class="p">,</span> <span class="s1">&#39;kgc:Thought&#39;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">ALL_TITLE</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;All&#39;</span>
+<span class="n">ALL_WITHOUT_TITLE</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;AllWithoutTitle&#39;</span>
+<span class="n">GENERAL</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;General&#39;</span>
+
+<span class="n">HOLMES_ALT_NAME</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;AllTitle:Holmes&#39;</span>
+<span class="n">WATSON_ALT_NAME</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;AllTitle:Watson&#39;</span>
+<span class="n">HOLMES_TITLE_NAME</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">title</span><span class="p">:</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">title</span><span class="si">}</span><span class="s1">:Holmes&#39;</span>
+<span class="n">WATSON_TITLE_NAME</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">title</span><span class="p">:</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">title</span><span class="si">}</span><span class="s1">:Watson&#39;</span>
+
+<span class="n">title_len_dict</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;僧坊荘園&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;AbbeyGrange&quot;</span><span class="p">,</span> <span class="mi">414</span><span class="p">,</span> <span class="mi">372</span><span class="p">,</span> <span class="mi">331</span><span class="p">,</span> <span class="mi">310</span><span class="p">),</span>
+    <span class="s2">&quot;花婿失踪事件&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;ACaseOfIdentity&quot;</span><span class="p">,</span> <span class="mi">580</span><span class="p">,</span> <span class="mi">522</span><span class="p">,</span> <span class="mi">464</span><span class="p">,</span> <span class="mi">435</span><span class="p">),</span>
+    <span class="s2">&quot;背中の曲がった男&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;CrookedMan&quot;</span><span class="p">,</span> <span class="mi">373</span><span class="p">,</span> <span class="mi">335</span><span class="p">,</span> <span class="mi">298</span><span class="p">,</span> <span class="mi">279</span><span class="p">),</span>
+    <span class="s2">&quot;踊る人形&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;DancingMen&quot;</span><span class="p">,</span> <span class="mi">231</span><span class="p">,</span> <span class="mi">207</span><span class="p">,</span> <span class="mi">184</span><span class="p">,</span> <span class="mi">173</span><span class="p">),</span>
+    <span class="s2">&quot;悪魔の足&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;DevilsFoot&quot;</span><span class="p">,</span> <span class="mi">489</span><span class="p">,</span> <span class="mi">440</span><span class="p">,</span> <span class="mi">391</span><span class="p">,</span> <span class="mi">366</span><span class="p">),</span>
+    <span class="s2">&quot;入院患者&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;ResidentPatient&quot;</span><span class="p">,</span> <span class="mi">324</span><span class="p">,</span> <span class="mi">291</span><span class="p">,</span> <span class="mi">259</span><span class="p">,</span> <span class="mi">243</span><span class="p">),</span>
+    <span class="s2">&quot;白銀号事件&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;SilverBlaze&quot;</span><span class="p">,</span> <span class="mi">397</span><span class="p">,</span> <span class="mi">367</span><span class="p">,</span> <span class="mi">317</span><span class="p">,</span> <span class="mi">297</span><span class="p">),</span>
+    <span class="s2">&quot;マダラのひも&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;SpeckledBand&quot;</span><span class="p">,</span> <span class="mi">401</span><span class="p">,</span> <span class="mi">360</span><span class="p">,</span> <span class="mi">320</span><span class="p">,</span> <span class="mi">300</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="n">OBJECT_SET</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="n">KGC</span><span class="o">.</span><span class="n">Animal</span><span class="p">,</span> <span class="n">KGC</span><span class="o">.</span><span class="n">OFobj</span><span class="p">,</span> <span class="n">KGC</span><span class="o">.</span><span class="n">ORobj</span><span class="p">,</span> <span class="n">KGC</span><span class="o">.</span><span class="n">Object</span><span class="p">,</span>
+    <span class="n">KGC</span><span class="o">.</span><span class="n">PhysicalObject</span><span class="p">,</span> <span class="n">KGC</span><span class="o">.</span><span class="n">Person</span><span class="p">,</span> <span class="n">KGC</span><span class="o">.</span><span class="n">Place</span><span class="p">,</span>
+<span class="p">}</span>
+<span class="n">ACTION_SET</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="n">KGC</span><span class="o">.</span><span class="n">Action</span><span class="p">,</span> <span class="n">KGC</span><span class="o">.</span><span class="n">CanAction</span><span class="p">,</span> <span class="n">KGC</span><span class="o">.</span><span class="n">CanNotAction</span><span class="p">,</span> <span class="n">KGC</span><span class="o">.</span><span class="n">NotAction</span>
+<span class="p">}</span>
+<span class="n">PEOPLE_SET</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="n">KGC</span><span class="o">.</span><span class="n">Person</span><span class="p">,</span>
+<span class="p">}</span>
+<span class="n">SCENE_SET</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="n">KGC</span><span class="o">.</span><span class="n">Scene</span><span class="p">,</span> <span class="n">KGC</span><span class="o">.</span><span class="n">Situation</span><span class="p">,</span> <span class="n">KGC</span><span class="o">.</span><span class="n">Thought</span><span class="p">,</span> <span class="n">KGC</span><span class="o">.</span><span class="n">Statement</span><span class="p">,</span> <span class="n">KGC</span><span class="o">.</span><span class="n">Talk</span>
+<span class="p">}</span>
+<span class="n">KGC_PREDICATE_LIST</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">URIRef</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">=</span> <span class="p">(</span><span class="n">KGC</span><span class="o">.</span><span class="n">subject</span><span class="p">,</span> <span class="n">KGC</span><span class="o">.</span><span class="n">hasPredicate</span><span class="p">,</span> <span class="n">KGC</span><span class="o">.</span><span class="n">hasProperty</span><span class="p">,</span> <span class="n">KGC</span><span class="o">.</span><span class="n">what</span><span class="p">,</span> <span class="n">KGC</span><span class="o">.</span><span class="n">whom</span><span class="p">,</span>
+                                                 <span class="n">KGC</span><span class="o">.</span><span class="n">to</span><span class="p">,</span> <span class="n">KGC</span><span class="o">.</span><span class="n">where</span><span class="p">,</span> <span class="n">KGC</span><span class="o">.</span><span class="n">infoSource</span><span class="p">,</span> <span class="n">KGC</span><span class="o">.</span><span class="n">on</span><span class="p">,</span> <span class="n">KGC</span><span class="o">.</span><span class="n">from_</span><span class="p">(),</span>
+                                                 <span class="n">KGC</span><span class="o">.</span><span class="n">when</span><span class="p">,</span> <span class="n">KGC</span><span class="o">.</span><span class="n">time</span><span class="p">,</span> <span class="n">KGC</span><span class="o">.</span><span class="n">why</span><span class="p">)</span>
+
+<span class="n">NodeList</span> <span class="o">=</span> <span class="nb">list</span><span class="p">[</span><span class="n">Node</span><span class="p">]</span>
+<span class="n">URIRefList</span> <span class="o">=</span> <span class="nb">list</span><span class="p">[</span><span class="n">URIRef</span><span class="p">]</span>
+<span class="n">NamespaceDict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Namespace</span><span class="p">]</span>
+<span class="n">StoryList</span> <span class="o">=</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+<span class="n">TripleDict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="n">URIRef</span><span class="p">,</span> <span class="n">URIRefList</span><span class="p">]]</span>
+<span class="n">SubjHaspredObj</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">StoryList</span><span class="p">,</span> <span class="n">URIRefList</span><span class="p">,</span> <span class="n">URIRefList</span><span class="p">,</span> <span class="n">URIRefList</span><span class="p">,</span> <span class="n">URIRefList</span><span class="p">]</span>
+<span class="n">StoryPredObj</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">StoryList</span><span class="p">,</span> <span class="n">URIRefList</span><span class="p">,</span> <span class="n">URIRefList</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="make_get_graph"><a class="viewcode-back" href="../../../src.data.html#src.data.make_kgcdata.make_get_graph">[ドキュメント]</a><span class="k">def</span> <span class="nf">make_get_graph</span><span class="p">(</span><span class="n">title</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">data_file_path</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;make and get rdf graph</span>
+
+<span class="sd">    * make the rdf graph and bind the words &#39;predicate&#39; and the title.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        title(str): the title.</span>
+<span class="sd">        data_file_path(Union[str, Path]): file path.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        tuple[Graph, NamespaceManager, dict[str, Namespace]]: return (graph ,NamespaceManager, namespace dict)</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">g</span> <span class="o">=</span> <span class="n">Graph</span><span class="p">()</span>
+    <span class="n">g</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">data_file_path</span><span class="p">)</span>
+    <span class="n">g</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">PREFIX_PREDICATE</span><span class="p">,</span> <span class="n">Namespace</span><span class="p">(</span><span class="n">URL_PREDICATE</span><span class="p">))</span>
+    <span class="n">g</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">Namespace</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">URL_DATA</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">title</span><span class="si">}</span><span class="s2">/&quot;</span><span class="p">))</span>
+    <span class="n">namespace_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">Namespace</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">g</span><span class="o">.</span><span class="n">namespace_manager</span><span class="o">.</span><span class="n">namespaces</span><span class="p">()}</span>
+    <span class="k">return</span> <span class="n">g</span><span class="p">,</span> <span class="n">g</span><span class="o">.</span><span class="n">namespace_manager</span><span class="p">,</span> <span class="n">namespace_dict</span></div>
+
+
+<div class="viewcode-block" id="change_sentence"><a class="viewcode-back" href="../../../src.data.html#src.data.make_kgcdata.change_sentence">[ドキュメント]</a><span class="k">def</span> <span class="nf">change_sentence</span><span class="p">(</span><span class="n">_uriref</span><span class="p">:</span> <span class="n">URIRef</span><span class="p">,</span> <span class="n">namespace_manager</span><span class="p">:</span> <span class="n">NamespaceManager</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Change one sentence.</span>
+
+<span class="sd">    * If the uriref is string item, this item change to short sentence one by using namespace_manager.</span>
+<span class="sd">    * Else if the uriref is time item, this item change to time item.</span>
+<span class="sd">    Args:</span>
+<span class="sd">        _uriref(URIRef): uriref item.</span>
+<span class="sd">        namespace_manager(NamespaceManager): namespace manager.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        str: changed item.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">_uriref</span><span class="o">.</span><span class="n">toPython</span><span class="p">())</span> <span class="ow">is</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">_uriref</span><span class="p">)</span><span class="o">.</span><span class="n">rsplit</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">,</span> <span class="n">maxsplit</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">url_</span><span class="p">,</span> <span class="n">value</span> <span class="o">=</span> <span class="n">x</span>
+            <span class="n">item</span> <span class="o">=</span> <span class="n">unquote</span><span class="p">(</span><span class="n">URIRef</span><span class="p">(</span><span class="n">url_</span> <span class="o">+</span> <span class="s1">&#39;/&#39;</span> <span class="o">+</span> <span class="n">quote</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">safe</span><span class="o">=</span><span class="s1">&#39;#&#39;</span><span class="p">))</span><span class="o">.</span><span class="n">n3</span><span class="p">(</span><span class="n">namespace_manager</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">item</span> <span class="o">=</span> <span class="n">_uriref</span><span class="o">.</span><span class="n">toPython</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">item</span> <span class="o">=</span> <span class="s2">&quot;DateTime:</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">_uriref</span><span class="p">))</span>
+        <span class="k">pass</span>
+    <span class="k">return</span> <span class="n">item</span></div>
+
+
+<div class="viewcode-block" id="replace_holmes_and_watson"><a class="viewcode-back" href="../../../src.data.html#src.data.make_kgcdata.replace_holmes_and_watson">[ドキュメント]</a><span class="k">def</span> <span class="nf">replace_holmes_and_watson</span><span class="p">(</span><span class="n">title</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">item_list</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;replace the holmes and watson tags.</span>
+
+<span class="sd">    * Delete specific title and set the general title for all holmes and watson tags.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        title(str): The specific title.</span>
+<span class="sd">        item_list(Iterable[str]): The item list.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        list[str]: The item list. the items about Holmes and Watson in this list are changed to no specific title items.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">HOLMES_ALT_NAME</span> <span class="k">if</span> <span class="n">item</span> <span class="o">==</span> <span class="n">HOLMES_TITLE_NAME</span><span class="p">(</span><span class="n">title</span><span class="p">)</span> <span class="k">else</span>
+            <span class="n">WATSON_ALT_NAME</span> <span class="k">if</span> <span class="n">item</span> <span class="o">==</span> <span class="n">WATSON_TITLE_NAME</span><span class="p">(</span><span class="n">title</span><span class="p">)</span> <span class="k">else</span>
+            <span class="n">item</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">item_list</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="get_shaped_str_list"><a class="viewcode-back" href="../../../src.data.html#src.data.make_kgcdata.get_shaped_str_list">[ドキュメント]</a><span class="k">def</span> <span class="nf">get_shaped_str_list</span><span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">namespace_manager</span><span class="p">,</span> <span class="n">node_list</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">URIRef</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;get shaped str list</span>
+
+<span class="sd">    * Get shaped string list. shape means change_sentence and replace name.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        title(str): title</span>
+<span class="sd">        namespace_manager(NamespaceManager): namespace_manager</span>
+<span class="sd">        node_list(Iterable[URIRef]): the list of node.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        list[str]: the list of strings.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">str_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">change_sentence</span><span class="p">(</span><span class="n">_n</span><span class="p">,</span> <span class="n">namespace_manager</span><span class="p">)</span> <span class="k">for</span> <span class="n">_n</span> <span class="ow">in</span> <span class="n">node_list</span><span class="p">]</span>
+    <span class="n">alt_name_list</span> <span class="o">=</span> <span class="n">replace_holmes_and_watson</span><span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">str_list</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">alt_name_list</span></div>
+
+
+<span class="c1"># noinspection PyTypeChecker</span>
+<div class="viewcode-block" id="get_type_match_list"><a class="viewcode-back" href="../../../src.data.html#src.data.make_kgcdata.get_type_match_list">[ドキュメント]</a><span class="k">def</span> <span class="nf">get_type_match_list</span><span class="p">(</span><span class="n">graph_</span><span class="p">:</span> <span class="n">Graph</span><span class="p">,</span> <span class="n">type_set</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="n">URIRef</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">URIRefList</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;get type match list</span>
+
+<span class="sd">    * get the list of URIRef item which type is in the type_set from rdf graph.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        graph_(Graph): graph</span>
+<span class="sd">        type_set(set[URIRef]):</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        list[URIRef]: URIRefList</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">match_list</span><span class="p">:</span> <span class="n">URIRefList</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">dict</span><span class="o">.</span><span class="n">fromkeys</span><span class="p">(</span>
+        <span class="p">[</span><span class="n">s</span> <span class="k">for</span> <span class="n">s</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">graph_</span><span class="o">.</span><span class="n">triples</span><span class="p">((</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span> <span class="k">if</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">type_set</span><span class="p">]))</span>
+    <span class="n">match_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">_l</span> <span class="k">for</span> <span class="n">_l</span> <span class="ow">in</span> <span class="n">match_list</span> <span class="k">if</span> <span class="n">_l</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">type_set</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">match_list</span></div>
+
+
+<div class="viewcode-block" id="get_story_list"><a class="viewcode-back" href="../../../src.data.html#src.data.make_kgcdata.get_story_list">[ドキュメント]</a><span class="k">def</span> <span class="nf">get_story_list</span><span class="p">(</span><span class="n">graph_</span><span class="p">:</span> <span class="n">Graph</span><span class="p">,</span> <span class="n">namespace_dict</span><span class="p">:</span> <span class="n">NamespaceDict</span><span class="p">,</span> <span class="n">title</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">story_length</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;get story list.</span>
+
+<span class="sd">    * get story item list in graph.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        graph_(Graph):</span>
+<span class="sd">        namespace_dict(dict[str, Namespace]):</span>
+<span class="sd">        title(str):</span>
+<span class="sd">        story_length(int):</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        list[str]: the string iiis item. iiis means triple int(iii) and char(s).</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">story_list</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="n">prefix_title</span> <span class="o">=</span> <span class="n">namespace_dict</span><span class="p">[</span><span class="n">title</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">story_length</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="n">iii</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="o">.</span><span class="n">zfill</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="s1">&#39;c&#39;</span><span class="p">]:</span>
+            <span class="n">iiis</span> <span class="o">=</span> <span class="n">iii</span> <span class="o">+</span> <span class="n">s</span>
+            <span class="n">story_</span> <span class="o">=</span> <span class="n">prefix_title</span><span class="p">[</span><span class="n">iiis</span><span class="p">]</span>
+            <span class="n">tmp</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">graph_</span><span class="o">.</span><span class="n">triples</span><span class="p">((</span><span class="n">story_</span><span class="p">,</span> <span class="n">RDF</span><span class="o">.</span><span class="n">type</span><span class="p">,</span> <span class="kc">None</span><span class="p">)))</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">tmp</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">story_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">iiis</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">story_list</span></div>
+
+
+<div class="viewcode-block" id="get_triples"><a class="viewcode-back" href="../../../src.data.html#src.data.make_kgcdata.get_triples">[ドキュメント]</a><span class="k">def</span> <span class="nf">get_triples</span><span class="p">(</span><span class="n">graph_</span><span class="p">:</span> <span class="n">Graph</span><span class="p">,</span> <span class="n">namespace_dict</span><span class="p">:</span> <span class="n">NamespaceDict</span><span class="p">,</span> <span class="n">title</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">story_list</span><span class="p">:</span> <span class="n">StoryList</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;get triples</span>
+
+<span class="sd">    * get some triples from rdf graph.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        graph_(Graph): rdf graph</span>
+<span class="sd">        namespace_dict(dict[str, Namespace]): namespace_dict</span>
+<span class="sd">        title(str): title</span>
+<span class="sd">        story_list(list[str]): the list of stories</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        tuple[TripleDict, SubjHaspredObj, StoryPredObj]:</span>
+<span class="sd">            TripleDict is the dict. dict[iiis] == dict[_predicate][object_list]</span>
+<span class="sd">            SubjHaspredObj is list. list[i] == []</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">prefix_title</span> <span class="o">=</span> <span class="n">namespace_dict</span><span class="p">[</span><span class="n">title</span><span class="p">]</span>
+    <span class="n">triple_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="n">URIRef</span><span class="p">,</span> <span class="n">URIRefList</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">iiis</span><span class="p">:</span> <span class="p">{</span><span class="n">p</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">graph_</span><span class="o">.</span><span class="n">objects</span><span class="p">(</span><span class="n">prefix_title</span><span class="p">[</span><span class="n">iiis</span><span class="p">],</span> <span class="n">p</span><span class="p">))</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">KGC_PREDICATE_LIST</span><span class="p">}</span>
+        <span class="k">for</span> <span class="n">iiis</span> <span class="ow">in</span> <span class="n">story_list</span>
+    <span class="p">}</span>
+
+    <span class="n">subj_haspred_obj</span> <span class="o">=</span> <span class="p">[(</span><span class="n">URIRef</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">title</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">iiis</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">),</span> <span class="n">_predicate</span><span class="p">,</span> <span class="n">_subject</span><span class="p">,</span> <span class="n">_has_predicate</span><span class="p">,</span> <span class="n">_object</span><span class="p">)</span>
+                        <span class="k">for</span> <span class="n">iiis</span> <span class="ow">in</span> <span class="n">story_list</span>
+                        <span class="k">for</span> <span class="n">_subject</span> <span class="ow">in</span> <span class="n">triple_dict</span><span class="p">[</span><span class="n">iiis</span><span class="p">][</span><span class="n">KGC</span><span class="o">.</span><span class="n">subject</span><span class="p">]</span>  <span class="c1"># almost always one item</span>
+                        <span class="k">for</span> <span class="n">_has_predicate</span> <span class="ow">in</span> <span class="n">triple_dict</span><span class="p">[</span><span class="n">iiis</span><span class="p">][</span><span class="n">KGC</span><span class="o">.</span><span class="n">hasPredicate</span><span class="p">]</span>  <span class="c1"># almost always one item</span>
+                        <span class="k">for</span> <span class="n">_predicate</span> <span class="ow">in</span> <span class="n">KGC_PREDICATE_LIST</span><span class="p">[</span><span class="mi">2</span><span class="p">:]</span>  <span class="c1"># delete KGC.subject and predicate</span>
+                        <span class="k">for</span> <span class="n">_object</span> <span class="ow">in</span> <span class="n">triple_dict</span><span class="p">[</span><span class="n">iiis</span><span class="p">][</span><span class="n">_predicate</span><span class="p">]]</span>  <span class="c1"># almost always one item</span>
+
+    <span class="n">story_pred_obj</span> <span class="o">=</span> <span class="p">[(</span><span class="n">URIRef</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">title</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">iiis</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">),</span> <span class="n">_predicate</span><span class="p">,</span> <span class="n">_object</span><span class="p">)</span>
+                      <span class="k">for</span> <span class="n">iiis</span> <span class="ow">in</span> <span class="n">story_list</span>
+                      <span class="k">for</span> <span class="n">_predicate</span> <span class="ow">in</span> <span class="n">KGC_PREDICATE_LIST</span>
+                      <span class="k">for</span> <span class="n">_object</span> <span class="ow">in</span> <span class="n">triple_dict</span><span class="p">[</span><span class="n">iiis</span><span class="p">][</span><span class="n">_predicate</span><span class="p">]]</span>
+
+    <span class="k">return</span> <span class="n">triple_dict</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">subj_haspred_obj</span><span class="p">)),</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">story_pred_obj</span><span class="p">))</span></div>
+
+
+<span class="c1"># noinspection PyTypeChecker</span>
+<div class="viewcode-block" id="get_label_list"><a class="viewcode-back" href="../../../src.data.html#src.data.make_kgcdata.get_label_list">[ドキュメント]</a><span class="k">def</span> <span class="nf">get_label_list</span><span class="p">(</span><span class="n">graph_</span><span class="p">:</span> <span class="n">Graph</span><span class="p">,</span> <span class="n">node_list</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">URIRef</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;get label list</span>
+
+<span class="sd">    * get label list from node_list</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        graph_(Graph):</span>
+<span class="sd">        node_list(Iterable[URIRef]):</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        list[str]: the label list.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_label_list_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n">rdflib</span><span class="o">.</span><span class="n">term</span><span class="o">.</span><span class="n">Literal</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">[</span><span class="n">o</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">graph_</span><span class="o">.</span><span class="n">objects</span><span class="p">(</span><span class="n">_n</span><span class="p">,</span> <span class="n">RDFS</span><span class="o">.</span><span class="n">label</span><span class="p">))</span> <span class="k">if</span> <span class="n">o</span><span class="o">.</span><span class="n">language</span> <span class="o">==</span> <span class="s1">&#39;en&#39;</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">_n</span> <span class="ow">in</span> <span class="n">node_list</span>
+    <span class="p">]</span>
+    <span class="n">_label_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">labels</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="s1">&#39;&#39;</span> <span class="k">for</span> <span class="n">labels</span> <span class="ow">in</span> <span class="n">_label_list_list</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">_label_list</span></div>
+
+
+<div class="viewcode-block" id="TAGS1"><a class="viewcode-back" href="../../../src.data.html#src.data.make_kgcdata.TAGS1">[ドキュメント]</a><span class="k">class</span> <span class="nc">TAGS1</span><span class="p">(</span><span class="n">metaclass</span><span class="o">=</span><span class="n">ConstMeta</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;TAGS1</span>
+
+<span class="sd">    * This is only const parameters about tags1.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">LENGTH_100</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;length_100&#39;</span>
+    <span class="n">LENGTH_090</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;length_090&#39;</span>
+    <span class="n">LENGTH_080</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;length_080&#39;</span>
+    <span class="n">LENGTH_075</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;length_075&#39;</span>
+    <span class="n">STORIES_IIIS</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;stories_iiis&#39;</span>
+    <span class="n">STORIES</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;stories&#39;</span>
+    <span class="n">OBJECTS</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;objects&#39;</span>
+    <span class="n">PURE_OBJECTS</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;pure_objects&#39;</span>
+    <span class="n">PEOPLE</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;people&#39;</span>
+    <span class="n">ACTIONS</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;actions&#39;</span>
+    <span class="n">OBJECTS_LABEL</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;objects_label&#39;</span>
+    <span class="n">ACTIONS_LABEL</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;actions_label&#39;</span>
+    <span class="n">PEOPLE_LABEL</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;people_label&#39;</span>
+    <span class="n">PURE_OBJECTS_LABEL</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;pure_objects_label&#39;</span>
+
+    <span class="n">SPO_TRIPLE</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;story_property_subject_predicate_object&#39;</span>
+    <span class="n">PO_TRIPLE</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;story_property_object&#39;</span>
+
+    <span class="n">ENTITY</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;entity&#39;</span>
+    <span class="n">RELATION</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="s1">&#39;relation&#39;</span>
+
+<div class="viewcode-block" id="TAGS1.ALL_LIST"><a class="viewcode-back" href="../../../src.data.html#src.data.make_kgcdata.TAGS1.ALL_LIST">[ドキュメント]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">ALL_LIST</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;all list of tags in TAGS1.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            tuple[str]: the tuple of tags in TAGS1.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">LENGTH_100</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">LENGTH_090</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">LENGTH_080</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">LENGTH_075</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">STORIES</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">STORIES_IIIS</span><span class="p">,</span>
+                <span class="bp">cls</span><span class="o">.</span><span class="n">OBJECTS</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">PURE_OBJECTS</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">ACTIONS</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">PEOPLE</span><span class="p">,</span>
+                <span class="bp">cls</span><span class="o">.</span><span class="n">OBJECTS_LABEL</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">PURE_OBJECTS_LABEL</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">PEOPLE_LABEL</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">ACTIONS_LABEL</span><span class="p">,</span>
+                <span class="bp">cls</span><span class="o">.</span><span class="n">SPO_TRIPLE</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">PO_TRIPLE</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="save_info_list"><a class="viewcode-back" href="../../../src.data.html#src.data.make_kgcdata.save_info_list">[ドキュメント]</a><span class="k">def</span> <span class="nf">save_info_list</span><span class="p">(</span>
+        <span class="n">title_group</span><span class="p">,</span> <span class="n">l100</span><span class="p">,</span> <span class="n">l090</span><span class="p">,</span> <span class="n">l080</span><span class="p">,</span> <span class="n">l075</span><span class="p">,</span>
+        <span class="n">story_iiis_list</span><span class="p">,</span> <span class="n">story_name_list</span><span class="p">,</span> <span class="n">objects_list</span><span class="p">,</span> <span class="n">pure_objects_list</span><span class="p">,</span> <span class="n">people_list</span><span class="p">,</span> <span class="n">actions_list</span><span class="p">,</span>
+        <span class="n">objects_label_list</span><span class="p">,</span> <span class="n">pure_objects_label_list</span><span class="p">,</span> <span class="n">people_label_list</span><span class="p">,</span> <span class="n">actions_label_list</span><span class="p">,</span> <span class="n">spo_array</span><span class="p">,</span> <span class="n">po_array</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Save function.</span>
+
+<span class="sd">    * Save its items to title_group.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        title_group(Group): title group.</span>
+<span class="sd">        l100(int): int about l100.</span>
+<span class="sd">        l090(int): int about l090.</span>
+<span class="sd">        l080(int): int about l080.</span>
+<span class="sd">        l075(int): int about l075.</span>
+<span class="sd">        story_iiis_list(list[str]): the list of iiis.</span>
+<span class="sd">        story_name_list(list[str]): the list of story_name(not iiis).</span>
+<span class="sd">        objects_list(list[str]): the list of objects.</span>
+<span class="sd">        actions_list(list[str]): the list of actions.</span>
+<span class="sd">        people_list(list[str]): the list of people.</span>
+<span class="sd">        objects_label_list(list[str]): the list of object labels.</span>
+<span class="sd">        actions_label_list(list[str]): the list of action labels.</span>
+<span class="sd">        people_label_list(list[str]): the list of people labels.</span>
+<span class="sd">        pure_objects_list(list[str]): the list of pure object. pure means all items not used in any other lists.</span>
+<span class="sd">        pure_objects_label_list(list[str]): the list of pure object label.</span>
+<span class="sd">            pure means all items not used in any other lists.</span>
+<span class="sd">        spo_array(np.ndarray): spo_array. It has (Story, predicate, subject, hasPredicate, object) in one sequence.</span>
+<span class="sd">        po_array(np.ndarray): po_array. It has (storySubject, predicate, object) in one sequence.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">change_to_np_array</span><span class="p">(</span><span class="n">_list</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">list</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="kc">None</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">list</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;change items to np.ndarray if the _list is not np.ndarray</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            _list(Union[list, np.ndarray]):</span>
+<span class="sd">                If its type is np.ndarray, return itself.</span>
+<span class="sd">                If its type is None, return None.</span>
+<span class="sd">                If its type is list, this list change to np.ndarray items.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Union[list, np.ndarray, None]: The item which type is np.ndarray or None.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">_list</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span> <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">str_list_for_hdf5</span><span class="p">(</span><span class="n">_list</span><span class="p">)</span> <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">story_iiis_list</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="k">else</span> <span class="n">_list</span>
+
+    <span class="p">[</span><span class="n">title_group</span><span class="o">.</span><span class="n">create_dataset</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="p">(</span>
+        <span class="p">(</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">LENGTH_100</span><span class="p">,</span> <span class="n">l100</span><span class="p">),</span>
+        <span class="p">(</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">LENGTH_090</span><span class="p">,</span> <span class="n">l090</span><span class="p">),</span>
+        <span class="p">(</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">LENGTH_080</span><span class="p">,</span> <span class="n">l080</span><span class="p">),</span>
+        <span class="p">(</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">LENGTH_075</span><span class="p">,</span> <span class="n">l075</span><span class="p">),</span>
+        <span class="p">(</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">STORIES_IIIS</span><span class="p">,</span> <span class="n">change_to_np_array</span><span class="p">(</span><span class="n">story_iiis_list</span><span class="p">)),</span>
+        <span class="p">(</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">STORIES</span><span class="p">,</span> <span class="n">change_to_np_array</span><span class="p">(</span><span class="n">story_name_list</span><span class="p">)),</span>
+        <span class="p">(</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">OBJECTS</span><span class="p">,</span> <span class="n">change_to_np_array</span><span class="p">(</span><span class="n">objects_list</span><span class="p">)),</span>
+        <span class="p">(</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">PURE_OBJECTS</span><span class="p">,</span> <span class="n">change_to_np_array</span><span class="p">(</span><span class="n">pure_objects_list</span><span class="p">)),</span>
+        <span class="p">(</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">PEOPLE</span><span class="p">,</span> <span class="n">change_to_np_array</span><span class="p">(</span><span class="n">people_list</span><span class="p">)),</span>
+        <span class="p">(</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">ACTIONS</span><span class="p">,</span> <span class="n">change_to_np_array</span><span class="p">(</span><span class="n">actions_list</span><span class="p">)),</span>
+        <span class="p">(</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">OBJECTS_LABEL</span><span class="p">,</span> <span class="n">change_to_np_array</span><span class="p">(</span><span class="n">objects_label_list</span><span class="p">)),</span>
+        <span class="p">(</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">PURE_OBJECTS_LABEL</span><span class="p">,</span> <span class="n">change_to_np_array</span><span class="p">(</span><span class="n">pure_objects_label_list</span><span class="p">)),</span>
+        <span class="p">(</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">PEOPLE_LABEL</span><span class="p">,</span> <span class="n">change_to_np_array</span><span class="p">(</span><span class="n">people_label_list</span><span class="p">)),</span>
+        <span class="p">(</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">ACTIONS_LABEL</span><span class="p">,</span> <span class="n">change_to_np_array</span><span class="p">(</span><span class="n">actions_label_list</span><span class="p">)),</span>
+        <span class="p">(</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">SPO_TRIPLE</span><span class="p">,</span> <span class="n">spo_array</span><span class="p">),</span>
+        <span class="p">(</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">PO_TRIPLE</span><span class="p">,</span> <span class="n">po_array</span><span class="p">),</span>
+    <span class="p">)</span> <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="write1_one_title"><a class="viewcode-back" href="../../../src.data.html#src.data.make_kgcdata.write1_one_title">[ドキュメント]</a><span class="k">def</span> <span class="nf">write1_one_title</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">title_ja</span><span class="p">,</span> <span class="n">title</span><span class="p">,</span> <span class="n">l100</span><span class="p">,</span> <span class="n">l090</span><span class="p">,</span> <span class="n">l080</span><span class="p">,</span> <span class="n">l075</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;write one title</span>
+
+<span class="sd">    * write one title in write1</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        f(File):</span>
+<span class="sd">        title_ja(str):</span>
+<span class="sd">        title(str):</span>
+<span class="sd">        l100(int):</span>
+<span class="sd">        l090(int):</span>
+<span class="sd">        l080(int):</span>
+<span class="sd">        l075(int):</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        tuple[list[str], list[str], list[str], list[str], list[str], list[str], list[str], list[str], list[str],</span>
+<span class="sd">            np.ndarray, np.ndarray]:</span>
+<span class="sd">            (objects_str_list, pure_objects_str_list, people_str_list, actions_str_list, story_name_list,</span>
+<span class="sd">            objects_label_list, pure_objects_label_list, people_label_list, actions_label_list,</span>
+<span class="sd">            subj_haspred_obj_array, story_pred_obj_array)</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">title_ja</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">data_file_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">DATA_FOLDER_PATH</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">title</span><span class="si">}</span><span class="s2">.ttl&quot;</span>
+    <span class="n">title_group</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">require_group</span><span class="p">(</span><span class="n">title</span><span class="p">)</span>
+
+    <span class="n">graph_</span><span class="p">,</span> <span class="n">namespace_manager</span><span class="p">,</span> <span class="n">namespace_dict</span> <span class="o">=</span> <span class="n">make_get_graph</span><span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">data_file_path</span><span class="p">)</span>
+
+    <span class="n">story_iiis_list</span> <span class="o">=</span> <span class="n">get_story_list</span><span class="p">(</span><span class="n">graph_</span><span class="p">,</span> <span class="n">namespace_dict</span><span class="p">,</span> <span class="n">title</span><span class="p">,</span> <span class="n">l100</span><span class="p">)</span>
+    <span class="n">story_name_list</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">title</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">iiis</span><span class="si">}</span><span class="s1">&#39;</span> <span class="k">for</span> <span class="n">iiis</span> <span class="ow">in</span> <span class="n">story_iiis_list</span><span class="p">]</span>
+    <span class="n">triple_dict</span><span class="p">,</span> <span class="n">subj_haspred_obj</span><span class="p">,</span> <span class="n">story_pred_obj</span> <span class="o">=</span> <span class="n">get_triples</span><span class="p">(</span><span class="n">graph_</span><span class="p">,</span> <span class="n">namespace_dict</span><span class="p">,</span> <span class="n">title</span><span class="p">,</span> <span class="n">story_iiis_list</span><span class="p">)</span>
+
+    <span class="n">subj_haspred_obj_shaped</span> <span class="o">=</span> <span class="p">[</span><span class="n">get_shaped_str_list</span><span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">namespace_manager</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">subj_haspred_obj</span><span class="p">]</span>
+    <span class="n">story_pred_obj_shaped</span> <span class="o">=</span> <span class="p">[</span><span class="n">get_shaped_str_list</span><span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">namespace_manager</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">story_pred_obj</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">make_str_label_list</span><span class="p">(</span><span class="n">_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">URIRef</span><span class="p">]):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;make_str_label_list</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">_str_list</span> <span class="o">=</span> <span class="n">get_shaped_str_list</span><span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">namespace_manager</span><span class="p">,</span> <span class="n">_list</span><span class="p">)</span>
+        <span class="n">_label_list</span> <span class="o">=</span> <span class="n">get_label_list</span><span class="p">(</span><span class="n">graph_</span><span class="p">,</span> <span class="n">_list</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">_list</span><span class="p">,</span> <span class="n">_str_list</span><span class="p">,</span> <span class="n">_label_list</span>
+
+    <span class="n">objects_node_list</span> <span class="o">=</span> <span class="n">get_type_match_list</span><span class="p">(</span><span class="n">graph_</span><span class="p">,</span> <span class="n">OBJECT_SET</span><span class="p">)</span>
+    <span class="n">people_node_list</span> <span class="o">=</span> <span class="n">get_type_match_list</span><span class="p">(</span><span class="n">graph_</span><span class="p">,</span> <span class="n">PEOPLE_SET</span><span class="p">)</span>
+    <span class="n">actions_node_list</span> <span class="o">=</span> <span class="n">get_type_match_list</span><span class="p">(</span><span class="n">graph_</span><span class="p">,</span> <span class="n">ACTION_SET</span><span class="p">)</span>
+
+    <span class="n">scene_set</span> <span class="o">=</span> <span class="n">get_type_match_list</span><span class="p">(</span><span class="n">graph_</span><span class="p">,</span> <span class="n">SCENE_SET</span><span class="p">)</span>
+    <span class="n">objects_node_list</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">dict</span><span class="o">.</span><span class="n">fromkeys</span><span class="p">(</span><span class="n">objects_node_list</span> <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="n">story_pred_obj</span><span class="p">[</span><span class="mi">2</span><span class="p">])))</span>
+
+    <span class="n">node_3set_mix</span> <span class="o">=</span> <span class="p">(</span><span class="n">people_node_list</span> <span class="o">+</span> <span class="n">actions_node_list</span> <span class="o">+</span> <span class="n">scene_set</span><span class="p">)</span>
+    <span class="n">pure_objects_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">o</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">objects_node_list</span> <span class="k">if</span> <span class="n">o</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">node_3set_mix</span><span class="p">]</span>
+
+    <span class="n">objects_node_list</span><span class="p">,</span> <span class="n">objects_str_list</span><span class="p">,</span> <span class="n">objects_label_list</span> <span class="o">=</span> <span class="n">make_str_label_list</span><span class="p">(</span><span class="n">objects_node_list</span><span class="p">)</span>
+    <span class="n">pure_objects_node_list</span><span class="p">,</span> <span class="n">pure_objects_str_list</span><span class="p">,</span> <span class="n">pure_objects_label_list</span> <span class="o">=</span> <span class="n">make_str_label_list</span><span class="p">(</span><span class="n">pure_objects_list</span><span class="p">)</span>
+    <span class="n">people_node_list</span><span class="p">,</span> <span class="n">people_str_list</span><span class="p">,</span> <span class="n">people_label_list</span> <span class="o">=</span> <span class="n">make_str_label_list</span><span class="p">(</span><span class="n">people_node_list</span><span class="p">)</span>
+    <span class="n">actions_node_list</span><span class="p">,</span> <span class="n">actions_str_list</span><span class="p">,</span> <span class="n">actions_label_list</span> <span class="o">=</span> <span class="n">make_str_label_list</span><span class="p">(</span><span class="n">actions_node_list</span><span class="p">)</span>
+
+    <span class="n">subj_haspred_obj_array</span> <span class="o">=</span> <span class="n">str_list_for_hdf5</span><span class="p">(</span><span class="n">subj_haspred_obj_shaped</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+    <span class="n">story_pred_obj_array</span> <span class="o">=</span> <span class="n">str_list_for_hdf5</span><span class="p">(</span><span class="n">story_pred_obj_shaped</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+
+    <span class="n">del_data_if_exist</span><span class="p">(</span><span class="n">title_group</span><span class="p">,</span> <span class="n">TAGS1</span><span class="o">.</span><span class="n">ALL_LIST</span><span class="p">())</span>
+    <span class="n">save_info_list</span><span class="p">(</span>
+        <span class="n">title_group</span><span class="p">,</span> <span class="n">l100</span><span class="p">,</span> <span class="n">l090</span><span class="p">,</span> <span class="n">l080</span><span class="p">,</span> <span class="n">l075</span><span class="p">,</span>
+        <span class="n">story_iiis_list</span><span class="p">,</span> <span class="n">story_name_list</span><span class="p">,</span>
+        <span class="n">objects_str_list</span><span class="p">,</span> <span class="n">pure_objects_str_list</span><span class="p">,</span> <span class="n">people_str_list</span><span class="p">,</span> <span class="n">actions_str_list</span><span class="p">,</span>
+        <span class="n">objects_label_list</span><span class="p">,</span> <span class="n">pure_objects_label_list</span><span class="p">,</span> <span class="n">people_label_list</span><span class="p">,</span> <span class="n">actions_label_list</span><span class="p">,</span>
+        <span class="n">subj_haspred_obj_array</span><span class="p">,</span> <span class="n">story_pred_obj_array</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="n">objects_str_list</span><span class="p">,</span> <span class="n">pure_objects_str_list</span><span class="p">,</span> <span class="n">people_str_list</span><span class="p">,</span> <span class="n">actions_str_list</span><span class="p">,</span> <span class="n">story_name_list</span><span class="p">,</span>
+        <span class="n">objects_label_list</span><span class="p">,</span> <span class="n">pure_objects_label_list</span><span class="p">,</span> <span class="n">people_label_list</span><span class="p">,</span> <span class="n">actions_label_list</span><span class="p">,</span>
+        <span class="n">subj_haspred_obj_array</span><span class="p">,</span> <span class="n">story_pred_obj_array</span>
+    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="write_"><a class="viewcode-back" href="../../../src.data.html#src.data.make_kgcdata.write_">[ドキュメント]</a><span class="k">def</span> <span class="nf">write_</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Write function 1</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># print(f&quot;{DATA_FOLDER_PATH}/../data/story_list.hdf5&quot;)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;save at: </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">get_pure_path</span><span class="p">(</span><span class="n">WRITE1_FILE_PATH</span><span class="p">)))</span>
+    <span class="k">with</span> <span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="n">WRITE1_FILE_PATH</span><span class="p">,</span> <span class="s1">&#39;a&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">all_objects_str_list</span><span class="p">,</span> <span class="n">all_pure_objects_str_list</span><span class="p">,</span> <span class="n">all_people_str_list</span><span class="p">,</span> <span class="n">all_actions_str_list</span> <span class="o">=</span> \
+            <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">](),</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">](),</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">](),</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]()</span>
+        <span class="n">all_objects_label_list</span><span class="p">,</span> <span class="n">all_pure_objects_label_list</span><span class="p">,</span> <span class="n">all_people_label_list</span><span class="p">,</span> <span class="n">all_actions_label_list</span> <span class="o">=</span> \
+            <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">](),</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">](),</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">](),</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]()</span>
+        <span class="n">all_story_name_list</span> <span class="o">=</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]()</span>
+        <span class="n">all_subj_haspred_obj_array_list</span><span class="p">,</span> <span class="n">all_story_pred_obj_array_list</span> <span class="o">=</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">](),</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]()</span>
+
+        <span class="k">for</span> <span class="n">title_ja</span><span class="p">,</span> <span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">l100</span><span class="p">,</span> <span class="n">l090</span><span class="p">,</span> <span class="n">l080</span><span class="p">,</span> <span class="n">l075</span><span class="p">)</span> <span class="ow">in</span> <span class="n">title_len_dict</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="p">(</span>
+                <span class="n">objects_str_list</span><span class="p">,</span> <span class="n">pure_objects_str_list</span><span class="p">,</span> <span class="n">people_str_list</span><span class="p">,</span> <span class="n">actions_str_list</span><span class="p">,</span> <span class="n">story_name_list</span><span class="p">,</span>
+                <span class="n">objects_label_list</span><span class="p">,</span> <span class="n">pure_objects_label_list</span><span class="p">,</span> <span class="n">people_label_list</span><span class="p">,</span> <span class="n">actions_label_list</span><span class="p">,</span>
+                <span class="n">spo_array</span><span class="p">,</span> <span class="n">po_array</span>
+            <span class="p">)</span> <span class="o">=</span> <span class="p">(</span><span class="n">write1_one_title</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">title_ja</span><span class="p">,</span> <span class="n">title</span><span class="p">,</span> <span class="n">l100</span><span class="p">,</span> <span class="n">l090</span><span class="p">,</span> <span class="n">l080</span><span class="p">,</span> <span class="n">l075</span><span class="p">))</span>
+            <span class="n">all_objects_str_list</span> <span class="o">+=</span> <span class="n">objects_str_list</span>
+            <span class="n">all_objects_label_list</span> <span class="o">+=</span> <span class="n">objects_label_list</span>
+            <span class="n">all_pure_objects_str_list</span> <span class="o">+=</span> <span class="n">pure_objects_str_list</span>
+            <span class="n">all_pure_objects_label_list</span> <span class="o">+=</span> <span class="n">pure_objects_label_list</span>
+            <span class="n">all_people_str_list</span> <span class="o">+=</span> <span class="n">people_str_list</span>
+            <span class="n">all_people_label_list</span> <span class="o">+=</span> <span class="n">people_label_list</span>
+            <span class="n">all_actions_str_list</span> <span class="o">+=</span> <span class="n">actions_str_list</span>
+            <span class="n">all_actions_label_list</span> <span class="o">+=</span> <span class="n">actions_label_list</span>
+            <span class="n">all_story_name_list</span> <span class="o">+=</span> <span class="n">story_name_list</span>
+            <span class="n">all_subj_haspred_obj_array_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">spo_array</span><span class="p">)</span>
+            <span class="n">all_story_pred_obj_array_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">po_array</span><span class="p">)</span>
+
+        <span class="k">def</span> <span class="nf">del_duplication</span><span class="p">(</span><span class="n">_str_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">_label_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]):</span>
+<span class="w">            </span><span class="sd">&quot;&quot;&quot;delete str_list duplication and reflected in label_list.</span>
+
+<span class="sd">            Args:</span>
+<span class="sd">                _str_list: list[str]: item names list.</span>
+<span class="sd">                _label_list: list[str]: item labels list.</span>
+
+<span class="sd">            Returns:</span>
+<span class="sd">                tuple[list[str], list[str]]: not duplication str_list and label_list.</span>
+<span class="sd">                    Note that sometimes label_list is duplicate but it is OK.</span>
+
+<span class="sd">            &quot;&quot;&quot;</span>
+            <span class="n">_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">value</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">_str_list</span><span class="p">,</span> <span class="n">_label_list</span><span class="p">)}</span>
+            <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span> <span class="nb">list</span><span class="p">(</span><span class="n">_dict</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+
+        <span class="n">all_objects_str_list</span><span class="p">,</span> <span class="n">all_objects_label_list</span> <span class="o">=</span> <span class="n">del_duplication</span><span class="p">(</span><span class="n">all_objects_str_list</span><span class="p">,</span> <span class="n">all_objects_label_list</span><span class="p">)</span>
+        <span class="n">all_pure_objects_str_list</span><span class="p">,</span> <span class="n">all_pure_objects_label_list</span> <span class="o">=</span> <span class="n">del_duplication</span><span class="p">(</span>
+            <span class="n">all_pure_objects_str_list</span><span class="p">,</span> <span class="n">all_pure_objects_label_list</span><span class="p">)</span>
+        <span class="n">all_people_str_list</span><span class="p">,</span> <span class="n">all_people_label_list</span> <span class="o">=</span> <span class="n">del_duplication</span><span class="p">(</span><span class="n">all_people_str_list</span><span class="p">,</span> <span class="n">all_people_label_list</span><span class="p">)</span>
+        <span class="n">all_actions_str_list</span><span class="p">,</span> <span class="n">all_actions_label_list</span> <span class="o">=</span> <span class="n">del_duplication</span><span class="p">(</span><span class="n">all_actions_str_list</span><span class="p">,</span> <span class="n">all_actions_label_list</span><span class="p">)</span>
+        <span class="c1">#</span>
+        <span class="n">all_subj_haspred_obj_array</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">all_subj_haspred_obj_array_list</span><span class="p">)</span>
+        <span class="n">all_story_pred_obj_array</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">all_story_pred_obj_array_list</span><span class="p">)</span>
+        <span class="c1"># general</span>
+        <span class="n">title_group</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">require_group</span><span class="p">(</span><span class="n">GENERAL</span><span class="p">)</span>
+        <span class="n">del_data_if_exist</span><span class="p">(</span><span class="n">title_group</span><span class="p">,</span> <span class="p">[</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">PEOPLE</span><span class="p">,</span> <span class="n">TAGS1</span><span class="o">.</span><span class="n">RELATION</span><span class="p">])</span>
+        <span class="n">title_group</span><span class="o">.</span><span class="n">create_dataset</span><span class="p">(</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">PEOPLE</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">str_list_for_hdf5</span><span class="p">([</span><span class="n">HOLMES_ALT_NAME</span><span class="p">,</span> <span class="n">WATSON_ALT_NAME</span><span class="p">]))</span>
+        <span class="n">title_group</span><span class="o">.</span><span class="n">create_dataset</span><span class="p">(</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">RELATION</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">str_list_for_hdf5</span><span class="p">(</span><span class="n">ALL_RELATION</span><span class="p">))</span>
+        <span class="c1"># all</span>
+        <span class="n">title_group</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">require_group</span><span class="p">(</span><span class="n">ALL_TITLE</span><span class="p">)</span>
+        <span class="n">del_data_if_exist</span><span class="p">(</span><span class="n">title_group</span><span class="p">,</span> <span class="n">TAGS1</span><span class="o">.</span><span class="n">ALL_LIST</span><span class="p">())</span>
+
+        <span class="c1"># noinspection PyTypeChecker</span>
+        <span class="n">save_info_list</span><span class="p">(</span>
+            <span class="n">title_group</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="kc">None</span><span class="p">,</span> <span class="n">all_story_name_list</span><span class="p">,</span>
+            <span class="n">all_objects_str_list</span><span class="p">,</span> <span class="n">all_pure_objects_str_list</span><span class="p">,</span> <span class="n">all_people_str_list</span><span class="p">,</span> <span class="n">all_actions_str_list</span><span class="p">,</span>
+            <span class="n">all_objects_label_list</span><span class="p">,</span> <span class="n">all_pure_objects_label_list</span><span class="p">,</span> <span class="n">all_people_label_list</span><span class="p">,</span> <span class="n">all_actions_label_list</span><span class="p">,</span>
+            <span class="n">all_subj_haspred_obj_array</span><span class="p">,</span> <span class="n">all_story_pred_obj_array</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="read_"><a class="viewcode-back" href="../../../src.data.html#src.data.make_kgcdata.read_">[ドキュメント]</a><span class="k">def</span> <span class="nf">read_</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;read write1 items</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="n">WRITE1_FILE_PATH</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">title_ja</span><span class="p">,</span> <span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">l100</span><span class="p">,</span> <span class="n">l090</span><span class="p">,</span> <span class="n">l080</span><span class="p">,</span> <span class="n">l075</span><span class="p">)</span> <span class="ow">in</span> <span class="n">title_len_dict</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">title_group</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">require_group</span><span class="p">(</span><span class="n">title</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">get_pure_path</span><span class="p">(</span><span class="n">title_group</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">filename</span><span class="p">))</span></div>
+            <span class="c1"># [logger.debug(title_group[name][()]) for name in ConstName1.all_list()]</span>
+
+
+<span class="n">keyREVERSE</span><span class="p">:</span> <span class="n">Final</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">key</span><span class="p">:</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s1">_REVERSE&#39;</span>
+
+
+<div class="viewcode-block" id="write2_write_triples"><a class="viewcode-back" href="../../../src.data.html#src.data.make_kgcdata.write2_write_triples">[ドキュメント]</a><span class="k">def</span> <span class="nf">write2_write_triples</span><span class="p">(</span><span class="n">fw_info</span><span class="p">,</span> <span class="n">fw_train</span><span class="p">,</span> <span class="n">entity_list</span><span class="p">,</span> <span class="n">entity_label_list</span><span class="p">,</span> <span class="n">relation_list</span><span class="p">,</span> <span class="n">relation_label_list</span><span class="p">,</span>
+                         <span class="n">is_rev_list</span><span class="p">,</span> <span class="n">triple</span><span class="p">,</span> <span class="n">triple_raw</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;write triples by using train file.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        fw_info(File): fw_info</span>
+<span class="sd">        fw_train(File): fw_train</span>
+<span class="sd">        entity_list(list[str]): entity_list</span>
+<span class="sd">        entity_label_list(list[str]): entity_label_list</span>
+<span class="sd">        relation_list(list[str]): relation_list</span>
+<span class="sd">        relation_label_list(list[str]): relation_label_list</span>
+<span class="sd">        is_rev_list(np.ndarray): is_rev_list</span>
+<span class="sd">        triple(np.ndarray): triple</span>
+<span class="sd">        triple_raw(np.ndarray): triple_raw</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1">#</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;info: </span><span class="si">{</span><span class="n">get_pure_path</span><span class="p">(</span><span class="n">fw_info</span><span class="o">.</span><span class="n">filename</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;triple: </span><span class="si">{</span><span class="n">get_pure_path</span><span class="p">(</span><span class="n">fw_train</span><span class="o">.</span><span class="n">filename</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="n">del_data_if_exist</span><span class="p">(</span><span class="n">fw_info</span><span class="p">,</span> <span class="n">INFO_INDEX</span><span class="o">.</span><span class="n">ALL_INDEXES</span><span class="p">())</span>
+    <span class="n">fw_info</span><span class="o">.</span><span class="n">create_dataset</span><span class="p">(</span><span class="n">INFO_INDEX</span><span class="o">.</span><span class="n">ENTITY_NUM</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">entity_list</span><span class="p">))</span>
+    <span class="n">fw_info</span><span class="o">.</span><span class="n">create_dataset</span><span class="p">(</span><span class="n">INFO_INDEX</span><span class="o">.</span><span class="n">RELATION_NUM</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">relation_list</span><span class="p">))</span>
+    <span class="n">fw_info</span><span class="o">.</span><span class="n">create_dataset</span><span class="p">(</span><span class="n">INFO_INDEX</span><span class="o">.</span><span class="n">ENTITIES</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">entity_list</span><span class="p">)</span>
+    <span class="n">fw_info</span><span class="o">.</span><span class="n">create_dataset</span><span class="p">(</span><span class="n">INFO_INDEX</span><span class="o">.</span><span class="n">ENTITIES_LABEL</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">entity_label_list</span><span class="p">)</span>
+    <span class="n">fw_info</span><span class="o">.</span><span class="n">create_dataset</span><span class="p">(</span><span class="n">INFO_INDEX</span><span class="o">.</span><span class="n">RELATIONS</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">relation_list</span><span class="p">)</span>
+    <span class="n">fw_info</span><span class="o">.</span><span class="n">create_dataset</span><span class="p">(</span><span class="n">INFO_INDEX</span><span class="o">.</span><span class="n">RELATIONS_LABEL</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">relation_label_list</span><span class="p">)</span>
+    <span class="n">fw_info</span><span class="o">.</span><span class="n">create_dataset</span><span class="p">(</span><span class="n">INFO_INDEX</span><span class="o">.</span><span class="n">IS_REV_RELATION</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">is_rev_list</span><span class="p">)</span>
+    <span class="n">fw_info</span><span class="o">.</span><span class="n">create_dataset</span><span class="p">(</span><span class="n">INFO_INDEX</span><span class="o">.</span><span class="n">ID2COUNT_ENTITY</span><span class="p">,</span>
+                           <span class="n">data</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">triple</span><span class="p">[:,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)]</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span> <span class="n">minlength</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">entity_list</span><span class="p">)))</span>
+    <span class="n">fw_info</span><span class="o">.</span><span class="n">create_dataset</span><span class="p">(</span><span class="n">INFO_INDEX</span><span class="o">.</span><span class="n">ID2COUNT_RELATION</span><span class="p">,</span>
+                           <span class="n">data</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">triple</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">minlength</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">relation_list</span><span class="p">)))</span>
+    <span class="c1"># triple</span>
+    <span class="n">del_data_if_exist</span><span class="p">(</span><span class="n">fw_train</span><span class="p">,</span> <span class="n">TRAIN_INDEX</span><span class="o">.</span><span class="n">ALL_INDEXES</span><span class="p">())</span>
+    <span class="n">fw_train</span><span class="o">.</span><span class="n">create_dataset</span><span class="p">(</span><span class="n">TRAIN_INDEX</span><span class="o">.</span><span class="n">TRIPLE</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">triple</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">triple_raw</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span> <span class="n">fw_train</span><span class="o">.</span><span class="n">create_dataset</span><span class="p">(</span><span class="n">TRAIN_INDEX</span><span class="o">.</span><span class="n">TRIPLE_RAW</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">triple_raw</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="write2_svo"><a class="viewcode-back" href="../../../src.data.html#src.data.make_kgcdata.write2_svo">[ドキュメント]</a><span class="k">def</span> <span class="nf">write2_svo</span><span class="p">(</span><span class="n">title</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">read_group</span><span class="p">:</span> <span class="n">Group</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;write2 about (subject, hasPredicate, objects).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        title(str): title</span>
+<span class="sd">        read_group(Group): read_group</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">entity_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">HOLMES_ALT_NAME</span><span class="p">,</span> <span class="n">WATSON_ALT_NAME</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="n">b</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="p">(</span>
+        <span class="o">*</span><span class="p">(</span><span class="n">read_group</span><span class="p">[</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">PEOPLE</span><span class="p">][()]),</span>
+        <span class="o">*</span><span class="p">(</span><span class="n">read_group</span><span class="p">[</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">STORIES</span><span class="p">][()]),</span>
+        <span class="o">*</span><span class="p">(</span><span class="n">read_group</span><span class="p">[</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">PURE_OBJECTS</span><span class="p">][()]),</span>
+    <span class="p">)]</span>
+    <span class="c1"># logger.debug(entity_list)</span>
+    <span class="n">entity_label_list</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;holmes&#39;</span><span class="p">,</span> <span class="s1">&#39;watson&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="n">b</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="p">(</span>
+        <span class="o">*</span><span class="p">(</span><span class="n">read_group</span><span class="p">[</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">PEOPLE_LABEL</span><span class="p">][()]),</span>
+        <span class="o">*</span><span class="p">([</span><span class="sa">b</span><span class="s1">&#39;&#39;</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">read_group</span><span class="p">[</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">STORIES</span><span class="p">][()]]),</span>
+        <span class="o">*</span><span class="p">(</span><span class="n">read_group</span><span class="p">[</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">OBJECTS_LABEL</span><span class="p">][()]),</span>
+    <span class="p">)]</span>
+    <span class="n">relation_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">b</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">read_group</span><span class="p">[</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">ACTIONS</span><span class="p">][()]]</span>
+    <span class="n">relation_label_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">b</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">read_group</span><span class="p">[</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">ACTIONS_LABEL</span><span class="p">][()]]</span>
+    <span class="n">entity_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">e</span><span class="p">:</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">e</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">entity_list</span><span class="p">)}</span>
+    <span class="n">relation_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">r</span><span class="p">:</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">r</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">relation_list</span><span class="p">)}</span>
+
+    <span class="n">svo_triple</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+        <span class="p">[</span><span class="n">entity_dict</span><span class="p">[</span><span class="n">s</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)],</span> <span class="n">relation_dict</span><span class="p">[</span><span class="n">v</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)],</span> <span class="n">entity_dict</span><span class="p">[</span><span class="n">o</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)]]</span>
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">s</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">read_group</span><span class="p">[</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">SPO_TRIPLE</span><span class="p">][()]</span>
+        <span class="c1"># if print(s, v, o) or True</span>
+    <span class="p">])</span>
+    <span class="c1"># add reverse</span>
+    <span class="n">relation_len_no_reverse</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">relation_list</span><span class="p">)</span>
+    <span class="n">relation_list</span> <span class="o">=</span> <span class="n">relation_list</span> <span class="o">+</span> <span class="p">[</span><span class="n">keyREVERSE</span><span class="p">(</span><span class="n">r</span><span class="p">)</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">relation_list</span><span class="p">]</span>
+    <span class="n">is_rev_list</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span>
+        <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">relation_len_no_reverse</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">relation_len_no_reverse</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)]</span>
+    <span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">relation_list</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">is_rev_list</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">is_rev_list</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">relation_len_no_reverse</span>
+    <span class="n">svo_triple_reverse</span> <span class="o">=</span> <span class="n">svo_triple</span><span class="p">[:,</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)]</span>
+    <span class="n">svo_triple_reverse</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">+=</span> <span class="n">relation_len_no_reverse</span>
+    <span class="c1"># concat</span>
+    <span class="n">svo_triple</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">svo_triple</span><span class="p">,</span> <span class="n">svo_triple_reverse</span><span class="p">])</span>
+
+    <span class="k">with</span> <span class="p">(</span><span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="n">WRITE2_SVO_INFO_FILE</span><span class="p">(</span><span class="n">title</span><span class="p">),</span> <span class="s1">&#39;a&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">fw_info</span><span class="p">,</span>
+          <span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="n">WRITE2_SVO_TRAIN_FILE</span><span class="p">(</span><span class="n">title</span><span class="p">),</span> <span class="s1">&#39;a&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">fw_train</span><span class="p">):</span>
+        <span class="n">write2_write_triples</span><span class="p">(</span><span class="n">fw_info</span><span class="p">,</span> <span class="n">fw_train</span><span class="p">,</span> <span class="n">entity_list</span><span class="p">,</span> <span class="n">entity_label_list</span><span class="p">,</span> <span class="n">relation_list</span><span class="p">,</span> <span class="n">relation_label_list</span><span class="p">,</span>
+                             <span class="n">is_rev_list</span><span class="p">,</span> <span class="n">svo_triple</span><span class="p">)</span>
+        <span class="k">pass</span></div>
+
+
+<div class="viewcode-block" id="write2_sro"><a class="viewcode-back" href="../../../src.data.html#src.data.make_kgcdata.write2_sro">[ドキュメント]</a><span class="k">def</span> <span class="nf">write2_sro</span><span class="p">(</span><span class="n">title</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">read_group</span><span class="p">:</span> <span class="n">Group</span><span class="p">,</span> <span class="n">general_read_group</span><span class="p">:</span> <span class="n">Group</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;write2 about (story, predicate, objects).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        title(str): title</span>
+<span class="sd">        read_group(Group): read_group</span>
+<span class="sd">        general_read_group(Group): general_read_group</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">entity_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">HOLMES_ALT_NAME</span><span class="p">,</span> <span class="n">WATSON_ALT_NAME</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="n">b</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="p">(</span>
+        <span class="o">*</span><span class="p">(</span><span class="n">read_group</span><span class="p">[</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">PEOPLE</span><span class="p">][()]),</span>
+        <span class="o">*</span><span class="p">(</span><span class="n">read_group</span><span class="p">[</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">PURE_OBJECTS</span><span class="p">][()]),</span>
+        <span class="o">*</span><span class="p">(</span><span class="n">read_group</span><span class="p">[</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">STORIES</span><span class="p">][()]),</span>
+        <span class="o">*</span><span class="p">(</span><span class="n">read_group</span><span class="p">[</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">ACTIONS</span><span class="p">][()]),</span>
+    <span class="p">)]</span>
+    <span class="n">entity_label_list</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Holmes&#39;</span><span class="p">,</span> <span class="s1">&#39;Watson&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="n">b</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="p">(</span>
+        <span class="o">*</span><span class="p">(</span><span class="n">read_group</span><span class="p">[</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">PEOPLE_LABEL</span><span class="p">][()]),</span>
+        <span class="o">*</span><span class="p">(</span><span class="n">read_group</span><span class="p">[</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">PURE_OBJECTS_LABEL</span><span class="p">][()]),</span>
+        <span class="o">*</span><span class="p">[</span><span class="sa">b</span><span class="s1">&#39;&#39;</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">read_group</span><span class="p">[</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">STORIES</span><span class="p">][()]],</span>
+        <span class="o">*</span><span class="p">(</span><span class="n">read_group</span><span class="p">[</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">ACTIONS_LABEL</span><span class="p">][()]),</span>
+    <span class="p">)]</span>
+    <span class="n">entity_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">e</span><span class="p">:</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">e</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">entity_list</span><span class="p">)}</span>
+    <span class="n">entity_label_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">e</span><span class="p">:</span> <span class="n">l</span> <span class="k">for</span> <span class="n">e</span><span class="p">,</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">entity_list</span><span class="p">,</span> <span class="n">entity_label_list</span><span class="p">)}</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">entity_dict</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">entity_label_dict</span><span class="p">)</span>
+    <span class="n">relation_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">b</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">general_read_group</span><span class="p">[</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">RELATION</span><span class="p">][()]]</span>
+    <span class="n">relation_label_list</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;&#39;</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">general_read_group</span><span class="p">[</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">RELATION</span><span class="p">][()]]</span>
+    <span class="n">relation_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">r</span><span class="p">:</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">r</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">relation_list</span><span class="p">)}</span>
+    <span class="n">sro_triple</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+        <span class="p">[</span><span class="n">entity_dict</span><span class="p">[</span><span class="n">s</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)],</span> <span class="n">relation_dict</span><span class="p">[</span><span class="n">r</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)],</span> <span class="n">entity_dict</span><span class="p">[</span><span class="n">o</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)]]</span>
+        <span class="k">for</span> <span class="n">s</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">read_group</span><span class="p">[</span><span class="n">TAGS1</span><span class="o">.</span><span class="n">PO_TRIPLE</span><span class="p">][()]</span>
+    <span class="p">])</span>
+    <span class="c1"># add reverse</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    relation_len_no_reverse = len(relation_list)</span>
+<span class="sd">    relation_list = relation_list + [ConstName2.keyREVERSE(r) for r in relation_list]</span>
+<span class="sd">    is_rev_list = np.concatenate(</span>
+<span class="sd">        [np.zeros(relation_len_no_reverse, dtype=bool), np.ones(relation_len_no_reverse, dtype=bool)]</span>
+<span class="sd">    )</span>
+<span class="sd">    sro_triple_reverse = sro_triple[:, (2, 1, 0)]</span>
+<span class="sd">    sro_triple_reverse[:, 1] += relation_len_no_reverse</span>
+
+<span class="sd">    sro_triple = np.concatenate([sro_triple, sro_triple_reverse])</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">sro_triple_raw</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">[</span><span class="n">entity_list</span><span class="p">[</span><span class="n">s</span><span class="p">],</span> <span class="n">relation_list</span><span class="p">[</span><span class="n">r</span><span class="p">],</span> <span class="n">entity_list</span><span class="p">[</span><span class="n">o</span><span class="p">]]</span>
+        <span class="k">for</span> <span class="n">s</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">sro_triple</span>
+    <span class="p">]</span>
+
+    <span class="k">with</span> <span class="p">(</span><span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="n">WRITE2_SRO_INFO_FILE</span><span class="p">(</span><span class="n">title</span><span class="p">),</span> <span class="s1">&#39;a&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">fw_info</span><span class="p">,</span>
+          <span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="n">WRITE2_SRO_TRAIN_FILE</span><span class="p">(</span><span class="n">title</span><span class="p">),</span> <span class="s1">&#39;a&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">fw_train</span><span class="p">):</span>
+        <span class="n">write2_write_triples</span><span class="p">(</span><span class="n">fw_info</span><span class="p">,</span> <span class="n">fw_train</span><span class="p">,</span>
+                             <span class="n">entity_list</span><span class="p">,</span> <span class="n">entity_label_list</span><span class="p">,</span> <span class="n">relation_list</span><span class="p">,</span> <span class="n">relation_label_list</span><span class="p">,</span>
+                             <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">relation_list</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">),</span> <span class="n">sro_triple</span><span class="p">,</span>
+                             <span class="n">str_list_for_hdf5</span><span class="p">(</span><span class="n">sro_triple_raw</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="write2_"><a class="viewcode-back" href="../../../src.data.html#src.data.make_kgcdata.write2_">[ドキュメント]</a><span class="k">def</span> <span class="nf">write2_</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot; Write function 2</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="p">(</span><span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="n">WRITE1_FILE_PATH</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">fr</span><span class="p">,</span> <span class="p">):</span>
+        <span class="n">general_read_group</span> <span class="o">=</span> <span class="n">fr</span><span class="p">[</span><span class="n">GENERAL</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">title_ja</span><span class="p">,</span> <span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">)</span> <span class="ow">in</span> <span class="n">title_len_dict</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="c1"># read</span>
+            <span class="n">read_group</span> <span class="o">=</span> <span class="n">fr</span><span class="p">[</span><span class="n">title</span><span class="p">]</span>
+            <span class="c1"># svo</span>
+            <span class="n">write2_svo</span><span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">read_group</span><span class="p">)</span>
+            <span class="c1"># spo</span>
+            <span class="n">write2_sro</span><span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">read_group</span><span class="p">,</span> <span class="n">general_read_group</span><span class="p">)</span>
+            <span class="k">del</span> <span class="n">title_ja</span><span class="p">,</span> <span class="n">title</span>
+        <span class="n">read_group</span> <span class="o">=</span> <span class="n">fr</span><span class="p">[</span><span class="n">ALL_TITLE</span><span class="p">]</span>
+        <span class="n">write2_svo</span><span class="p">(</span><span class="n">ALL_TITLE</span><span class="p">,</span> <span class="n">read_group</span><span class="p">)</span>
+        <span class="n">write2_sro</span><span class="p">(</span><span class="n">ALL_TITLE</span><span class="p">,</span> <span class="n">read_group</span><span class="p">,</span> <span class="n">general_read_group</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="main"><a class="viewcode-back" href="../../../src.data.html#src.data.make_kgcdata.main">[ドキュメント]</a><span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Main function</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">global</span> <span class="n">logger</span>
+    <span class="n">logger</span> <span class="o">=</span> <span class="n">setup_logger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">,</span> <span class="s1">&#39;log/make_kgcdata.log&#39;</span><span class="p">,</span> <span class="n">console_level</span><span class="o">=</span><span class="s1">&#39;debug&#39;</span><span class="p">)</span>
+    <span class="c1"># write 1</span>
+    <span class="n">write_</span><span class="p">()</span>
+    <span class="c1"># write 2</span>
+    <span class="n">write2_</span><span class="p">()</span></div>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+    <span class="k">pass</span>
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">KnowledgeGraphChallenge2023</a></h1>
+
+
+
+
+
+
+
+
+<h3>ナビゲーション</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../src.html">src package</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">モジュールコード</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">クイック検索</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="検索" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2023, RyoyaKaneda.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 5.3.0</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.13</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>
