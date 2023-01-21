@@ -27,15 +27,15 @@ extensions = [
     'sphinx.ext.napoleon'
 ]
 
-templates_path = ['sphinxdoc']
+templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
-language = 'ja'
+language = 'en'
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_theme = 'alabaster'
+html_theme = 'sphinxdoc'
 html_static_path = ['_static']
 
 # -- Options for todo extension ----------------------------------------------

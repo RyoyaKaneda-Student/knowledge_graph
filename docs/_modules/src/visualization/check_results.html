@@ -1,39 +1,43 @@
 
 <!DOCTYPE html>
 
-<html lang="ja">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>src.visualization.check_results &#8212; KnowledgeGraphChallenge2023 v1.0 ドキュメント</title>
+    <title>src.visualization.check_results &#8212; KnowledgeGraphChallenge2023 v1.0 documentation</title>
     <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinxdoc.css" />
     <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js"></script>
     <script src="../../../_static/jquery.js"></script>
     <script src="../../../_static/underscore.js"></script>
     <script src="../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
     <script src="../../../_static/doctools.js"></script>
     <script src="../../../_static/sphinx_highlight.js"></script>
-    <script src="../../../_static/translations.js"></script>
-    <link rel="index" title="索引" href="../../../genindex.html" />
-    <link rel="search" title="検索" href="../../../search.html" />
-   
-  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
-  
-  
-  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
-
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
   </head><body>
-  
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">KnowledgeGraphChallenge2023 v1.0 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" accesskey="U">Module code</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">src.visualization.check_results</a></li> 
+      </ul>
+    </div>  
 
     <div class="document">
       <div class="documentwrapper">
         <div class="bodywrapper">
-          
-
           <div class="body" role="main">
             
-  <h1>src.visualization.check_results のソースコード</h1><div class="highlight"><pre>
+  <h1>Source code for src.visualization.check_results</h1><div class="highlight"><pre>
 <span></span><span class="ch">#!/usr/bin/python</span>
 <span class="c1"># -*- coding: utf-8 -*-</span>
 <span class="sd">&quot;&quot;&quot;Check results.</span>
@@ -46,6 +50,7 @@
 <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
 <span class="c1"># Machine learning</span>
 <span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">from</span> <span class="nn">IPython.display</span> <span class="kn">import</span> <span class="n">display</span>
 <span class="c1"># jupyter</span>
 <span class="kn">import</span> <span class="nn">seaborn</span> <span class="k">as</span> <span class="nn">sns</span>
 <span class="c1"># torch</span>
@@ -63,7 +68,7 @@
 <span class="c1"># My utils</span>
 <span class="kn">from</span> <span class="nn">utils.setup</span> <span class="kn">import</span> <span class="n">load_param</span>
 <span class="kn">from</span> <span class="nn">utils.setup</span> <span class="kn">import</span> <span class="n">setup_logger</span><span class="p">,</span> <span class="n">get_device</span>
-<span class="kn">from</span> <span class="nn">utils.torch</span> <span class="kn">import</span> <span class="n">load_model</span>
+<span class="kn">from</span> <span class="nn">utils.torch</span> <span class="kn">import</span> <span class="n">load_model</span><span class="p">,</span> <span class="n">torch_fix_seed</span>
 
 <span class="kn">from</span> <span class="nn">const.const_values</span> <span class="kn">import</span> <span class="n">SpeckledBand</span>
 
@@ -72,7 +77,7 @@
 <span class="n">SEED</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">42</span>
 
 
-<div class="viewcode-block" id="get_args_from_path"><a class="viewcode-back" href="../../../src.visualization.html#src.visualization.check_results.get_args_from_path">[ドキュメント]</a><span class="k">def</span> <span class="nf">get_args_from_path</span><span class="p">(</span><span class="n">args_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">Logger</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">):</span>
+<div class="viewcode-block" id="get_args_from_path"><a class="viewcode-back" href="../../../src.visualization.html#src.visualization.check_results.get_args_from_path">[docs]</a><span class="k">def</span> <span class="nf">get_args_from_path</span><span class="p">(</span><span class="n">args_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">Logger</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;get_args_from_path</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -84,19 +89,16 @@
     <span class="n">args</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">1</span>
     <span class="n">args</span><span class="o">.</span><span class="n">pre_train</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">args</span><span class="o">.</span><span class="n">init_embedding_using_bert</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">args</span><span class="o">.</span><span class="n">use_for_challenge090</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="s1">&#39;use_for_challenge090&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="n">args</span><span class="o">.</span><span class="n">use_for_challenge075</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="s1">&#39;use_for_challenge075&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+
     <span class="k">del</span> <span class="n">args</span><span class="o">.</span><span class="n">optuna_file</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">device_name</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">pid</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">study_name</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">n_trials</span>
     <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">args</span></div>
 
 
-<div class="viewcode-block" id="get_from_return_dict"><a class="viewcode-back" href="../../../src.visualization.html#src.visualization.check_results.get_from_return_dict">[ドキュメント]</a><span class="k">def</span> <span class="nf">get_from_return_dict</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">return_dict</span><span class="p">):</span>
+<div class="viewcode-block" id="get_from_return_dict"><a class="viewcode-back" href="../../../src.visualization.html#src.visualization.check_results.get_from_return_dict">[docs]</a><span class="k">def</span> <span class="nf">get_from_return_dict</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">return_dict</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;get some items from return_dict.</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        args:</span>
-<span class="sd">        return_dict:</span>
-
-<span class="sd">    Returns:</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">model</span> <span class="o">=</span> <span class="n">return_dict</span><span class="p">[</span><span class="n">MODEL</span><span class="p">]</span>
@@ -120,7 +122,7 @@
 
 
 <span class="c1"># noinspection PyTypeChecker</span>
-<div class="viewcode-block" id="extract"><a class="viewcode-back" href="../../../src.visualization.html#src.visualization.check_results.extract">[ドキュメント]</a><span class="k">def</span> <span class="nf">extract</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">inputs</span><span class="p">):</span>
+<div class="viewcode-block" id="extract"><a class="viewcode-back" href="../../../src.visualization.html#src.visualization.check_results.extract">[docs]</a><span class="k">def</span> <span class="nf">extract</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">inputs</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;to get attention function.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -142,7 +144,7 @@
     <span class="k">return</span> <span class="n">features</span></div>
 
 
-<div class="viewcode-block" id="get_attention"><a class="viewcode-back" href="../../../src.visualization.html#src.visualization.check_results.get_attention">[ドキュメント]</a><span class="k">def</span> <span class="nf">get_attention</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">input_</span><span class="p">,</span> <span class="n">entities</span><span class="p">,</span> <span class="n">relations</span><span class="p">):</span>
+<div class="viewcode-block" id="get_attention"><a class="viewcode-back" href="../../../src.visualization.html#src.visualization.check_results.get_attention">[docs]</a><span class="k">def</span> <span class="nf">get_attention</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">input_</span><span class="p">,</span> <span class="n">entities</span><span class="p">,</span> <span class="n">relations</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;get attention. It is the output of Transformer&#39;s last layer.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -151,19 +153,20 @@
     <span class="n">df_attention</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
         <span class="p">[[</span><span class="n">entities</span><span class="p">[</span><span class="n">h</span><span class="p">],</span> <span class="n">relations</span><span class="p">[</span><span class="n">r</span><span class="p">],</span> <span class="n">entities</span><span class="p">[</span><span class="n">t</span><span class="p">]]</span> <span class="o">+</span> <span class="p">[</span><span class="n">features</span><span class="p">[</span><span class="n">j</span><span class="p">,</span> <span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">features</span><span class="p">))]</span> <span class="k">for</span>
          <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">input_</span><span class="p">[</span><span class="mi">0</span><span class="p">])])</span>
-    <span class="n">df_attention</span><span class="o">.</span><span class="n">columns</span> <span class="o">=</span> <span class="p">[</span><span class="n">HEAD</span><span class="p">,</span> <span class="n">RELATION</span><span class="p">,</span> <span class="n">TAIL</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="sa">f</span><span class="s1">&#39;attention_from</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s1">&#39;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">df_attention</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span> <span class="o">-</span> <span class="mi">3</span><span class="p">)]</span>
+    <span class="n">df_attention</span><span class="o">.</span><span class="n">columns</span> <span class="o">=</span> <span class="p">[</span><span class="n">HEAD</span><span class="p">,</span> <span class="n">RELATION</span><span class="p">,</span> <span class="n">TAIL</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="sa">f</span><span class="s1">&#39;atten_from</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s1">&#39;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">df_attention</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span> <span class="o">-</span> <span class="mi">3</span><span class="p">)]</span>
     <span class="k">return</span> <span class="n">df_attention</span></div>
 
 
-<div class="viewcode-block" id="show_attension_heatmap"><a class="viewcode-back" href="../../../src.visualization.html#src.visualization.check_results.show_attension_heatmap">[ドキュメント]</a><span class="k">def</span> <span class="nf">show_attension_heatmap</span><span class="p">(</span><span class="n">df_attention</span><span class="p">):</span>
+<div class="viewcode-block" id="show_attension_heatmap"><a class="viewcode-back" href="../../../src.visualization.html#src.visualization.check_results.show_attension_heatmap">[docs]</a><span class="k">def</span> <span class="nf">show_attension_heatmap</span><span class="p">(</span><span class="n">df_attention</span><span class="p">):</span>
     <span class="n">sns</span><span class="o">.</span><span class="n">heatmap</span><span class="p">(</span><span class="n">df_attention</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">:])</span>
     <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span></div>
 
 
-<div class="viewcode-block" id="make_ranking"><a class="viewcode-back" href="../../../src.visualization.html#src.visualization.check_results.make_ranking">[ドキュメント]</a><span class="k">def</span> <span class="nf">make_ranking</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">from_story_name</span><span class="p">,</span> <span class="n">to_story_name</span><span class="p">,</span> <span class="n">predicate_</span><span class="p">,</span> <span class="n">whom_</span><span class="p">,</span> <span class="n">subject_</span><span class="p">,</span> <span class="n">why_</span><span class="p">,</span> <span class="n">what_</span><span class="p">,</span> <span class="n">where_</span><span class="p">,</span>
+<div class="viewcode-block" id="make_ranking"><a class="viewcode-back" href="../../../src.visualization.html#src.visualization.check_results.make_ranking">[docs]</a><span class="k">def</span> <span class="nf">make_ranking</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">from_story_name</span><span class="p">,</span> <span class="n">to_story_name</span><span class="p">,</span> <span class="n">predicate_</span><span class="p">,</span> <span class="n">whom_</span><span class="p">,</span> <span class="n">subject_</span><span class="p">,</span> <span class="n">why_</span><span class="p">,</span> <span class="n">what_</span><span class="p">,</span> <span class="n">where_</span><span class="p">,</span>
                  <span class="o">*</span><span class="p">,</span> <span class="n">return_dict</span><span class="p">):</span>
     <span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">triple</span><span class="p">,</span>
-     <span class="n">entity2index</span><span class="p">,</span> <span class="n">relation2index</span><span class="p">,</span> <span class="n">index2entity</span><span class="p">,</span> <span class="n">index2relation</span><span class="p">,</span>
+     <span class="n">entity2index</span><span class="p">,</span> <span class="n">relation2index</span><span class="p">,</span>
+     <span class="n">index2entity</span><span class="p">,</span> <span class="n">index2relation</span><span class="p">,</span>
      <span class="n">triple_df</span><span class="p">,</span> <span class="n">story_entities</span><span class="p">)</span> <span class="o">=</span> <span class="n">get_from_return_dict</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">return_dict</span><span class="p">)</span>
 
     <span class="n">bos_triple</span> <span class="o">=</span> <span class="p">[</span>
@@ -215,34 +218,34 @@
     <span class="k">return</span> <span class="n">df_ranking</span><span class="p">,</span> <span class="n">df_attention</span></div>
 
 
-<div class="viewcode-block" id="main_func01"><a class="viewcode-back" href="../../../src.visualization.html#src.visualization.check_results.main_func01">[ドキュメント]</a><span class="k">def</span> <span class="nf">main_func01</span><span class="p">(</span><span class="n">_title</span><span class="p">,</span> <span class="n">_victim_name</span><span class="p">,</span> <span class="n">criminal</span><span class="p">,</span> <span class="n">predicate</span><span class="p">,</span> <span class="n">_last_index</span><span class="p">,</span> <span class="n">_story_len</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">logger</span><span class="p">,</span> <span class="n">return_dict</span><span class="p">):</span>
+<div class="viewcode-block" id="main_func01"><a class="viewcode-back" href="../../../src.visualization.html#src.visualization.check_results.main_func01">[docs]</a><span class="k">def</span> <span class="nf">main_func01</span><span class="p">(</span><span class="n">_title</span><span class="p">,</span> <span class="n">_victim_name</span><span class="p">,</span> <span class="n">criminal</span><span class="p">,</span> <span class="n">predicate</span><span class="p">,</span> <span class="n">_last_index</span><span class="p">,</span> <span class="n">_story_len</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">logger</span><span class="p">,</span> <span class="n">return_dict</span><span class="p">):</span>
     <span class="n">from_</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">_title</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">_last_index</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">_story_len</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s1">&#39;</span>
     <span class="n">to_</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">_title</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">_last_index</span><span class="si">}</span><span class="s1">&#39;</span>
     <span class="n">predicate</span> <span class="o">=</span> <span class="n">predicate</span>
     <span class="n">victim</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">_title</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">_victim_name</span><span class="si">}</span><span class="s1">&#39;</span>
     <span class="n">criminal</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">_title</span><span class="si">}</span><span class="s1">:</span><span class="si">{</span><span class="n">criminal</span><span class="si">}</span><span class="s1">&#39;</span>
-    <span class="n">df_ranking</span><span class="p">,</span> <span class="n">df_attension</span> <span class="o">=</span> <span class="n">make_ranking</span><span class="p">(</span>
+    <span class="n">df_ranking</span><span class="p">,</span> <span class="n">df_attention</span> <span class="o">=</span> <span class="n">make_ranking</span><span class="p">(</span>
         <span class="n">args</span><span class="p">,</span> <span class="n">from_</span><span class="p">,</span> <span class="n">to_</span><span class="p">,</span> <span class="n">predicate</span><span class="p">,</span> <span class="n">victim</span><span class="p">,</span> <span class="n">MASK_E</span><span class="p">,</span> <span class="n">MASK_E</span><span class="p">,</span> <span class="n">MASK_E</span><span class="p">,</span> <span class="n">MASK_E</span><span class="p">,</span> <span class="n">return_dict</span><span class="o">=</span><span class="n">return_dict</span><span class="p">)</span>
 
     <span class="n">pred_rank</span> <span class="o">=</span> <span class="n">df_ranking</span><span class="o">.</span><span class="n">index</span><span class="p">[</span><span class="n">df_ranking</span><span class="p">[</span><span class="s1">&#39;subject&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">criminal</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
     <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;The pred ranking about </span><span class="si">{</span><span class="n">criminal</span><span class="si">}</span><span class="s2"> is </span><span class="si">{</span><span class="n">pred_rank</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">df_ranking</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:</span><span class="nb">max</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span> <span class="n">pred_rank</span><span class="p">)])</span>
-    <span class="n">len_</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">df_attension</span><span class="p">)</span>
+    <span class="n">display</span><span class="p">(</span><span class="n">df_ranking</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:</span><span class="nb">max</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span> <span class="n">pred_rank</span><span class="p">)])</span>
+    <span class="n">len_</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">df_attention</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">len_</span> <span class="o">-</span> <span class="mi">10</span><span class="p">,</span> <span class="n">len_</span><span class="p">):</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">df_attension</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:</span><span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">df_attension</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;atten_from</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">ascending</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:</span><span class="mi">20</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span> <span class="o">+</span> <span class="n">i</span><span class="p">]])</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;----------&quot;</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">df_ranking</span><span class="p">,</span> <span class="n">df_attension</span></div>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;index</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">df_attention</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="w"> </span><span class="p">:</span><span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">display</span><span class="p">(</span><span class="n">df_attention</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;atten_from</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">ascending</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:</span><span class="mi">20</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span> <span class="o">+</span> <span class="n">i</span><span class="p">]])</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;----------&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">df_ranking</span><span class="p">,</span> <span class="n">df_attention</span></div>
 
 
-<div class="viewcode-block" id="check_killer"><a class="viewcode-back" href="../../../src.visualization.html#src.visualization.check_results.check_killer">[ドキュメント]</a><span class="k">def</span> <span class="nf">check_killer</span><span class="p">(</span><span class="n">_title</span><span class="p">,</span> <span class="n">_victim_name</span><span class="p">,</span> <span class="n">_killer_name</span><span class="p">,</span> <span class="n">_last_index</span><span class="p">,</span> <span class="n">_story_len</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">logger</span><span class="p">,</span> <span class="n">return_dict</span><span class="p">):</span>
+<div class="viewcode-block" id="check_killer"><a class="viewcode-back" href="../../../src.visualization.html#src.visualization.check_results.check_killer">[docs]</a><span class="k">def</span> <span class="nf">check_killer</span><span class="p">(</span><span class="n">_title</span><span class="p">,</span> <span class="n">_victim_name</span><span class="p">,</span> <span class="n">_killer_name</span><span class="p">,</span> <span class="n">_last_index</span><span class="p">,</span> <span class="n">_story_len</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">logger</span><span class="p">,</span> <span class="n">return_dict</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">main_func01</span><span class="p">(</span>
         <span class="n">_title</span><span class="p">,</span> <span class="n">_victim_name</span><span class="p">,</span> <span class="n">_killer_name</span><span class="p">,</span> <span class="n">KILL</span><span class="p">,</span> <span class="n">_last_index</span><span class="p">,</span> <span class="n">_story_len</span><span class="p">,</span>
         <span class="n">args</span><span class="o">=</span><span class="n">args</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">,</span> <span class="n">return_dict</span><span class="o">=</span><span class="n">return_dict</span>
     <span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="do_madara_pred"><a class="viewcode-back" href="../../../src.visualization.html#src.visualization.check_results.do_madara_pred">[ドキュメント]</a><span class="k">def</span> <span class="nf">do_madara_pred</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">logger</span><span class="p">,</span> <span class="n">return_dict</span><span class="p">,</span> <span class="n">last_index</span><span class="o">=</span><span class="mi">401</span><span class="p">,</span> <span class="n">story_len</span><span class="o">=</span><span class="mi">80</span><span class="p">):</span>
+<div class="viewcode-block" id="do_madara_pred"><a class="viewcode-back" href="../../../src.visualization.html#src.visualization.check_results.do_madara_pred">[docs]</a><span class="k">def</span> <span class="nf">do_madara_pred</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">logger</span><span class="p">,</span> <span class="n">return_dict</span><span class="p">,</span> <span class="n">last_index</span><span class="o">=</span><span class="mi">401</span><span class="p">,</span> <span class="n">story_len</span><span class="o">=</span><span class="mi">80</span><span class="p">):</span>
     <span class="n">title</span> <span class="o">=</span> <span class="n">SpeckledBand</span>
     <span class="n">victim_name</span> <span class="o">=</span> <span class="s1">&#39;Julia&#39;</span>
     <span class="n">killer_name</span> <span class="o">=</span> <span class="s1">&#39;Roylott&#39;</span>
@@ -251,14 +254,15 @@
         <span class="n">title</span><span class="p">,</span> <span class="n">victim_name</span><span class="p">,</span> <span class="n">killer_name</span><span class="p">,</span> <span class="n">last_index</span><span class="p">,</span> <span class="n">story_len</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="n">args</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">,</span> <span class="n">return_dict</span><span class="o">=</span><span class="n">return_dict</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="main"><a class="viewcode-back" href="../../../src.visualization.html#src.visualization.check_results.main">[ドキュメント]</a><span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+<div class="viewcode-block" id="main"><a class="viewcode-back" href="../../../src.visualization.html#src.visualization.check_results.main">[docs]</a><span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;main</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">args_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">PROJECT_DIR</span><span class="si">}</span><span class="s1">/models/230114/01/param.pkl&#39;</span>
+    <span class="n">args_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">PROJECT_DIR</span><span class="si">}</span><span class="s1">/saved_models/kgc/all100/03/param.pkl&#39;</span>
     <span class="n">logger</span><span class="p">:</span> <span class="n">Logger</span> <span class="o">=</span> <span class="n">setup_logger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">PROJECT_DIR</span><span class="si">}</span><span class="s1">/log/jupyter_run.log&#39;</span><span class="p">,</span> <span class="s1">&#39;info&#39;</span><span class="p">)</span>
     <span class="n">device</span> <span class="o">=</span> <span class="n">get_device</span><span class="p">(</span><span class="n">device_name</span><span class="o">=</span><span class="s1">&#39;cpu&#39;</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">)</span>
     <span class="n">args</span> <span class="o">=</span> <span class="n">get_args_from_path</span><span class="p">(</span><span class="n">args_path</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">torch_fix_seed</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="n">SEED</span><span class="p">)</span>
     <span class="n">return_dict</span> <span class="o">=</span> <span class="n">main_function</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">)</span>
 
     <span class="n">do_madara_pred</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">logger</span><span class="p">,</span> <span class="n">return_dict</span><span class="p">)</span></div>
@@ -268,69 +272,43 @@
     <span class="n">main</span><span class="p">()</span>
 </pre></div>
 
+            <div class="clearer"></div>
           </div>
-          
         </div>
       </div>
       <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
         <div class="sphinxsidebarwrapper">
-<h1 class="logo"><a href="../../../index.html">KnowledgeGraphChallenge2023</a></h1>
-
-
-
-
-
-
-
-
-<h3>ナビゲーション</h3>
-<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="../../../src.html">src package</a></li>
-</ul>
-
-<div class="relations">
-<h3>Related Topics</h3>
-<ul>
-  <li><a href="../../../index.html">Documentation overview</a><ul>
-  <li><a href="../../index.html">モジュールコード</a><ul>
-  </ul></li>
-  </ul></li>
-</ul>
-</div>
 <div id="searchbox" style="display: none" role="search">
-  <h3 id="searchlabel">クイック検索</h3>
+  <h3 id="searchlabel">Quick search</h3>
     <div class="searchformwrapper">
     <form class="search" action="../../../search.html" method="get">
       <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
-      <input type="submit" value="検索" />
+      <input type="submit" value="Go" />
     </form>
     </div>
 </div>
 <script>document.getElementById('searchbox').style.display = "block"</script>
-
-
-
-
-
-
-
-
         </div>
       </div>
       <div class="clearer"></div>
     </div>
-    <div class="footer">
-      &copy;2023, RyoyaKaneda.
-      
-      |
-      Powered by <a href="http://sphinx-doc.org/">Sphinx 5.3.0</a>
-      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.13</a>
-      
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">KnowledgeGraphChallenge2023 v1.0 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">src.visualization.check_results</a></li> 
+      </ul>
     </div>
-
-    
-
-    
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2023, RyoyaKaneda.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 5.3.0.
+    </div>
   </body>
 </html>
