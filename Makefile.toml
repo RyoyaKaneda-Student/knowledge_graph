@@ -1516,5 +1516,6 @@ description = "kgc model ver 03 focal loss and pre embedding with BERT)"
 [tasks.kgc_0122]
 workspace = false
 dependencies = ["kgc_0122_01", "kgc_0122_02"]
+description = "kgc model ver 03 focal loss and pre embedding with BERT"
 
 description = "kgc model ver 03 focal loss, and check the validity of bert."

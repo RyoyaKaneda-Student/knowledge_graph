@@ -4,8 +4,10 @@
 
 """
 # ========== python ==========
+import argparse
+from argparse import Namespace
 from logging import Logger
-from typing import Final
+from typing import Final, Optional, Sequence
 
 import matplotlib.pyplot as plt
 # Machine learning
@@ -28,13 +30,37 @@ from run_for_KGC import main_function
 # My utils
 from utils.setup import load_param
 from utils.setup import setup_logger, get_device
-from utils.torch import load_model, torch_fix_seed
+from utils.torch import load_model, torch_fix_seed, DeviceName
 
 from const.const_values import SpeckledBand
 
 MASK_E = DefaultTokens.MASK_E
 KILL = 'word.predicate:kill'
 SEED: Final[int] = 42
+
+
+def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
+    """make parser function
+
+    * My first-setup function needs the function which make and return parser.
+
+    Args:
+        args(:obj:`Sequence[str]`, optional): args list or None. Default to None.
+
+    Returns:
+        Namespace: your args instance.
+
+    """
+    parser = argparse.ArgumentParser(description='This is make and training source code for KGC.')
+    paa = parser.add_argument
+    paa('args-path', type=str)
+    paa('--notebook', help='if use notebook, use this argument.', action='store_true')
+    paa('--console-level', help='log level on console', type=str, default='debug', choices=['info', 'debug'])
+    paa('--logfile', help='the path of saving log', type=str, default='log/test.log')
+    paa('--param-file', help='the path of saving param', type=str, default='log/param.pkl')
+    paa('--device-name', help=DeviceName.ALL_INFO, type=str, default=DeviceName.CPU, choices=DeviceName.ALL_LIST)
+    args = parser.parse_args(args=args)
+    return args
 
 
 def get_args_from_path(args_path: str, *, logger: Logger, device: torch.device):
@@ -218,14 +244,14 @@ def main():
     """main
 
     """
-    args_path = f'{PROJECT_DIR}/saved_models/kgc/all100/03/param.pkl'
-    logger: Logger = setup_logger(__name__, f'{PROJECT_DIR}/log/jupyter_run.log', 'info')
-    device = get_device(device_name='cpu', logger=logger)
-    args = get_args_from_path(args_path, logger=logger, device=device)
+    from utils.setup import setup, save_param
     torch_fix_seed(seed=SEED)
-    return_dict = main_function(args, logger=logger)
+    args, logger, device = setup(setup_parser, PROJECT_DIR)
+    trained_args = get_args_from_path(args.args_path, logger=logger, device=device)
+    torch_fix_seed(seed=SEED)
+    return_dict = main_function(trained_args, logger=logger)
 
-    do_madara_pred(args, logger, return_dict)
+    do_madara_pred(trained_args, logger, return_dict)
 
 
 if __name__ == '__main__':
