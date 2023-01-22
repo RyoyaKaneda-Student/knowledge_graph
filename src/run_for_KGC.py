@@ -721,7 +721,7 @@ def make_get_model(args: Namespace, *, data_helper: MyDataHelper, logger: Logger
     model = Model_(args, num_entities, num_relations, special_tokens=SpecialTokens(*all_tokens))
     model.assert_check()
     model.init(args, data_helper=data_helper)
-    logger.info(model)
+    logger.info(f"\n{model}")
 
     return model
 
