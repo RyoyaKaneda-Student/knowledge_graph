@@ -65,13 +65,9 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
     paa('--AbbeyGrange-090', help='AbbeyGrange 090', action='store_true')
     paa('--AbbeyGrange_075', help='AbbeyGrange 075', action='store_true')
 
-    paa('--DevilsFoot1-100', help='DevilsFoot1 100', action='store_true')
-    paa('--DevilsFoot1-090', help='DevilsFoot1 090', action='store_true')
-    paa('--DevilsFoot1-075', help='DevilsFoot1 075', action='store_true')
-
-    paa('--DevilsFoot2-100', help='DevilsFoot2 100', action='store_true')
-    paa('--DevilsFoot2-090', help='DevilsFoot2 090', action='store_true')
-    paa('--DevilsFoot2-075', help='DevilsFoot2 075', action='store_true')
+    paa('--DevilsFoot-100', help='DevilsFoot 100', action='store_true')
+    paa('--DevilsFoot-090', help='DevilsFoot 090', action='store_true')
+    paa('--DevilsFoot-075', help='DevilsFoot 075', action='store_true')
 
     paa('--ResidentPatient-100', help='ResidentPatient 100', action='store_true')
     paa('--ResidentPatient-090', help='ResidentPatient 090', action='store_true')
