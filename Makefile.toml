@@ -1516,8 +1516,6 @@ workspace = false
 dependencies = ["kgc_0122_01", "kgc_0122_02"]
 description = "kgc model ver 03 focal loss and pre embedding with BERT"
 
-description = "kgc model ver 03 focal loss, and check the validity of bert."
-
 [tasks.kgc_all100_03_2]
 workspace = false
 script = [
@@ -1529,7 +1527,6 @@ LrStory="1e-4"
 LrRelation="1e-6"
 LREntity="1e-6"
 Epoch="1500"
-
 EmbeddingDim="128"
 EEmbeddingDim="128"
 REmbeddingDim="64"
