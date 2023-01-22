@@ -31,6 +31,10 @@ from models.KGModel.kg_model import HEAD, RELATION, TAIL
 from const.const_values import DATASETS, DATA_HELPER, AbbeyGrange, SilverBlaze, ResidentPatient, DevilsFoot, SpeckledBand
 from const.const_values import MODEL, PROJECT_DIR, EN_TITLE2LEN_INFO
 
+pd.set_option('display.max_columns', 100)
+pd.set_option('display.max_rows', 500)
+
+
 MASK_E = DefaultTokens.MASK_E
 KILL = 'word.predicate:kill'
 TAKE = 'word.predicate:take'
