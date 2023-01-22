@@ -341,7 +341,7 @@ def training_with_ignite(
         good_checkpoint=good_checkpoint, last_checkpoint=last_checkpoint, logger=logger
     )
     trainer.add_event_handler(Events.EPOCH_COMPLETED, last_checkpoint)
-    evaluator.add_event_handler(Events.COMPLETED, force_cpu_deco(good_checkpoint))
+    evaluator.add_event_handler(Events.COMPLETED, force_cpu_deco(good_checkpoint)) if evaluator is not None else None
 
     if max_epoch > trainer.state.epoch:
         trainer.run(train, max_epochs=max_epoch)

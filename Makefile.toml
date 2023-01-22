@@ -1,4 +1,5 @@
 [tasks.init_folder]
+workspace = false
 script = [
 '''
 #!/usr/bin/env bash
@@ -13,6 +14,7 @@ mkdir -p ./models
 ]
 
 [tasks.init_kgc_folder]
+workspace = false
 script = [
 '''
 #!/usr/bin/env bash
@@ -28,6 +30,7 @@ git clone -b kaneda/feature/change_some_tags https://github.com/RyoyaKaneda-Stud
 ]
 
 [tasks.init_kg_folder]
+workspace = false
 script = [
 '''
 #!/usr/bin/env bash
@@ -1244,7 +1247,6 @@ python3 -O src/run_for_KGC.py   \
 ]
 description = "kgc challenge: ResidentPatient090"
 
-
 [tasks.kgc_0112_01]
 workspace = false
 script = [
@@ -1274,7 +1276,6 @@ python3 -O src/run_for_KGC.py   \
 	'''
 	]
 description = "kgc model ver 03 (new data) pre init embedding"
-
 
 [tasks.kgc_0114_01]
 workspace = false
@@ -1431,3 +1432,625 @@ workspace = false
 dependencies = ["kgc_0121_01", "kgc_0121_02"]
 
 description = "kgc model ver 03 focal loss, and check the validity of bert."
+
+[tasks.kgc_0122_01]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/230122/01"
+Lr="1e-5"
+LrStory="5e-5"
+LrRelation="1e-6"
+LREntity="1e-6"
+EmbeddingDim="512"
+EEmbeddingDim="768"
+REmbeddingDim="64"
+MaskPercent="0.30"
+MaskMaskPercent="0.80"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.10"
+LossFunction="focal_loss"
+Gamma="3.0"
+
+Epoch="1000"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--train-valid-test --epoch ${Epoch} --batch-size 128 \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--loss-function ${LossFunction} --gamma ${Gamma} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--valid-interval 50 ${@:2}
+	'''
+	]
+description = "kgc model ver 03 focal loss (Compare with models that use Bert)"
+
+[tasks.kgc_0122_02]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/230122/02"
+Lr="1e-5"
+LrStory="5e-5"
+LrRelation="1e-6"
+LREntity="1e-6"
+EmbeddingDim="512"
+EEmbeddingDim="768"
+REmbeddingDim="64"
+MaskPercent="0.30"
+MaskMaskPercent="0.80"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.10"
+LossFunction="focal_loss"
+Gamma="3.0"
+
+Epoch="1000"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03a --init-embedding-using-bert \
+	--train-valid-test --epoch ${Epoch} --batch-size 128 \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--loss-function ${LossFunction} --gamma ${Gamma} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--valid-interval 50 ${@:2}
+	'''
+	]
+description = "kgc model ver 03 focal loss and pre embedding with BERT)"
+
+[tasks.kgc_0122]
+workspace = false
+dependencies = ["kgc_0122_01", "kgc_0122_02"]
+description = "kgc model ver 03 focal loss and pre embedding with BERT"
+
+[tasks.kgc_all100_03_2]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/kgc/all100/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+EmbeddingDim="128"
+EEmbeddingDim="128"
+REmbeddingDim="64"
+MaskPercent="0.15"
+MaskMaskPercent="0.80"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.10"
+LossFunction="cross_entropy_loss"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--loss-function ${LossFunction} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+
+description = "kgc model ver 03 (new new data on 23.0121)"
+
+[tasks.kgc_AbbeyGrange075_03_2]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/kgc/AbbeyGrange075/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+EmbeddingDim="128"
+EEmbeddingDim="128"
+REmbeddingDim="64"
+MaskPercent="0.15"
+MaskMaskPercent="0.80"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.10"
+LossFunction="cross_entropy_loss"
+
+Title="AbbeyGrange"
+UsePer="075"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge${UsePer} --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--loss-function ${LossFunction} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc model ver 03 (new new data on 23.0121). AbbeyGrange075"
+
+[tasks.kgc_AbbeyGrange090_03_2]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/kgc/AbbeyGrange090/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+EmbeddingDim="128"
+EEmbeddingDim="128"
+REmbeddingDim="64"
+MaskPercent="0.15"
+MaskMaskPercent="0.80"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.10"
+LossFunction="cross_entropy_loss"
+
+Title="AbbeyGrange"
+UsePer="090"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge${UsePer} --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--loss-function ${LossFunction} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc model ver 03 (new new data on 23.0121). AbbeyGrange090"
+
+[tasks.kgc_CrookedMan075_03_2]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/kgc/CrookedMan075/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+EmbeddingDim="128"
+EEmbeddingDim="128"
+REmbeddingDim="64"
+MaskPercent="0.15"
+MaskMaskPercent="0.80"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.10"
+LossFunction="cross_entropy_loss"
+
+Title="CrookedMan"
+UsePer="075"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge${UsePer} --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--loss-function ${LossFunction} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc model ver 03 (new new data on 23.0121). CrookedMan075"
+
+[tasks.kgc_CrookedMan090_03_2]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/kgc/CrookedMan090/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+EmbeddingDim="128"
+EEmbeddingDim="128"
+REmbeddingDim="64"
+MaskPercent="0.15"
+MaskMaskPercent="0.80"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.10"
+LossFunction="cross_entropy_loss"
+
+Title="CrookedMan"
+UsePer="090"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge${UsePer} --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--loss-function ${LossFunction} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc model ver 03 (new new data on 23.0121). CrookedMan090"
+
+[tasks.kgc_SpeckledBand075_03_2]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/kgc/SpeckledBand075/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+EmbeddingDim="128"
+EEmbeddingDim="128"
+REmbeddingDim="64"
+MaskPercent="0.15"
+MaskMaskPercent="0.80"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.10"
+LossFunction="cross_entropy_loss"
+
+Title="SpeckledBand"
+UsePer="075"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge${UsePer} --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--loss-function ${LossFunction} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc model ver 03 (new new data on 23.0121). SpeckledBand075"
+
+[tasks.kgc_SpeckledBand090_03_2]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/kgc/SpeckledBand090/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+EmbeddingDim="128"
+EEmbeddingDim="128"
+REmbeddingDim="64"
+MaskPercent="0.15"
+MaskMaskPercent="0.80"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.10"
+LossFunction="cross_entropy_loss"
+
+Title="SpeckledBand"
+UsePer="090"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge${UsePer} --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--loss-function ${LossFunction} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc model ver 03 (new new data on 23.0121). SpeckledBand090"
+
+[tasks.kgc_DevilsFoot075_03_2]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/kgc/DevilsFoot075/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+EmbeddingDim="128"
+EEmbeddingDim="128"
+REmbeddingDim="64"
+MaskPercent="0.15"
+MaskMaskPercent="0.80"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.10"
+LossFunction="cross_entropy_loss"
+
+Title="DevilsFoot"
+UsePer="075"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge${UsePer} --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--loss-function ${LossFunction} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc model ver 03 (new new data on 23.0121). DevilsFoot075"
+
+[tasks.kgc_DevilsFoot090_03_2]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/kgc/DevilsFoot090/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+EmbeddingDim="128"
+EEmbeddingDim="128"
+REmbeddingDim="64"
+MaskPercent="0.15"
+MaskMaskPercent="0.80"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.10"
+LossFunction="cross_entropy_loss"
+
+Title="DevilsFoot"
+UsePer="090"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge${UsePer} --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--loss-function ${LossFunction} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc model ver 03 (new new data on 23.0121). DevilsFoot090"
+
+[tasks.kgc_ResidentPatient075_03_2]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/kgc/ResidentPatient075/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+EmbeddingDim="128"
+EEmbeddingDim="128"
+REmbeddingDim="64"
+MaskPercent="0.15"
+MaskMaskPercent="0.80"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.10"
+LossFunction="cross_entropy_loss"
+
+Title="ResidentPatient"
+UsePer="075"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge${UsePer} --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--loss-function ${LossFunction} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc model ver 03 (new new data on 23.0121). ResidentPatient075"
+
+[tasks.kgc_ResidentPatient090_03_2]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/kgc/ResidentPatient090/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+EmbeddingDim="128"
+EEmbeddingDim="128"
+REmbeddingDim="64"
+MaskPercent="0.15"
+MaskMaskPercent="0.80"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.10"
+LossFunction="cross_entropy_loss"
+
+Title="ResidentPatient"
+UsePer="090"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge${UsePer} --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--loss-function ${LossFunction} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc model ver 03 (new new data on 23.0121). ResidentPatient090"
+
+[tasks.kgc_SilverBlaze075_03_2]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/kgc/SilverBlaze075/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+EmbeddingDim="128"
+EEmbeddingDim="128"
+REmbeddingDim="64"
+MaskPercent="0.15"
+MaskMaskPercent="0.80"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.10"
+LossFunction="cross_entropy_loss"
+
+Title="SilverBlaze"
+UsePer="075"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge${UsePer} --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--loss-function ${LossFunction} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc model ver 03 (new new data on 23.0121). SilverBlaze075"
+
+[tasks.kgc_SilverBlaze090_03_2]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/kgc/SilverBlaze090/03"
+Lr="5e-5"
+LrStory="1e-4"
+LrRelation="1e-6"
+LREntity="1e-6"
+Epoch="1500"
+EmbeddingDim="128"
+EEmbeddingDim="128"
+REmbeddingDim="64"
+MaskPercent="0.15"
+MaskMaskPercent="0.80"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.10"
+LossFunction="cross_entropy_loss"
+
+Title="SilverBlaze"
+UsePer="090"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--only-train --epoch ${Epoch} --batch-size 256 \
+	--use-for-challenge${UsePer} --use-title ${Title} \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--loss-function ${LossFunction} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--valid-interval 10000 ${@:2}
+'''
+]
+description = "kgc model ver 03 (new new data on 23.0121). SilverBlaze090"
+
+[tasks.kgc_model03_2]
+workspace = false
+dependencies = [
+	"kgc_AbbeyGrange075_03_2", "kgc_AbbeyGrange090_03_2", "kgc_CrookedMan075_03_2", "kgc_CrookedMan090_03_2",
+	"kgc_SpeckledBand075_03_2", "kgc_SpeckledBand090_03_2", "kgc_DevilsFoot075_03_2", "kgc_DevilsFoot090_03_2",
+	"kgc_ResidentPatient075_03_2", "kgc_ResidentPatient090_03_2", "kgc_SilverBlaze075_03_2", "kgc_SilverBlaze090_03_2"
+]
+description = "kgc model ver 03.(new new data.)"

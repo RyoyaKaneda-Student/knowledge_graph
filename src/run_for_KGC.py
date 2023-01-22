@@ -521,14 +521,17 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
 
     model.to(device)
     trainer, trainer_matrix = set_engine_metrix(train_step)
-    evaluator, evaluator_matrix = set_engine_metrix(valid_step) if args.train_valid_test else (None, None)
-
     _kwargs = dict(summary_writer=summary_writer, metric_names=METRIC_NAMES, param_names=ALL_WEIGHT_LIST, logger=logger)
     set_start_epoch_function(trainer, optional_func=train.dataset.shuffle_per_1scene, logger=logger)
     set_end_epoch_function(trainer, PRE_TRAIN_SCALER_TAG_GETTER, **_kwargs)
-    set_valid_function(trainer, evaluator, valid, args.valid_interval, PRE_VALID_SCALER_TAG_GETTER, **_kwargs)
     set_write_model_param_function(
         trainer, model, PRE_TRAIN_MODEL_WEIGHT_TAG_GETTER, lambda _key: getattr(model, _key).data, **_kwargs)
+
+    if args.train_valid_test:
+        evaluator, evaluator_matrix = set_engine_metrix(valid_step)
+        set_valid_function(trainer, evaluator, valid, args.valid_interval, PRE_VALID_SCALER_TAG_GETTER, **_kwargs)
+    else:
+        evaluator, evaluator_matrix = None, None
 
     # Interrupt
     if args.only_load_trainer_evaluator:
@@ -718,7 +721,7 @@ def make_get_model(args: Namespace, *, data_helper: MyDataHelper, logger: Logger
     model = Model_(args, num_entities, num_relations, special_tokens=SpecialTokens(*all_tokens))
     model.assert_check()
     model.init(args, data_helper=data_helper)
-    logger.info(model)
+    logger.info(f"\n{model}")
 
     return model
 

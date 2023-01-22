@@ -4,8 +4,10 @@
 
 """
 # ========== python ==========
+import argparse
+from argparse import Namespace
 from logging import Logger
-from typing import Final
+from typing import Final, Optional, Sequence
 
 import matplotlib.pyplot as plt
 # Machine learning
@@ -16,25 +18,75 @@ import seaborn as sns
 # torch
 import torch
 
-from const.const_values import DATASETS, DATA_HELPER
-from const.const_values import MODEL
-from const.const_values import PROJECT_DIR
-from models.KGModel.kg_model import HEAD, RELATION, TAIL
 # My items
 from models.datasets.data_helper import MyDataHelper, DefaultTokens
 from models.datasets.datasets_for_story import StoryTriple
 # main function
 from run_for_KGC import main_function
 # My utils
-from utils.setup import load_param
-from utils.setup import setup_logger, get_device
-from utils.torch import load_model, torch_fix_seed
+from utils.setup import setup, load_param
+from utils.torch import load_model, torch_fix_seed, DeviceName
+# const
+from models.KGModel.kg_model import HEAD, RELATION, TAIL
+from const.const_values import DATASETS, DATA_HELPER, AbbeyGrange, SilverBlaze, ResidentPatient, DevilsFoot, SpeckledBand
+from const.const_values import MODEL, PROJECT_DIR, EN_TITLE2LEN_INFO
 
-from const.const_values import SpeckledBand
+pd.set_option('display.max_columns', 100)
+pd.set_option('display.max_rows', 500)
+
 
 MASK_E = DefaultTokens.MASK_E
 KILL = 'word.predicate:kill'
+TAKE = 'word.predicate:take'
+BRING = 'word.predicate:bring'
+DIE = 'word.predicate:die'
+HIDE = 'word.predicate:hide'
 SEED: Final[int] = 42
+
+
+def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
+    """make parser function
+
+    * My first-setup function needs the function which make and return parser.
+
+    Args:
+        args(:obj:`Sequence[str]`, optional): args list or None. Default to None.
+
+    Returns:
+        Namespace: your args instance.
+
+    """
+    parser = argparse.ArgumentParser(description='This is make and training source code for KGC.')
+    paa = parser.add_argument
+    paa('args_path', type=str)
+    paa('--notebook', help='if use notebook, use this argument.', action='store_true')
+    paa('--console-level', help='log level on console', type=str, default='debug', choices=['info', 'debug'])
+    paa('--logfile', help='the path of saving log', type=str, default='log/test.log')
+    paa('--param-file', help='the path of saving param', type=str, default='log/param.pkl')
+    paa('--device-name', help=DeviceName.ALL_INFO, type=str, default=DeviceName.CPU, choices=DeviceName.ALL_LIST)
+
+    paa('--AbbeyGrange-100', help='AbbeyGrange 100', action='store_true')
+    paa('--AbbeyGrange-090', help='AbbeyGrange 090', action='store_true')
+    paa('--AbbeyGrange_075', help='AbbeyGrange 075', action='store_true')
+
+    paa('--DevilsFoot-100', help='DevilsFoot 100', action='store_true')
+    paa('--DevilsFoot-090', help='DevilsFoot 090', action='store_true')
+    paa('--DevilsFoot-075', help='DevilsFoot 075', action='store_true')
+
+    paa('--ResidentPatient-100', help='ResidentPatient 100', action='store_true')
+    paa('--ResidentPatient-090', help='ResidentPatient 090', action='store_true')
+    paa('--ResidentPatient-075', help='ResidentPatient 075', action='store_true')
+
+    paa('--SilverBlaze-100', help='SilverBlaze 100', action='store_true')
+    paa('--SilverBlaze-090', help='SilverBlaze 090', action='store_true')
+    paa('--SilverBlaze-075', help='SilverBlaze 075', action='store_true')
+
+    paa('--SpeckledBand-100', help='SpeckledBand 100', action='store_true')
+    paa('--SpeckledBand-090', help='SpeckledBand 090', action='store_true')
+    paa('--SpeckledBand-075', help='SpeckledBand 075', action='store_true')
+
+    args = parser.parse_args(args=args)
+    return args
 
 
 def get_args_from_path(args_path: str, *, logger: Logger, device: torch.device):
@@ -48,9 +100,6 @@ def get_args_from_path(args_path: str, *, logger: Logger, device: torch.device):
     args.device = device
     args.batch_size = 1
     args.pre_train = False
-    args.init_embedding_using_bert = False
-    args.use_for_challenge090 = getattr(args, 'use_for_challenge090', False)
-    args.use_for_challenge075 = getattr(args, 'use_for_challenge075', False)
 
     del args.optuna_file, args.device_name, args.pid, args.study_name, args.n_trials
     logger.info(args)
@@ -178,7 +227,7 @@ def make_ranking(args, from_story_name, to_story_name, predicate_, whom_, subjec
     return df_ranking, df_attention
 
 
-def main_func01(_title, _victim_name, criminal, predicate, _last_index, _story_len, *, args, logger, return_dict):
+def main_func01(args, _title, _victim_name, criminal, predicate, _last_index, _story_len, *, logger, return_dict):
     from_ = f'{_title}:{_last_index - _story_len + 1}'
     to_ = f'{_title}:{_last_index}'
     predicate = predicate
@@ -198,34 +247,103 @@ def main_func01(_title, _victim_name, criminal, predicate, _last_index, _story_l
     return df_ranking, df_attention
 
 
-def check_killer(_title, _victim_name, _killer_name, _last_index, _story_len, *, args, logger, return_dict):
+def check_killer(args, _title, _victim_name, _killer_name, _last_index, _story_len, *, logger, return_dict):
     return main_func01(
-        _title, _victim_name, _killer_name, KILL, _last_index, _story_len,
-        args=args, logger=logger, return_dict=return_dict
+        args, _title, _victim_name, _killer_name, KILL, _last_index, _story_len,
+        logger=logger, return_dict=return_dict
     )
 
 
-def do_madara_pred(args, logger, return_dict, last_index=401, story_len=80):
+def AbbeyGrange_pred(args, logger, return_dict, last_index, story_len):
+    title = AbbeyGrange
+    victim_name = 'Sir_Eustace_Brackenstall'
+    killer_name = 'Jack_Croker'
+
+    df_ranking, df_attention = check_killer(
+        args, title, victim_name, killer_name, last_index, story_len, logger=logger, return_dict=return_dict)
+    return df_ranking, df_attention
+
+
+def DevilsFoot1_pred(args, logger, return_dict, last_index, story_len):
+    title = DevilsFoot
+    victim_name = 'Brenda'
+    killer_name = 'Mortimer'
+
+    df_ranking, df_attention = check_killer(
+        args, title, victim_name, killer_name, last_index, story_len, logger=logger, return_dict=return_dict)
+    return df_ranking, df_attention
+
+
+def DevilsFoot2_pred(args, logger, return_dict, last_index, story_len):
+    title = DevilsFoot
+    victim_name = 'Mortimer'
+    killer_name = 'Sterndale'
+
+    df_ranking, df_attention = check_killer(
+        args, title, victim_name, killer_name, last_index, story_len, logger=logger, return_dict=return_dict)
+    return df_ranking, df_attention
+
+
+def ResidentPatient_pred(args, logger, return_dict, last_index, story_len):
+    title = ResidentPatient
+    victim_name = 'Blessington'
+    killer_name = ''
+
+    df_ranking, df_attention = check_killer(
+        args, title, victim_name, killer_name, last_index, story_len, logger=logger, return_dict=return_dict)
+    return df_ranking, df_attention
+
+
+def SpeckledBand_pred(args, logger, return_dict, last_index, story_len):
     title = SpeckledBand
     victim_name = 'Julia'
     killer_name = 'Roylott'
 
-    df_ranking_SpeckledBand, df_attention_SpeckledBand = check_killer(
-        title, victim_name, killer_name, last_index, story_len, args=args, logger=logger, return_dict=return_dict)
+    df_ranking, df_attention = check_killer(
+        args, title, victim_name, killer_name, last_index, story_len, logger=logger, return_dict=return_dict)
+    return df_ranking, df_attention
+
+
+def SilverBlaze_pred(args, logger, return_dict, last_index, story_len):
+    title = SilverBlaze
+    victim_name = f'{title}:Silver_Blaze'
+
+    df_ranking, df_attention = make_ranking(args, f'SilverBlaze:{last_index-story_len+1}', f'SilverBlaze:{last_index}',
+                                            BRING, MASK_E, MASK_E, MASK_E, victim_name, MASK_E, return_dict=return_dict)
+
+    pred_rank = df_ranking.index[df_ranking['what'] == victim_name].tolist()[0]
+    # logger.info(f"The pred ranking about {criminal} is {pred_rank}")
+    display(df_ranking.iloc[:max(20, pred_rank)])
+    len_ = len(df_attention)
+    for i in range(len_ - 10, len_):
+        logger.info(f"index{i}: {df_attention.iloc[i, :3].tolist()}")
+        display(df_attention.sort_values(f'atten_from{i}', ascending=False).iloc[:20, [0, 1, 2, 3 + i]])
+        logger.info("----------")
+
+    return df_ranking, df_attention
 
 
 def main():
     """main
 
     """
-    args_path = f'{PROJECT_DIR}/saved_models/kgc/all100/03/param.pkl'
-    logger: Logger = setup_logger(__name__, f'{PROJECT_DIR}/log/jupyter_run.log', 'info')
-    device = get_device(device_name='cpu', logger=logger)
-    args = get_args_from_path(args_path, logger=logger, device=device)
     torch_fix_seed(seed=SEED)
-    return_dict = main_function(args, logger=logger)
+    args, logger, device = setup(setup_parser, PROJECT_DIR)
+    trained_args = get_args_from_path(args.args_path, logger=logger, device=device)
+    return_dict = main_function(trained_args, logger=logger)
 
-    do_madara_pred(args, logger, return_dict)
+    title2functions = {
+        AbbeyGrange: [AbbeyGrange_pred],
+        DevilsFoot: [DevilsFoot1_pred, DevilsFoot2_pred],
+        ResidentPatient: [ResidentPatient_pred],
+        SilverBlaze: [SilverBlaze_pred],
+        SpeckledBand: [SpeckledBand_pred]
+    }
+    for i, percent in enumerate(['100', '090', '075']):
+        for title in [AbbeyGrange, DevilsFoot, ResidentPatient, SilverBlaze, SpeckledBand]:
+            if getattr(args, f"{title}_{percent}"):
+                last_index = EN_TITLE2LEN_INFO[title][i]
+                [func(trained_args, logger, return_dict, last_index, 80) for func in title2functions[title]]
 
 
 if __name__ == '__main__':

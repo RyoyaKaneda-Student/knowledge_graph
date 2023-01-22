@@ -17,7 +17,7 @@ Please change some parts depending on your environment.
 3. bash run `docker build -t ${image-name} -f ./docker/Dockerfile .`. 
 If you use linux with no gpu, this may be not work, so you change `pyproject.toml` and `Dockerfile`. 
 Additionally, I do not have a Windows environment, so if you are in that environment, please make changes accordingly.
-4. docker run with these folders. ex)`docker run --rm -it -v .:/var/www/ ${image-name} bash`
+4. docker run with these folders. ex)`docker run --rm -it --gpus all -v $PWD:/var/www/ ${image-name} bash`
 5. run `makers init_folder` and `makers init_kgc_folder`.
 6. run `python3 src/data/make_kgcdata.py`
 7. run `python3 src/data/make_missing_kgcdata.py`

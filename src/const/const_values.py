@@ -144,3 +144,14 @@ JA_TITLE2LEN_INFO = {
     "白銀号事件": ("SilverBlaze", 397, 367, 317, 297),
     "マダラのひも": ("SpeckledBand", 401, 360, 320, 300)
 }
+
+EN_TITLE2LEN_INFO = {
+    AbbeyGrange: (414, 372, 331, 310),
+    ACaseOfIdentity: (580, 522, 464, 435),
+    CrookedMan: (373, 335, 298, 279),
+    DancingMen: (231, 207, 184, 173),
+    DevilsFoot: (489, 440, 391, 366),
+    ResidentPatient: (324, 291, 259, 243),
+    SilverBlaze: (397, 367, 317, 297),
+    SpeckledBand: (401, 360, 320, 300)
+}
