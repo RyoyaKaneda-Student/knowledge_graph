@@ -53,7 +53,7 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
     """
     parser = argparse.ArgumentParser(description='This is make and training source code for KGC.')
     paa = parser.add_argument
-    paa('args-path', type=str)
+    paa('args_path', type=str)
     paa('--notebook', help='if use notebook, use this argument.', action='store_true')
     paa('--console-level', help='log level on console', type=str, default='debug', choices=['info', 'debug'])
     paa('--logfile', help='the path of saving log', type=str, default='log/test.log')
