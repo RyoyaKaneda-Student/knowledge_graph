@@ -18,7 +18,7 @@ import seaborn as sns
 # torch
 import torch
 
-from const.const_values import DATASETS, DATA_HELPER
+from const.const_values import DATASETS, DATA_HELPER, AbbeyGrange, SilverBlaze, ResidentPatient, DevilsFoot
 from const.const_values import MODEL
 from const.const_values import PROJECT_DIR
 from models.KGModel.kg_model import HEAD, RELATION, TAIL
@@ -36,6 +36,10 @@ from const.const_values import SpeckledBand
 
 MASK_E = DefaultTokens.MASK_E
 KILL = 'word.predicate:kill'
+TAKE = 'word.predicate:take'
+BRING = 'word.predicate:bring'
+DIE = 'word.predicate:die'
+HIDE = 'word.predicate:hide'
 SEED: Final[int] = 42
 
 
@@ -204,7 +208,7 @@ def make_ranking(args, from_story_name, to_story_name, predicate_, whom_, subjec
     return df_ranking, df_attention
 
 
-def main_func01(_title, _victim_name, criminal, predicate, _last_index, _story_len, *, args, logger, return_dict):
+def main_func01(args, _title, _victim_name, criminal, predicate, _last_index, _story_len, *, logger, return_dict):
     from_ = f'{_title}:{_last_index - _story_len + 1}'
     to_ = f'{_title}:{_last_index}'
     predicate = predicate
@@ -224,20 +228,73 @@ def main_func01(_title, _victim_name, criminal, predicate, _last_index, _story_l
     return df_ranking, df_attention
 
 
-def check_killer(_title, _victim_name, _killer_name, _last_index, _story_len, *, args, logger, return_dict):
+def check_killer(args, _title, _victim_name, _killer_name, _last_index, _story_len, *, logger, return_dict):
     return main_func01(
-        _title, _victim_name, _killer_name, KILL, _last_index, _story_len,
-        args=args, logger=logger, return_dict=return_dict
+        args, _title, _victim_name, _killer_name, KILL, _last_index, _story_len,
+        logger=logger, return_dict=return_dict
     )
 
 
-def do_madara_pred(args, logger, return_dict, last_index=401, story_len=80):
+def AbbeyGrange_pred(args, logger, return_dict, last_index=414, story_len=80):
+    title = AbbeyGrange
+    victim_name = 'Sir_Eustace_Brackenstall'
+    killer_name = 'Jack_Croker'
+
+    df_ranking, df_attention = check_killer(
+        args, title, victim_name, killer_name, last_index, story_len, logger=logger, return_dict=return_dict)
+    return df_ranking, df_attention
+
+
+def SpeckledBand_pred(args, logger, return_dict, last_index=401, story_len=80):
     title = SpeckledBand
     victim_name = 'Julia'
     killer_name = 'Roylott'
 
-    df_ranking_SpeckledBand, df_attention_SpeckledBand = check_killer(
-        title, victim_name, killer_name, last_index, story_len, args=args, logger=logger, return_dict=return_dict)
+    df_ranking, df_attention = check_killer(
+        args, title, victim_name, killer_name, last_index, story_len, logger=logger, return_dict=return_dict)
+    return df_ranking, df_attention
+
+
+def DevilsFoot1_pred(args, logger, return_dict, last_index=489, story_len=80):
+    title = DevilsFoot
+    victim_name = 'Brenda'
+    killer_name = 'Mortimer'
+
+    df_ranking, df_attention = check_killer(
+        args, title, victim_name, killer_name, last_index, story_len, logger=logger, return_dict=return_dict)
+    return df_ranking, df_attention
+
+
+def DevilsFoot2_pred(args, logger, return_dict, last_index=489, story_len=80):
+    title = DevilsFoot
+    victim_name = 'Mortimer'
+    killer_name = 'Sterndale'
+
+    df_ranking, df_attention = check_killer(
+        args, title, victim_name, killer_name, last_index, story_len, logger=logger, return_dict=return_dict)
+    return df_ranking, df_attention
+
+
+def ResidentPatient_pred(args, logger, return_dict, last_index=324, story_len=80):
+    title = ResidentPatient
+    victim_name = 'Blessington'
+    killer_name = ''
+
+    df_ranking, df_attention = check_killer(
+        args, title, victim_name, killer_name, last_index, story_len, logger=logger, return_dict=return_dict)
+    return df_ranking, df_attention
+
+
+def SilverBlaze_pred(args, logger, return_dict, last_index=324, story_len=80):
+    title = SilverBlaze
+    victim_name = 'SilverBlaze:Silver_Blaze'
+
+    make_ranking(args, 'SilverBlaze:330', 'SilverBlaze:396', BRING, MASK_E, MASK_E, MASK_E, victim, MASK_E)
+
+    df_ranking, df_attention = main_func01(
+        args, title, victim_name, '', BRING, -1, story_len, logger=logger, return_dict=return_dict)
+
+    return df_ranking, df_attention
 
 
 def main():
@@ -250,9 +307,6 @@ def main():
     trained_args = get_args_from_path(args.args_path, logger=logger, device=device)
     torch_fix_seed(seed=SEED)
     return_dict = main_function(trained_args, logger=logger)
-
-    do_madara_pred(trained_args, logger, return_dict)
-
 
 if __name__ == '__main__':
     main()
