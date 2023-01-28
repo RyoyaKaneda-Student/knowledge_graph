@@ -2135,7 +2135,7 @@ python3 -O src/run_for_KGC.py   \
 	]
 description = "kgc model ver 03 focal loss and pre embedding with BERT)"
 
-[tasks.kgc_0122]
+[tasks.kgc_0128]
 workspace = false
-dependencies = ["kgc_0122_01", "kgc_0122_02"]
+dependencies = ["kgc_0128_01", "kgc_0128_02"]
 description = "kgc model ver 03 focal loss and pre embedding with BERT"
