@@ -19,11 +19,12 @@ from utils.torch import MM
 
 from models.utilModules.tranformer import PositionalEncoding
 from models.utilModules.mlp_mixer import MlpMixer, MlpMixerLayer
-from models.datasets.data_helper import SpecialPaddingTokens
+from models.datasets.data_helper import SpecialPaddingTokens, SpecialTokens01
 
 HEAD: Final = 'head'
 RELATION: Final = 'relation'
 TAIL: Final = 'tail'
+ENTITY: Final = 'entity'
 
 
 class KGE_ERTails(torch.nn.Module, metaclass=abc.ABCMeta):
@@ -183,7 +184,7 @@ class DistMult(KGE_ERTails):
 
     """
     def __init__(self, args, entity_num, relation_num, special_tokens):
-        super(DistMult, self).__init__(args.embedding_dim, entity_num, relation_num, special_tokens)
+        super(DistMult, self).__init__(args.embedding_dim, args.embedding_dim, entity_num, relation_num, special_tokens)
         self.inp_drop = torch.nn.Dropout(args.input_drop)
         self.loss = torch.nn.BCELoss()
 
@@ -213,9 +214,9 @@ class DistMult(KGE_ERTails):
         return pred
 
 
-class TransformerVer2E(KGE_ERTails):
+class TransformerE(KGE_ERTails):
     def __init__(self, args, entity_num, relation_num, special_tokens, **kwargs):
-        super(TransformerVer2E, self).__init__(args.embedding_dim, entity_num, relation_num, special_tokens)
+        super(TransformerE, self).__init__(args.embedding_dim, entity_num, relation_num, special_tokens)
         embedding_dim = args.embedding_dim
         input_drop = args.input_drop
         hidden_drop = args.hidden_drop
@@ -254,7 +255,6 @@ class TransformerVer2E(KGE_ERTails):
         self.fc1 = torch.nn.Linear(embedding_dim, embedding_dim * 4)
         self.activate2 = torch.nn.GELU()
         self.fc2 = torch.nn.Linear(embedding_dim * 4, embedding_dim)
-
 
         self.bn02 = torch.nn.BatchNorm1d(embedding_dim)
         self.activate3 = torch.nn.GELU()
@@ -314,7 +314,7 @@ class TransformerVer2E(KGE_ERTails):
         return pred
 
 
-class TransformerVer3E(KGE_ERTails):
+class Transformer2E(KGE_ERTails):
     def __init__(self, args, entity_num, relation_num, data_helper, **kwargs):
         from models.pytorch_geometric import make_geodata, separate_triples
 
@@ -332,6 +332,10 @@ class TransformerVer3E(KGE_ERTails):
         cls_token_r = args.cls_token_r
         self_loop_token_r = args.self_loop_token_r
 
+        special_tokens = SpecialTokens01(
+            padding_token_e, padding_token_r, cls_token_e, cls_token_r, mask_token_e, -1, -1, -1, -1, -1)
+        special_tokens.self_loop_token_r = self_loop_token_r
+
         assert padding_token_e is not None
         assert cls_token_e is not None
         assert padding_token_e != cls_token_e
@@ -345,8 +349,7 @@ class TransformerVer3E(KGE_ERTails):
         assert self_loop_token_r != padding_token_r
         assert args.relation_special_num >= 3
 
-        super(TransformerVer3E, self).__init__(
-            embedding_dim, entity_num, relation_num, padding_token_e, padding_token_r)
+        super(Transformer2E, self).__init__(embedding_dim, embedding_dim, entity_num, relation_num, special_tokens)
 
         self.padding_token_e = padding_token_e
         self.cls_token_e = cls_token_e
@@ -459,9 +462,9 @@ class TransformerVer3E(KGE_ERTails):
         return pred
 
 
-class TransformerVer3E_1(TransformerVer3E):
+class TransformerVer2E_1(Transformer2E):
     def __init__(self, args, entity_num, relation_num, data_helper, **kwargs):
-        super(TransformerVer3E_1, self).__init__(args, entity_num, relation_num, data_helper, **kwargs)
+        super(TransformerVer2E_1, self).__init__(args, entity_num, relation_num, data_helper, **kwargs)
         del self.pos_encoder, self.transformer_encoder, self.fc
 
         embedding_dim = args.embedding_dim
@@ -483,7 +486,7 @@ class TransformerVer3E_1(TransformerVer3E):
         return x
 
 
-class MlpMixE(TransformerVer2E):
+class MlpMixE(TransformerE):
     def __init__(self, args, entity_num, relation_num, **kwargs):
         super(MlpMixE, self).__init__(args, entity_num, relation_num, **kwargs)
         del self.transformer_encoder
