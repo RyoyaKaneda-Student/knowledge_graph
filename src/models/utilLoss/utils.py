@@ -1,4 +1,6 @@
+from typing import Final
 from utils.typing import ConstMeta
+
 
 class LossFnName(metaclass=ConstMeta):
     CROSS_ENTROPY_LOSS = 'cross_entropy_loss'

@@ -26,6 +26,11 @@ OPTIMIZER: Final[str] = 'optimizer'
 LOSS: Final[str] = 'loss'
 PRED: Final[str] = 'pred'
 ANS: Final[str] = 'ans'
+# about lr
+LR_STORY: Final[str] = 'lr_story'
+LR_RELATION: Final[str] = 'lr_relation'
+LR_ENTITY: Final[str] = 'lr_entity'
+LOSS_FUNCTION: Final[str] = 'loss_function'
 # about training loss tags especially for triple.
 STORY_LOSS: Final[str] = 'story_loss'
 RELATION_LOSS: Final[str] = 'relation_loss'

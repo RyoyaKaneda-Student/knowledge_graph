@@ -16,7 +16,7 @@ from torch.optim import Optimizer
 from torch.utils.tensorboard.writer import SummaryWriter
 
 from ignite.engine import Events, Engine
-from ignite.handlers import Timer, Checkpoint, DiskSaver, global_step_from_engine
+from ignite.handlers import Timer, Checkpoint, DiskSaver, global_step_from_engine, EarlyStopping
 
 from utils.torch import force_cpu
 from utils.utils import elapsed_time_str
@@ -131,6 +131,22 @@ def set_valid_function(trainer, evaluator, valid, valid_interval, get_tag_func, 
         epoch = engine.state.epoch
         metrics = evaluator.state.metrics
         save_metrics(epoch, metrics, get_tag_func, metric_names, summary_writer)
+
+
+def set_early_stopping_function(trainer, evaluator, patience, score_function):
+    """set early stopping
+
+    Args:
+        trainer:
+        evaluator:
+        patience:
+        score_function:
+
+    Returns:
+
+    """
+    handler = EarlyStopping(patience=patience, score_function=score_function, trainer=trainer)
+    evaluator.add_event_handler(Events.COMPLETED, handler)
 
 
 def set_write_model_param_function(trainer, model, get_tag_func, get_item_func, *,

@@ -16,6 +16,7 @@ from logging import Logger
 from operator import itemgetter
 from typing import Optional, Callable, Final, cast, Sequence
 # Machine learning
+import ignite
 import numpy as np
 import pandas as pd
 import h5py
@@ -29,7 +30,7 @@ from torch.utils.tensorboard.writer import SummaryWriter
 # torch ignite
 from ignite.contrib.handlers.tqdm_logger import ProgressBar
 from ignite.engine import Engine
-from ignite.handlers import Checkpoint
+from ignite.handlers import Checkpoint, EarlyStopping
 from ignite.metrics import Average, Accuracy
 
 # My const words about words used as tags
@@ -50,13 +51,14 @@ from utils.error import UnderDevelopmentError
 from utils.torch import save_model, torch_fix_seed, DeviceName
 from utils.torch_ignite import (
     set_write_model_param_function, set_start_epoch_function, set_end_epoch_function,
-    set_valid_function, training_with_ignite
+    set_valid_function, training_with_ignite, set_early_stopping_function
 )
 from utils.utils import version_check
 # My const words about file direction and title
 from const.const_values import (
     PROJECT_DIR,
     ALL_TITLE_LIST, SRO_ALL_TRAIN_FILE, SRO_ALL_INFO_FILE, TITLE2SRO_FILE090, TITLE2SRO_FILE075, ABOUT_KILL_WORDS,
+    LR_STORY, LR_RELATION, LR_ENTITY, LOSS_FUNCTION, STUDY,
 )
 # My const words about words used as tags
 from const.const_values import (CPU, MODEL, LOSS, PARAMS, LR,
@@ -221,6 +223,9 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
     paa6('--loss-weight-relation', type=float, default=1., help='loss-weight-relation')
     paa6('--loss-weight-entity', type=float, default=1., help='loss-weight-entity')
     paa6('--epoch', help='max epoch', type=int, default=2)
+    paa6('--early-stopping', action='store_true', help='', )
+    paa6('--early-stopping-count', type=int, default=10, )
+
     paa6('--valid-interval', type=int, default=1, help='valid-interval', )
     # if focal loss, this is need.
     parser_group061 = parser.add_argument_group('focal loss setting',
@@ -527,9 +532,15 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
     set_write_model_param_function(
         trainer, model, PRE_TRAIN_MODEL_WEIGHT_TAG_GETTER, lambda _key: getattr(model, _key).data, **_kwargs)
 
+    # valid function
     if args.train_valid_test:
         evaluator, evaluator_matrix = set_engine_metrix(valid_step)
         set_valid_function(trainer, evaluator, valid, args.valid_interval, PRE_VALID_SCALER_TAG_GETTER, **_kwargs)
+        # early stopping
+        if args.early_stopping:
+            set_early_stopping_function(
+                trainer, evaluator, args.early_stopping_count, lambda engine: -engine.state.metrics[LOSS])
+
     else:
         evaluator, evaluator_matrix = None, None
 
@@ -767,7 +778,26 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
     """
     # Now we are ready to start except for the hyper parameters.
     summary_writer = SummaryWriter(log_dir=args.tensorboard_dir) if args.tensorboard_dir is not None else None
-    train_returns = {MODEL: None, TRAINER: None, EVALUATOR: None, LAST_CHECKPOINTE: None, GOOD_LOSS_CHECKPOINTE: None}
+    train_returns = {
+        MODEL: None, TRAINER: None, EVALUATOR: None, LAST_CHECKPOINTE: None, GOOD_LOSS_CHECKPOINTE: None, STUDY: None}
+
+    def func(_hyper_params):
+        """Training and save checkpoint.
+
+        """
+        # setting path
+        _model_path = args.model_path
+        if _model_path is None: raise ValueError("model path must not None")
+        # training.
+        _train_returns = pre_training(
+            args, _hyper_params, data_helper, data_loaders, model, summary_writer=summary_writer, logger=logger)
+        # check the output of the training.
+        _good_checkpoint, _last_checkpoint = map(train_returns.get, (GOOD_LOSS_CHECKPOINTE, LAST_CHECKPOINTE))
+        _checkpoint = last_checkpoint.last_checkpoint if args.only_train else good_checkpoint.last_checkpoint
+        Checkpoint.load_objects(to_load={MODEL: model}, checkpoint=_checkpoint)
+        # re-save as cpu model
+        save_model(model, _model_path, device=args.device)
+        return _train_returns, _good_checkpoint, _last_checkpoint, _checkpoint
 
     # default mode
     if args.pre_train:
@@ -777,23 +807,47 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
             args.loss_function, args.loss_weight_story, args.loss_weight_relation, args.loss_weight_story,
             {GAMMA: args.gamma}
         )
-        # setting path
-        model_path = args.model_path
-        if model_path is None: raise ValueError("model path must not None")
-        # training.
-        train_returns = pre_training(
-            args, hyper_params, data_helper, data_loaders, model, summary_writer=summary_writer, logger=logger)
-        # check the output of the training.
-        good_checkpoint, last_checkpoint = map(train_returns.get, (GOOD_LOSS_CHECKPOINTE, LAST_CHECKPOINTE))
-        checkpoint_ = last_checkpoint.last_checkpoint if args.only_train else good_checkpoint.last_checkpoint
-        Checkpoint.load_objects(to_load={MODEL: model}, checkpoint=checkpoint_)
-        # re-save as cpu model
-        save_model(model, args.model_path, device=args.device)
+        train_returns, good_checkpoint, last_checkpoint, checkpoint_ = func(hyper_params)
         logger.info(f"good model path: {good_checkpoint.last_checkpoint}")
         logger.info(f"last model path: {last_checkpoint.last_checkpoint}")
         logger.info(f"load checkpoint path: {checkpoint_}")
         logger.info(f"save model path: {args.model_path}")
     # if checking the trained items, use this mode.
+    elif args.do_optuna:
+        def optimizer(trial: optuna.Trial):
+            """optuna optimize function
+            Args:
+                trial:
+
+            Returns:
+
+            """
+            lr = trial.suggest_loguniform(LR, 1e-6, 1e-4)
+            lr_story = trial.suggest_loguniform(LR_STORY, 1e-6, 1e-4)
+            lr_relation = trial.suggest_loguniform(LR_RELATION, 1e-6, 1e-4)
+            lr_entity = trial.suggest_loguniform(LR_ENTITY, 1e-6, 1e-4)
+            loss_function = trial.suggest_categorical(LOSS_FUNCTION, LossFnName.ALL_LIST())
+            gamma = trial.suggest_uniform(GAMMA, 0.0, 5.0)
+            _hyper_params = (
+                lr, lr_story, lr_relation, lr_entity,
+                loss_function, args.loss_weight_story, args.loss_weight_relation, args.loss_weight_entity,
+                {GAMMA: gamma}
+            )
+            # check the output of the training.
+            _train_returns, _, _, _ = func(_hyper_params)
+            _evaluator: Engine = _train_returns[EVALUATOR]
+            _evaluator.run(data_loaders.valid_dataloader)
+            return _evaluator.state.metrics[LOSS]
+
+        logger.info("---------- Optuna ----------")
+        logger.info(f"---- name: {args.study_name}, trial num: {args.n_trials}, save file: {args.optuna_file} ----")
+        study = optuna.create_study(
+            study_name=args.study_name, storage=f'sqlite:///{PROJECT_DIR}/{args.optuna_file}',
+            load_if_exists=True,  direction='minimize'
+        )
+        study.optimize(optimizer, args.n_trials)
+        train_returns[STUDY] = study
+
     elif args.only_load_trainer_evaluator:
         hyper_params = (0., 0., 0., 0., LossFnName.CROSS_ENTROPY_LOSS, 1., 1., 1.)
         train_returns = pre_training(
