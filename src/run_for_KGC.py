@@ -793,7 +793,7 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
             args, _hyper_params, data_helper, data_loaders, model, summary_writer=summary_writer, logger=logger)
         # check the output of the training.
         _good_checkpoint, _last_checkpoint = map(train_returns.get, (GOOD_LOSS_CHECKPOINTE, LAST_CHECKPOINTE))
-        _checkpoint = last_checkpoint.last_checkpoint if args.only_train else good_checkpoint.last_checkpoint
+        _checkpoint = _last_checkpoint.last_checkpoint if args.only_train else _good_checkpoint.last_checkpoint
         Checkpoint.load_objects(to_load={MODEL: model}, checkpoint=_checkpoint)
         # re-save as cpu model
         save_model(model, _model_path, device=args.device)
@@ -812,7 +812,7 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
         logger.info(f"last model path: {last_checkpoint.last_checkpoint}")
         logger.info(f"load checkpoint path: {checkpoint_}")
         logger.info(f"save model path: {args.model_path}")
-    # if checking the trained items, use this mode.
+    # optuna mode
     elif args.do_optuna:
         def optimizer(trial: optuna.Trial):
             """optuna optimize function
@@ -847,7 +847,7 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
         )
         study.optimize(optimizer, args.n_trials)
         train_returns[STUDY] = study
-
+    # if checking the trained items, use this mode.
     elif args.only_load_trainer_evaluator:
         hyper_params = (0., 0., 0., 0., LossFnName.CROSS_ENTROPY_LOSS, 1., 1., 1.)
         train_returns = pre_training(
