@@ -15,24 +15,40 @@ from itertools import chain
 from logging import Logger
 from operator import itemgetter
 from typing import Optional, Callable, Final, cast, Sequence
-# Machine learning
-import ignite
-import numpy as np
-import pandas as pd
+
 import h5py
+# Machine learning
+import numpy as np
 import optuna
+import pandas as pd
 # torch
 import torch
+# torch ignite
+from ignite.contrib.handlers.tqdm_logger import ProgressBar
+from ignite.engine import Engine
+from ignite.handlers import Checkpoint
+from ignite.metrics import Average, Accuracy
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import Dataset
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
-# torch ignite
-from ignite.contrib.handlers.tqdm_logger import ProgressBar
-from ignite.engine import Engine
-from ignite.handlers import Checkpoint, EarlyStopping
-from ignite.metrics import Average, Accuracy
 
+# My const words about words used as tags
+from const.const_values import (CPU, MODEL, LOSS, PARAMS, LR,
+                                DATA_HELPER, DATASETS, DATA_LOADERS, TRAIN_RETURNS,
+                                STORY_LOSS, RELATION_LOSS, OBJECT_LOSS,
+                                STORY_ACCURACY, RELATION_ACCURACY, ENTITY_ACCURACY,
+                                STORY_ANS, RELATION_ANS, OBJECT_ANS,
+                                STORY_PRED, RELATION_PRED, ENTITY_PRED,
+                                PRE_TRAIN_SCALER_TAG_GETTER, PRE_VALID_SCALER_TAG_GETTER,
+                                PRE_TRAIN_MODEL_WEIGHT_TAG_GETTER,
+                                METRIC_NAMES)
+# My const words about file direction and title
+from const.const_values import (
+    PROJECT_DIR,
+    ALL_TITLE_LIST, SRO_ALL_TRAIN_FILE, SRO_ALL_INFO_FILE, TITLE2SRO_FILE090, TITLE2SRO_FILE075, ABOUT_KILL_WORDS,
+    LR_STORY, LR_RELATION, LR_ENTITY, LOSS_FUNCTION, STUDY,
+)
 # My const words about words used as tags
 from models.KGModel.kg_story_transformer import (
     ALL_WEIGHT_LIST, HEAD_MASKED_LM, TAIL_MASKED_LM, RELATION_MASKED_LM, )
@@ -45,33 +61,17 @@ from models.datasets.data_helper import (
 from models.datasets.datasets_for_story import add_bos, StoryTriple, StoryTripleForValid
 from models.utilLoss.focal_loss import FocalLoss, GAMMA
 from models.utilLoss.utils import LossFnName
-# My utils
-from utils.typing import ConstMeta
 from utils.error import UnderDevelopmentError
 from utils.torch import save_model, torch_fix_seed, DeviceName
+# My const value about torch ignite
+from utils.torch_ignite import (TRAINER, EVALUATOR, GOOD_LOSS_CHECKPOINTE, LAST_CHECKPOINTE)
 from utils.torch_ignite import (
     set_write_model_param_function, set_start_epoch_function, set_end_epoch_function,
     set_valid_function, training_with_ignite, set_early_stopping_function
 )
+# My utils
+from utils.typing import ConstMeta
 from utils.utils import version_check
-# My const words about file direction and title
-from const.const_values import (
-    PROJECT_DIR,
-    ALL_TITLE_LIST, SRO_ALL_TRAIN_FILE, SRO_ALL_INFO_FILE, TITLE2SRO_FILE090, TITLE2SRO_FILE075, ABOUT_KILL_WORDS,
-    LR_STORY, LR_RELATION, LR_ENTITY, LOSS_FUNCTION, STUDY,
-)
-# My const words about words used as tags
-from const.const_values import (CPU, MODEL, LOSS, PARAMS, LR,
-                                DATA_HELPER, DATASETS, DATA_LOADERS, TRAIN_RETURNS,
-                                STORY_LOSS, RELATION_LOSS, OBJECT_LOSS,
-                                STORY_ACCURACY, RELATION_ACCURACY, ENTITY_ACCURACY,
-                                STORY_ANS, RELATION_ANS, OBJECT_ANS,
-                                STORY_PRED, RELATION_PRED, ENTITY_PRED,
-                                PRE_TRAIN_SCALER_TAG_GETTER, PRE_VALID_SCALER_TAG_GETTER,
-                                PRE_TRAIN_MODEL_WEIGHT_TAG_GETTER,
-                                METRIC_NAMES)
-# My const value about torch ignite
-from utils.torch_ignite import (TRAINER, EVALUATOR, GOOD_LOSS_CHECKPOINTE, LAST_CHECKPOINTE)
 
 
 class ModelVersion(metaclass=ConstMeta):
@@ -540,9 +540,9 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         if args.early_stopping:
             set_early_stopping_function(
                 trainer, evaluator, args.early_stopping_count, lambda engine: -engine.state.metrics[LOSS])
-
     else:
         evaluator, evaluator_matrix = None, None
+        pass
 
     # Interrupt
     if args.only_load_trainer_evaluator:
@@ -778,8 +778,6 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
     """
     # Now we are ready to start except for the hyper parameters.
     summary_writer = SummaryWriter(log_dir=args.tensorboard_dir) if args.tensorboard_dir is not None else None
-    train_returns = {
-        MODEL: None, TRAINER: None, EVALUATOR: None, LAST_CHECKPOINTE: None, GOOD_LOSS_CHECKPOINTE: None, STUDY: None}
 
     def func(_hyper_params):
         """Training and save checkpoint.
@@ -792,7 +790,7 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
         _train_returns = pre_training(
             args, _hyper_params, data_helper, data_loaders, model, summary_writer=summary_writer, logger=logger)
         # check the output of the training.
-        _good_checkpoint, _last_checkpoint = map(train_returns.get, (GOOD_LOSS_CHECKPOINTE, LAST_CHECKPOINTE))
+        _good_checkpoint, _last_checkpoint = map(_train_returns.get, (GOOD_LOSS_CHECKPOINTE, LAST_CHECKPOINTE))
         _checkpoint = _last_checkpoint.last_checkpoint if args.only_train else _good_checkpoint.last_checkpoint
         Checkpoint.load_objects(to_load={MODEL: model}, checkpoint=_checkpoint)
         # re-save as cpu model
@@ -846,13 +844,15 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
             load_if_exists=True,  direction='minimize'
         )
         study.optimize(optimizer, args.n_trials)
-        train_returns[STUDY] = study
+        train_returns = {STUDY: study, }
     # if checking the trained items, use this mode.
     elif args.only_load_trainer_evaluator:
         hyper_params = (0., 0., 0., 0., LossFnName.CROSS_ENTROPY_LOSS, 1., 1., 1.)
         train_returns = pre_training(
             args, hyper_params, data_helper, data_loaders, model, summary_writer=summary_writer, logger=logger)
-
+    else:
+        train_returns = {}
+        pass
     return train_returns
 
 
