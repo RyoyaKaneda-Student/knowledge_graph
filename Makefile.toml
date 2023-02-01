@@ -2079,7 +2079,7 @@ Epoch="1000"
 
 python3 -O src/run_for_KGC.py   \
 	--device cuda --console-level info --pre-train --model-version 03 \
-	--train-valid-test --epoch ${Epoch} --batch-size 128 \
+	--train-valid-test --epoch ${Epoch} --batch-size 64 --train-anyway \
 	--early-stopping --early-stopping-count 10 \
 	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
 	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
@@ -2119,7 +2119,7 @@ Epoch="1000"
 
 python3 -O src/run_for_KGC.py   \
 	--device cuda --console-level info --pre-train --model-version 03a --init-embedding-using-bert \
-	--train-valid-test --epoch ${Epoch} --batch-size 128 \
+	--train-valid-test --epoch ${Epoch} --batch-size 64 --train-anyway \
 	--early-stopping --early-stopping-count 10 \
 	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
 	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
