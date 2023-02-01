@@ -32,7 +32,29 @@ from torch.nn import CrossEntropyLoss
 from torch.utils.data import Dataset
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
-
+# My Models
+from models.KGModel.kg_story_transformer import (
+    KgStoryTransformer01, KgStoryTransformer02, KgStoryTransformer03, KgStoryTransformer03preInit,
+    KgStoryTransformer00, KgStoryTransformer)
+from models.datasets.data_helper import (
+    MyDataHelper, DefaultTokens, DefaultIds, SpecialTokens01 as SpecialTokens, MyDataLoaderHelper, )
+from models.datasets.datasets_for_story import add_bos, StoryTriple, StoryTripleForValid
+from models.utilLoss.focal_loss import FocalLoss, GAMMA
+from models.utilLoss.utils import LossFnName
+# My utils
+from utils.error import UnderDevelopmentError
+from utils.torch import save_model, torch_fix_seed, DeviceName
+from utils.typing import ConstMeta
+from utils.utils import version_check
+from utils.torch_ignite import (
+    set_write_model_param_function, set_start_epoch_function, set_end_epoch_function,
+    set_valid_function, training_with_ignite, set_early_stopping_function
+)
+# My const words about words used as tags
+from models.KGModel.kg_story_transformer import (
+    ALL_WEIGHT_LIST, HEAD_MASKED_LM, TAIL_MASKED_LM, RELATION_MASKED_LM, )
+# My const value about torch ignite
+from utils.torch_ignite import (TRAINER, EVALUATOR, GOOD_LOSS_CHECKPOINTE, LAST_CHECKPOINTE)
 # My const words about words used as tags
 from const.const_values import (CPU, MODEL, LOSS, PARAMS, LR,
                                 DATA_HELPER, DATASETS, DATA_LOADERS, TRAIN_RETURNS,
@@ -49,29 +71,8 @@ from const.const_values import (
     ALL_TITLE_LIST, SRO_ALL_TRAIN_FILE, SRO_ALL_INFO_FILE, TITLE2SRO_FILE090, TITLE2SRO_FILE075, ABOUT_KILL_WORDS,
     LR_STORY, LR_RELATION, LR_ENTITY, LOSS_FUNCTION, STUDY,
 )
-# My const words about words used as tags
-from models.KGModel.kg_story_transformer import (
-    ALL_WEIGHT_LIST, HEAD_MASKED_LM, TAIL_MASKED_LM, RELATION_MASKED_LM, )
-# My Models
-from models.KGModel.kg_story_transformer import (
-    KgStoryTransformer01, KgStoryTransformer02, KgStoryTransformer03, KgStoryTransformer03preInit,
-    KgStoryTransformer00, KgStoryTransformer)
-from models.datasets.data_helper import (
-    MyDataHelper, DefaultTokens, DefaultIds, SpecialTokens01 as SpecialTokens, MyDataLoaderHelper, )
-from models.datasets.datasets_for_story import add_bos, StoryTriple, StoryTripleForValid
-from models.utilLoss.focal_loss import FocalLoss, GAMMA
-from models.utilLoss.utils import LossFnName
-from utils.error import UnderDevelopmentError
-from utils.torch import save_model, torch_fix_seed, DeviceName
-# My const value about torch ignite
-from utils.torch_ignite import (TRAINER, EVALUATOR, GOOD_LOSS_CHECKPOINTE, LAST_CHECKPOINTE)
-from utils.torch_ignite import (
-    set_write_model_param_function, set_start_epoch_function, set_end_epoch_function,
-    set_valid_function, training_with_ignite, set_early_stopping_function
-)
-# My utils
-from utils.typing import ConstMeta
-from utils.utils import version_check
+
+
 
 
 class ModelVersion(metaclass=ConstMeta):
@@ -456,10 +457,6 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         # triple.shape == (batch, max_len, 3)
         # valid_filter.shape == (batch, max_len)
 
-        valid_ans_story = triple[:, :, 0][valid_filter]
-        valid_ans_relation = triple[:, :, 1][valid_filter]
-        valid_ans_object = triple[:, :, 2][valid_filter]
-
         triple_for_valid = triple.clone()
         triple_for_valid[:, :, 0][valid_filter] = mask_token_e
         _, (story_pred, _, _) = model(triple_for_valid, valid_filter, None, None)
@@ -472,22 +469,26 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         triple_for_valid[:, :, 2][valid_filter] = mask_token_e
         _, (_, _, entity_pred) = model(triple_for_valid, None, None, valid_filter)
 
+        story_valid_ans = triple[:, :, 0][valid_filter]
+        relation_valid_ans = triple[:, :, 1][valid_filter]
+        object_valid_ans = triple[:, :, 2][valid_filter]
+
         loss: torch.Tensor = torch.tensor(0, dtype=torch.float).to(device)
         story_loss, relation_loss, object_loss = None, None, None
-        if len(valid_ans_story) > 0:
-            story_loss = loss_fn_entity(story_pred, valid_ans_story)
-            loss += story_loss  # * valid_ans_story
-            relation_loss = loss_fn_relation(relation_pred, valid_ans_relation)
-            loss += relation_loss  # * valid_ans_relation
-            object_loss = loss_fn_entity(entity_pred, valid_ans_object)
+        if len(story_valid_ans) > 0:
+            story_loss = loss_fn_entity(story_pred, story_valid_ans)
+            loss += story_loss  # * story_valid_ans
+            relation_loss = loss_fn_relation(relation_pred, relation_valid_ans)
+            loss += relation_loss  # * relation_valid_ans
+            object_loss = loss_fn_entity(entity_pred, object_valid_ans)
             if object_loss < 0: raise ValueError("error")
-            loss += object_loss  # * valid_ans_object
+            loss += object_loss  # * object_valid_ans
 
         # return dict
         return_dict = {
-            STORY_ANS: cpu_deep_copy_or_none(valid_ans_story),
-            RELATION_ANS: cpu_deep_copy_or_none(valid_ans_relation),
-            OBJECT_ANS: cpu_deep_copy_or_none(valid_ans_object),
+            STORY_ANS: cpu_deep_copy_or_none(story_valid_ans),
+            RELATION_ANS: cpu_deep_copy_or_none(relation_valid_ans),
+            OBJECT_ANS: cpu_deep_copy_or_none(object_valid_ans),
             STORY_PRED: cpu_deep_copy_or_none(story_pred),
             RELATION_PRED: cpu_deep_copy_or_none(relation_pred),
             ENTITY_PRED: cpu_deep_copy_or_none(entity_pred),
