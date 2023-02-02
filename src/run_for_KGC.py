@@ -73,8 +73,6 @@ from const.const_values import (
 )
 
 
-
-
 class ModelVersion(metaclass=ConstMeta):
     """Model Versions
 
@@ -274,7 +272,7 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         data_helper(MyDataHelper): MyDataHelper instance.
         data_loaders(MyDataLoaderHelper): MyDataLoaderHelper instance. It has .train_dataloader and .valid_dataloader.
         model(KgStoryTransformer): model.
-        summary_writer(SummaryWriter): tensorboard's SummaryWriter instance. if it is None, don't write to tensorboard.
+        summary_writer(SummaryWriter|None): tensorboard's SummaryWriter instance. if it is None, don't write to tensorboard.
         logger(Logger): logging.Logger.
 
     Returns:
@@ -778,9 +776,7 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
 
     """
     # Now we are ready to start except for the hyper parameters.
-    summary_writer = SummaryWriter(log_dir=args.tensorboard_dir) if args.tensorboard_dir is not None else None
-
-    def func(_hyper_params):
+    def func(_hyper_params, _summary_writer):
         """Training and save checkpoint.
 
         """
@@ -789,7 +785,7 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
         if _model_path is None: raise ValueError("model path must not None")
         # training.
         _train_returns = pre_training(
-            args, _hyper_params, data_helper, data_loaders, model, summary_writer=summary_writer, logger=logger)
+            args, _hyper_params, data_helper, data_loaders, model, summary_writer=_summary_writer, logger=logger)
         # check the output of the training.
         _good_checkpoint, _last_checkpoint = map(_train_returns.get, (GOOD_LOSS_CHECKPOINTE, LAST_CHECKPOINTE))
         _checkpoint = _last_checkpoint.last_checkpoint if args.only_train else _good_checkpoint.last_checkpoint
@@ -799,20 +795,21 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
         return _train_returns, _good_checkpoint, _last_checkpoint, _checkpoint
 
     # default mode
-    if args.pre_train:
+    if args.pre_train and not args.do_optuna:
+        summary_writer = SummaryWriter(log_dir=args.tensorboard_dir) if args.tensorboard_dir is not None else None
         # setting hyper parameter
         hyper_params = (
             args.lr, args.lr_story or args.lr, args.lr_relation or args.lr, args.lr_entity or args.lr,
             args.loss_function, args.loss_weight_story, args.loss_weight_relation, args.loss_weight_story,
             {GAMMA: args.gamma}
         )
-        train_returns, good_checkpoint, last_checkpoint, checkpoint_ = func(hyper_params)
+        train_returns, good_checkpoint, last_checkpoint, checkpoint_ = func(hyper_params, summary_writer)
         logger.info(f"good model path: {good_checkpoint.last_checkpoint}")
         logger.info(f"last model path: {last_checkpoint.last_checkpoint}")
         logger.info(f"load checkpoint path: {checkpoint_}")
         logger.info(f"save model path: {args.model_path}")
     # optuna mode
-    elif args.do_optuna:
+    elif args.pre_train and args.do_optuna:
         def optimizer(trial: optuna.Trial):
             """optuna optimize function
             Args:
@@ -821,36 +818,36 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
             Returns:
 
             """
-            lr = trial.suggest_loguniform(LR, 1e-6, 1e-4)
-            lr_story = trial.suggest_loguniform(LR_STORY, 1e-6, 1e-4)
-            lr_relation = trial.suggest_loguniform(LR_RELATION, 1e-6, 1e-4)
-            lr_entity = trial.suggest_loguniform(LR_ENTITY, 1e-6, 1e-4)
+            _summary_writer = SummaryWriter(
+                log_dir=f"{args.tensorboard_dir}/{trial.number}") if args.tensorboard_dir is not None else None
+            lr = trial.suggest_float(LR, 1e-6, 1e-4, log=True)
+            lr_story = trial.suggest_float(LR_STORY, 1e-5, 1e-3, log=True)
+            lr_relation = trial.suggest_float(LR_RELATION, 1e-6, 1e-4, log=True)
+            lr_entity = trial.suggest_float(LR_ENTITY, 1e-6, 1e-4, log=True)
             loss_function = trial.suggest_categorical(LOSS_FUNCTION, LossFnName.ALL_LIST())
-            gamma = trial.suggest_uniform(GAMMA, 0.0, 5.0)
-            _hyper_params = (
-                lr, lr_story, lr_relation, lr_entity,
-                loss_function, args.loss_weight_story, args.loss_weight_relation, args.loss_weight_entity,
-                {GAMMA: gamma}
-            )
+            gamma = trial.suggest_float(GAMMA, 1e-6, 5.0) if loss_function == LossFnName.FOCAL_LOSS else None
+            _hyper_params = (lr, lr_story, lr_relation, lr_entity, loss_function,
+                             args.loss_weight_story, args.loss_weight_relation, args.loss_weight_entity,
+                             {GAMMA: gamma})
             # check the output of the training.
-            _train_returns, _, _, _ = func(_hyper_params)
-            _evaluator: Engine = _train_returns[EVALUATOR]
+            _train_returns, _, _, _ = func(_hyper_params, _summary_writer)
+            _evaluator = _train_returns[EVALUATOR]
             _evaluator.run(data_loaders.valid_dataloader)
-            return _evaluator.state.metrics[LOSS]
+            return _evaluator.state.metrics[OBJECT_LOSS]
 
         logger.info("---------- Optuna ----------")
         logger.info(f"---- name: {args.study_name}, trial num: {args.n_trials}, save file: {args.optuna_file} ----")
         study = optuna.create_study(
             study_name=args.study_name, storage=f'sqlite:///{PROJECT_DIR}/{args.optuna_file}',
-            load_if_exists=True,  direction='minimize'
+            load_if_exists=True, direction='minimize'
         )
-        study.optimize(optimizer, args.n_trials)
+        study.optimize(optimizer, args.n_trials, gc_after_trial=True)
         train_returns = {STUDY: study, }
     # if checking the trained items, use this mode.
     elif args.only_load_trainer_evaluator:
         hyper_params = (0., 0., 0., 0., LossFnName.CROSS_ENTROPY_LOSS, 1., 1., 1.)
         train_returns = pre_training(
-            args, hyper_params, data_helper, data_loaders, model, summary_writer=summary_writer, logger=logger)
+            args, hyper_params, data_helper, data_loaders, model, summary_writer=None, logger=logger)
     else:
         train_returns = {}
         pass
