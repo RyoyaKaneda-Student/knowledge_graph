@@ -2180,12 +2180,12 @@ python3 -O src/run_for_KGC.py   \
 	]
 description = ""
 
-[tasks.kgc_0201]
+[tasks.kgc_0202]
 workspace = false
 script = [
 '''
 #!/usr/bin/env bash
-Logfile="models/230201/01"
+Logfile="models/230202/01"
 EmbeddingDim="128"
 EEmbeddingDim="768"
 REmbeddingDim="64"
@@ -2211,5 +2211,3 @@ python3 -O src/run_for_KGC.py   \
 	'''
 	]
 description = "kgc model ver 03 focal loss (Compare with models that use Bert)"
-
-python src/run_for_KGC.py --pre-train --model-path log/test.pth --train-valid-test --batch-size 256
