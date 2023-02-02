@@ -137,6 +137,7 @@ class DefaultIds(metaclass=ConstMeta):
 class DefaultTokenIds:
     """DefaultTokenIds
     """
+
     @staticmethod
     def default_token2ids_e():
         """default_token to ids_e
@@ -199,6 +200,7 @@ def make_change_index_func(_length: int, special_ids: Iterable[int]):
 class SpecialTokens:
     """SpecialTokens
     """
+
     @classmethod
     def default(cls):
         """return itself.
@@ -704,7 +706,7 @@ class MyDataLoaderHelper:
 def main():
     """Main class for check its movement.
     """
-    print("a")
+
     SRO_FOLDER = f"{PROJECT_DIR}/data/processed/KGCdata/All/SRO"
     SRO_ALL_INFO_FILE = f"{SRO_FOLDER}/info.hdf5"
     SRO_ALL_TRAIN_FILE = f"{SRO_FOLDER}/train.hdf5"
@@ -716,6 +718,10 @@ def main():
                                relation_special_dicts={0: '<pad>', 1: 'cls'},
                                logger=logger)
     logger.debug(data_helper.processed_train_triple_geometric)
+    logger.debug(data_helper.processed_entities)
+
+    print(data_helper.entity_special_ids)
+    print(data_helper.processed_entities)
 
 
 if __name__ == '__main__':

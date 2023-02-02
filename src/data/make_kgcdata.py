@@ -30,7 +30,6 @@ from utils.utils import get_pure_path
 # get PROJECT_DIR
 from const.const_values import PROJECT_DIR
 
-
 DATA_FOLDER_PATH: Final = f"{PROJECT_DIR}/data/external/KGRC-RDF"
 WRITE1_FILE_PATH: Final = f"{PROJECT_DIR}/data/external/KGCdata/story_list.hdf5"
 WRITE2_SVO_INFO_FILE: Final = lambda title: f"{PROJECT_DIR}/data/processed/KGCdata/{title}/SVO/info.hdf5"
@@ -45,7 +44,7 @@ PREFIX_PREDICATE: Final = 'word.predicate'
 KGC_TYPE: Final = 'kgc:type'
 KGC_LABEL: Final = 'kgc:label'
 
-logger: Logger = None
+logger: Logger | None = None
 
 
 class KGC(DefinedNamespace):
@@ -362,6 +361,22 @@ def get_triples(graph_: Graph, namespace_dict: NamespaceDict, title: str, story_
     return triple_dict, tuple(zip(*subj_haspred_obj)), tuple(zip(*story_pred_obj))
 
 
+def del_duplication(_str_list: list[str], _label_list: list[str]):
+    """delete str_list duplication and reflected in label_list.
+
+    Args:
+        _str_list: list[str]: item names list.
+        _label_list: list[str]: item labels list.
+
+    Returns:
+        tuple[list[str], list[str]]: not duplication str_list and label_list.
+            Note that sometimes label_list is duplicate but it is OK.
+
+    """
+    _dict = {key: value for key, value in zip(_str_list, _label_list)}
+    return list(_dict.keys()), list(_dict.values())
+
+
 # noinspection PyTypeChecker
 def get_label_list(graph_: Graph, node_list: Iterable[URIRef]):
     """get label list
@@ -601,24 +616,12 @@ def write_():
             all_subj_haspred_obj_array_list.append(spo_array)
             all_story_pred_obj_array_list.append(po_array)
 
-        def del_duplication(_str_list: list[str], _label_list: list[str]):
-            """delete str_list duplication and reflected in label_list.
-
-            Args:
-                _str_list: list[str]: item names list.
-                _label_list: list[str]: item labels list.
-
-            Returns:
-                tuple[list[str], list[str]]: not duplication str_list and label_list.
-                    Note that sometimes label_list is duplicate but it is OK.
-
-            """
-            _dict = {key: value for key, value in zip(_str_list, _label_list)}
-            return list(_dict.keys()), list(_dict.values())
-
         all_objects_str_list, all_objects_label_list = del_duplication(all_objects_str_list, all_objects_label_list)
         all_pure_objects_str_list, all_pure_objects_label_list = del_duplication(
             all_pure_objects_str_list, all_pure_objects_label_list)
+
+        all_people_str_list = [HOLMES_ALT_NAME, WATSON_ALT_NAME] + all_people_str_list
+        all_people_label_list = ['Holmes', 'Watson'] + all_people_label_list
         all_people_str_list, all_people_label_list = del_duplication(all_people_str_list, all_people_label_list)
         all_actions_str_list, all_actions_label_list = del_duplication(all_actions_str_list, all_actions_label_list)
         #
@@ -709,13 +712,16 @@ def write2_svo(title: str, read_group: Group):
         *(read_group[TAGS1.PURE_OBJECTS][()]),
     )]
     # logger.debug(entity_list)
-    entity_label_list = ['holmes', 'watson'] + [b.decode('utf-8') for b in (
+    entity_label_list = ['Holmes', 'Watson'] + [b.decode('utf-8') for b in (
         *(read_group[TAGS1.PEOPLE_LABEL][()]),
         *([b'' for _ in read_group[TAGS1.STORIES][()]]),
         *(read_group[TAGS1.OBJECTS_LABEL][()]),
     )]
     relation_list = [b.decode('utf-8') for b in read_group[TAGS1.ACTIONS][()]]
     relation_label_list = [b.decode('utf-8') for b in read_group[TAGS1.ACTIONS_LABEL][()]]
+    entity_list, entity_label_list = del_duplication(entity_list, entity_label_list)
+    relation_list, relation_label_list = del_duplication(relation_list, relation_label_list)
+
     entity_dict = {e: i for i, e in enumerate(entity_list)}
     relation_dict = {r: i for i, r in enumerate(relation_list)}
 
@@ -764,11 +770,13 @@ def write2_sro(title: str, read_group: Group, general_read_group: Group):
         *[b'' for _ in read_group[TAGS1.STORIES][()]],
         *(read_group[TAGS1.ACTIONS_LABEL][()]),
     )]
-    entity_dict = {e: i for i, e in enumerate(entity_list)}
-    entity_label_dict = {e: l for e, l in zip(entity_list, entity_label_list)}
-    assert len(entity_dict) == len(entity_label_dict)
     relation_list = [b.decode('utf-8') for b in general_read_group[TAGS1.RELATION][()]]
     relation_label_list = ['' for _ in general_read_group[TAGS1.RELATION][()]]
+    entity_list, entity_label_list = del_duplication(entity_list, entity_label_list)
+    relation_list, relation_label_list = del_duplication(relation_list, relation_label_list)
+
+    entity_dict = {e: i for i, e in enumerate(entity_list)}
+
     relation_dict = {r: i for i, r in enumerate(relation_list)}
     sro_triple = np.array([
         [entity_dict[s.decode('utf-8')], relation_dict[r.decode('utf-8')], entity_dict[o.decode('utf-8')]]
