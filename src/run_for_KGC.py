@@ -587,7 +587,10 @@ def make_get_data_helper(args: Namespace, *, logger: Logger):
             logger.info("----- use old data (version 1) -----")
             train_file = train_file.replace('data', 'data.tmp1', 1)
             info_file = info_file.replace('data', 'data.tmp1', 1)
-        pass
+        if args.old_data == 2:
+            logger.info("----- use old data (version 2) -----")
+            train_file = train_file.replace('data', 'data.tmp2', 1)
+            info_file = info_file.replace('data', 'data.tmp2', 1)
     entity_special_dicts = {
         pad_token_e: DefaultTokens.PAD_E, cls_token_e: DefaultTokens.CLS_E, mask_token_e: DefaultTokens.MASK_E,
         sep_token_e: DefaultTokens.SEP_E, bos_token_e: DefaultTokens.BOS_E
