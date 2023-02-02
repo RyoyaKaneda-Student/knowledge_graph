@@ -58,6 +58,7 @@ networkx = {version = "^3.0", source = "pypi"}
 optional = true
 
 [tool.poetry.group.jupyter.dependencies]
+jupyter = { version = "^1.0.0", source = "pypi" }
 notebook = { version = "^6.5.2", source = "pypi" }
 seaborn = { version = "^0.12.1", source = "pypi"}
 jupyterlab = { version = "^3.0.16", source = "pypi" }
