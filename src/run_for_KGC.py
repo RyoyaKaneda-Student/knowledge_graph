@@ -580,11 +580,13 @@ def make_get_data_helper(args: Namespace, *, logger: Logger):
     if is_090: train_file = TITLE2SRO_FILE090[use_title]
     elif is_075: train_file = TITLE2SRO_FILE075[use_title]
     else: train_file = SRO_ALL_TRAIN_FILE
+    info_file = SRO_ALL_INFO_FILE
 
     if getattr(args, 'old_data', None):
         if args.old_data == 1:
             logger.info("----- use old data (version 1) -----")
             train_file = train_file.replace('data', 'data.tmp1', 1)
+            info_file = info_file.replace('data', 'data.tmp1', 1)
         pass
     entity_special_dicts = {
         pad_token_e: DefaultTokens.PAD_E, cls_token_e: DefaultTokens.CLS_E, mask_token_e: DefaultTokens.MASK_E,
@@ -594,7 +596,7 @@ def make_get_data_helper(args: Namespace, *, logger: Logger):
         pad_token_r: DefaultTokens.PAD_R, cls_token_r: DefaultTokens.CLS_R, mask_token_r: DefaultTokens.MASK_R,
         sep_token_r: DefaultTokens.SEP_R, bos_token_r: DefaultTokens.BOS_R
     }
-    data_helper = MyDataHelper(SRO_ALL_INFO_FILE, train_file, None, None, logger=logger,
+    data_helper = MyDataHelper(info_file, train_file, None, None, logger=logger,
                                entity_special_dicts=entity_special_dicts, relation_special_dicts=relation_special_dicts)
     data_helper.show(logger)
     return data_helper
