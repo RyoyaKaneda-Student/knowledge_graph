@@ -536,14 +536,14 @@ def write1_one_title(f, title_ja, title, l100, l090, l080, l075):
         _label_list = get_label_list(graph_, _list)
         return _list, _str_list, _label_list
 
-    objects_node_list = get_type_match_list(graph_, OBJECT_SET)
-    people_node_list = get_type_match_list(graph_, PEOPLE_SET)
-    actions_node_list = get_type_match_list(graph_, ACTION_SET)
+    objects_node_list = sorted(get_type_match_list(graph_, OBJECT_SET))
+    people_node_list = sorted(get_type_match_list(graph_, PEOPLE_SET))
+    actions_node_list = sorted(get_type_match_list(graph_, ACTION_SET))
 
-    scene_set = get_type_match_list(graph_, SCENE_SET)
+    scene_list = get_type_match_list(graph_, SCENE_SET)
     objects_node_list = list(dict.fromkeys(objects_node_list + list(story_pred_obj[2])))
 
-    node_3set_mix = (people_node_list + actions_node_list + scene_set)
+    node_3set_mix = (people_node_list + actions_node_list + scene_list)
     pure_objects_list = [o for o in objects_node_list if o not in node_3set_mix]
 
     objects_node_list, objects_str_list, objects_label_list = make_str_label_list(objects_node_list)
