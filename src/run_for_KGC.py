@@ -583,6 +583,7 @@ def make_get_data_helper(args: Namespace, *, logger: Logger):
 
     if getattr(args, 'old_data', None):
         if args.old_data == 1:
+            logger.info("----- use old data (version 1) -----")
             train_file = train_file.replace('data', 'data.tmp1', 1)
         pass
     entity_special_dicts = {
