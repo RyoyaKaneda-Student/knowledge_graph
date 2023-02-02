@@ -365,7 +365,7 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
                                {PARAMS: model.tail_maskdlm.parameters(), LR: lr_entity},
                            ])
     # loss function setting
-    gamma = other_params[GAMMA]
+    gamma = other_params.get(GAMMA, None)
     if do_weight_loss:
         loss_fn_entity = None
         loss_fn_relation = None
@@ -849,7 +849,7 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
         train_returns = {STUDY: study, }
     # if checking the trained items, use this mode.
     elif args.only_load_trainer_evaluator:
-        hyper_params = (0., 0., 0., 0., LossFnName.CROSS_ENTROPY_LOSS, 1., 1., 1.)
+        hyper_params = (0., 0., 0., 0., LossFnName.CROSS_ENTROPY_LOSS, 1., 1., 1., {})
         train_returns = pre_training(
             args, hyper_params, data_helper, data_loaders, model, summary_writer=None, logger=logger)
     else:
