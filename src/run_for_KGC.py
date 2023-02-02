@@ -116,6 +116,8 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
     paa('--param-file', help='the path of saving param', type=str, default='log/param.pkl')
     paa('--device-name', help=DeviceName.ALL_INFO, type=str, default=DeviceName.CPU, choices=DeviceName.ALL_LIST)
     paa('--train-anyway', help='It will not be reproducible, but it could be faster.', action='store_true')
+    paa('--old-data', type=int, default=0,
+        help='If you use old data, please enter the number. Basically, do not put anything in.')
     # save dir setting
     parser_group01 = parser.add_argument_group('dir and path', 'There are the setting of training setting dir or path.')
     paa1 = parser_group01.add_argument
@@ -575,9 +577,14 @@ def make_get_data_helper(args: Namespace, *, logger: Logger):
     if is_090 or is_075:
         if not args.only_train: raise ValueError("If use for challenge, --only-train must True")
         if args.use_title is None: raise ValueError("--use-title must not None.")
+    if is_090: train_file = TITLE2SRO_FILE090[use_title]
+    elif is_075: train_file = TITLE2SRO_FILE075[use_title]
+    else: train_file = SRO_ALL_TRAIN_FILE
 
-    train_file = TITLE2SRO_FILE090[use_title] if is_090 else TITLE2SRO_FILE075[
-        use_title] if is_075 else SRO_ALL_TRAIN_FILE
+    if getattr(args, 'old_data', None):
+        if args.old_data == 1:
+            train_file = train_file.replace('data', 'data.tmp1', 1)
+        pass
     entity_special_dicts = {
         pad_token_e: DefaultTokens.PAD_E, cls_token_e: DefaultTokens.CLS_E, mask_token_e: DefaultTokens.MASK_E,
         sep_token_e: DefaultTokens.SEP_E, bos_token_e: DefaultTokens.BOS_E
