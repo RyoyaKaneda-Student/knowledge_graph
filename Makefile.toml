@@ -2753,4 +2753,4 @@ dependencies = [
 	"kgc_SilverBlaze075_03final", "kgc_SilverBlaze090_03final",
 ]
 
-description = "kgc model ver 03 focal loss and pre embedding with BERT"
+description = ""
