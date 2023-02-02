@@ -775,6 +775,7 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
         dict: Keys=(MODEL, TRAINER, EVALUATOR, CHECKPOINTER_LAST, CHECKPOINTER_GOOD_LOSS)
 
     """
+
     # Now we are ready to start except for the hyper parameters.
     def func(_hyper_params, _summary_writer):
         """Training and save checkpoint.
@@ -830,6 +831,9 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
                              args.loss_weight_story, args.loss_weight_relation, args.loss_weight_entity,
                              {GAMMA: gamma})
             # check the output of the training.
+            _summary_writer.add_text(
+                'info', "lr={}, lr_story={}, lr_relation={}, lr_entity={}, loss_function={}, gamma={}".format(
+                    lr, lr_story, lr_relation, lr_entity, loss_function, gamma), )
             _train_returns, _, _, _ = func(_hyper_params, _summary_writer)
             _evaluator = _train_returns[EVALUATOR]
             _evaluator.run(data_loaders.valid_dataloader)
