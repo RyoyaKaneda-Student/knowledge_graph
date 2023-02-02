@@ -67,12 +67,13 @@ class StoryTriple(Dataset):
     """Dataset using for Story Triple.
 
     """
+    story_count: int
+    sequence_length: int
+    max_len: int
     padding_tensor: torch.Tensor
     sep_tensor: torch.Tensor
     triple: torch.Tensor
     bos_indexes: torch.Tensor
-    max_len: int
-    _bos_end: torch.Tensor
 
     def __init__(self, triple, bos_indexes, max_len, padding_h, padding_r, padding_t, sep_h, sep_r, sep_t, ):
         """Dataset using for Story Triple.
@@ -90,14 +91,24 @@ class StoryTriple(Dataset):
             sep_r(int): relation sep token
             sep_t(int): tail sep token
         """
-        # set variable
+        story_count = len(bos_indexes)
+        sequence_length = len(triple)
+        triple = np.concatenate([triple, triple[:max_len]])
+        bos_indexes = np.concatenate([bos_indexes, bos_indexes + sequence_length])
+        bos_indexes = bos_indexes[bos_indexes < sequence_length+max_len]
+        # set number
+        self.story_count = story_count
+        self.sequence_length = sequence_length
+        self.max_len = max_len
+        # set tensor
         self.padding_tensor = torch.tensor([padding_h, padding_r, padding_t])
         self.sep_tensor = torch.tensor([sep_h, sep_r, sep_t])
-        self.triple = torch.from_numpy(np.concatenate((triple, triple[:max_len]))).clone()
+        # set items
+        self.triple = torch.from_numpy(triple).clone()
         self.bos_indexes = torch.from_numpy(bos_indexes).clone()
-        self.max_len = max_len
+        # only use in this class
         # make bos_end
-        self._bos_end = torch.stack((self.bos_indexes, self.bos_indexes + self.max_len)).T
+        self._bos_end = torch.stack((self.bos_indexes, self.bos_indexes + max_len)).T
 
     def shuffle_per_1scene(self):
         """shuffle per one scene.
@@ -109,8 +120,10 @@ class StoryTriple(Dataset):
 
         """
         triple = self.triple
+        len_ = len(triple)
         for i, i_next in itertools.pairwise(list(self.bos_indexes) + [len(triple)]):
             triple[i + 1: i_next] = triple[i + 1: i_next][torch.randperm(i_next - (i + 1))]
+        assert len_ == len(triple)
         self.triple = triple
 
     def __getitem__(self, index: int):
@@ -118,7 +131,7 @@ class StoryTriple(Dataset):
         return self.triple[bos_index: end_index]
 
     def __len__(self) -> int:
-        return len(self.bos_indexes)
+        return self.story_count
 
 
 @dataclass(init=False)
@@ -147,8 +160,9 @@ class StoryTripleForValid(StoryTriple):
             sep_t(int): tail sep token
         """
         super().__init__(triple, bos_indexes, max_len, padding_h, padding_r, padding_t, sep_h, sep_r, sep_t)
-        assert len(triple) == len(valid_filter)
         self.valid_filter = torch.from_numpy(np.concatenate((valid_filter, valid_filter[:max_len])))
+        if not len(triple) == len(valid_filter):
+            raise ValueError("len of triple and len of filter must have same size.")
 
     def __getitem__(self, index: int):
         bos, end = self._bos_end[index]
