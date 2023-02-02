@@ -2146,7 +2146,7 @@ script = [
 '''
 #!/usr/bin/env bash
 Logfile="models/230201/01"
-Lr="5e-5"
+Lr="1e-4"
 LrStory="5e-5"
 LrRelation="1e-6"
 LREntity="1e-6"
@@ -2164,7 +2164,7 @@ Epoch="1500"
 
 python3 -O src/run_for_KGC.py   \
 	--device cuda --console-level info --pre-train --model-version 03 \
-	--train-valid-test --epoch ${Epoch} --batch-size 128 \
+	--train-valid-test --epoch ${Epoch} --batch-size 128 --train-anyway \
 	--early-stopping --early-stopping-count 10 \
 	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
 	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
@@ -2178,4 +2178,4 @@ python3 -O src/run_for_KGC.py   \
 	--valid-interval 50 ${@:2}
 	'''
 	]
-description = "kgc model ver 03 focal loss (Compare with models that use Bert)"
+description = ""
