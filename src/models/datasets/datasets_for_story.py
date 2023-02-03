@@ -96,6 +96,7 @@ class StoryTriple(Dataset):
         triple = np.concatenate([triple, triple[:max_len]])
         bos_indexes = np.concatenate([bos_indexes, bos_indexes + sequence_length])
         bos_indexes = bos_indexes[bos_indexes < sequence_length+max_len]
+        assert ((np.array([i for i, _t in enumerate(triple) if _t[0] == 4])) == bos_indexes).all()
         # set number
         self.story_count = story_count
         self.sequence_length = sequence_length

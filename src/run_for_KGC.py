@@ -219,7 +219,8 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
     paa6('--lr-story', type=float, help='learning rate (default: same as --lr)')
     paa6('--lr-relation', type=float, help='learning rate (default: same as --lr)')
     paa6('--lr-entity', type=float, help='learning rate (default: same as --lr)')
-    paa6('--loss-function', type=str, choices=LossFnName.ALL_LIST(), help='loss function (default: CrossEntropyLoss)')
+    paa6('--loss-function', type=str, default=LossFnName.CROSS_ENTROPY_LOSS, choices=LossFnName.ALL_LIST(),
+         help='loss function (default: CrossEntropyLoss)')
     paa6('--loss-weight-story', type=float, default=1., help='loss-weight-story')
     paa6('--loss-weight-relation', type=float, default=1., help='loss-weight-relation')
     paa6('--loss-weight-entity', type=float, default=1., help='loss-weight-entity')
