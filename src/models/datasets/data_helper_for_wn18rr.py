@@ -322,9 +322,7 @@ class MyDataHelperForWN18RR:
 
 
 def main():
-    wn18rr_train_file_path = f"{PROJECT_DIR}/data/external/KGdata/WN18RR/text/train.txt"
-    wn18rr_valid_file_path = f"{PROJECT_DIR}/data/external/KGdata/WN18RR/text/valid.txt"
-    wn18rr_test_file_path = f"{PROJECT_DIR}/data/external/KGdata/WN18RR/text/test.txt"
+
 
     limit = 32
 
