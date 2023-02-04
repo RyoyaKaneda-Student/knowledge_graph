@@ -2197,10 +2197,42 @@ MaskNomaskPercent="0.20"
 Epoch="2000"
 
 python3 -O src/run_for_KGC.py   \
-	--device cuda --console-level info --pre-train --model-version 03 --train-anyway\
+	--device cuda --console-level info --pre-train --model-version 03 --train-anyway \
 	--train-valid-test --epoch ${Epoch} --batch-size 128 --early-stopping --early-stopping-count 10 \
 	--do-optuna --study-name "0202" --n-trials 20 --optuna-file models/optuna.db \
 	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--valid-interval 50 ${@:2}
+	'''
+	]
+description = "kgc model ver 03 focal loss (Compare with models that use Bert)"
+
+[tasks.kgc_0202_2]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/230202/01"
+EmbeddingDim="128"
+EEmbeddingDim="768"
+REmbeddingDim="64"
+MaskPercent="0.30"
+MaskMaskPercent="0.70"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.20"
+
+Epoch="2000"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03a --init-embedding-using-bert --train-anyway \
+	--train-valid-test --epoch ${Epoch} --batch-size 128 --early-stopping --early-stopping-count 10 \
+	--do-optuna --study-name "0202" --n-trials 20 --optuna-file models/optuna.db \
+	--logfile ${Logfile}/log2.log --tensorboard-dir ${Logfile}/tensorboard \
 	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
 	--checkpoint-dir ${Logfile}/checkpoint/ \
 	--max-len 512 \
