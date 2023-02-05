@@ -294,7 +294,7 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
     is_resume_from_checkpoint = args.resume_from_checkpoint
     is_resume_from_last_point = args.resume_from_last_point
 
-    non_blocking = getattr(args, 'non_blocking', False) 
+    non_blocking = getattr(args, 'non_blocking', True)
 
     # optional function
     def cpu_deep_copy_or_none(_tensor: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
