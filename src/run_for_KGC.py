@@ -294,7 +294,7 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
     is_resume_from_checkpoint = args.resume_from_checkpoint
     is_resume_from_last_point = args.resume_from_last_point
 
-    non_blocking = getattr(args, 'non_blocking', True)
+    non_blocking = args.non_blocking
 
     # optional function
     def cpu_deep_copy_or_none(_tensor: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
@@ -939,6 +939,10 @@ def main(args: Optional[Sequence[str]] = None):
     if args.train_anyway:
         logger.warning("This process do not have reproducible.")
         torch.backends.cudnn.benchmark = True
+        args.non_blocking = True
+    else:
+        args.non_blocking = False
+
     version_check(torch, np, pd, h5py, optuna, logger=logger)
     try:
         args.project_dir = PROJECT_DIR
