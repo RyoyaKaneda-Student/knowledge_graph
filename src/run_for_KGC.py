@@ -578,9 +578,12 @@ def make_get_data_helper(args: Namespace, *, logger: Logger):
     if is_090 or is_075:
         if not args.only_train: raise ValueError("If use for challenge, --only-train must True")
         if args.use_title is None: raise ValueError("--use-title must not None.")
-    if is_090: train_file = TITLE2SRO_FILE090[use_title]
-    elif is_075: train_file = TITLE2SRO_FILE075[use_title]
-    else: train_file = SRO_ALL_TRAIN_FILE
+    if is_090:
+        train_file = TITLE2SRO_FILE090[use_title]
+    elif is_075:
+        train_file = TITLE2SRO_FILE075[use_title]
+    else:
+        train_file = SRO_ALL_TRAIN_FILE
     info_file = SRO_ALL_INFO_FILE
 
     if getattr(args, 'old_data', None):
@@ -790,6 +793,7 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, logger: Log
 
     """
     model = None
+
     # Now we are ready to start except for the hyper parameters.
     def func(_hyper_params, _summary_writer):
         """Training and save checkpoint.
@@ -863,7 +867,7 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, logger: Log
             load_if_exists=True, direction='minimize'
         )
         study.optimize(optimizer, args.n_trials, gc_after_trial=True)
-        train_returns = {STUDY: study, }
+        train_returns = {STUDY: study, MODEL: None}
     # if checking the trained items, use this mode.
     elif args.only_load_trainer_evaluator:
         model = make_get_model(args, data_helper=data_helper, logger=logger)
@@ -871,7 +875,7 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, logger: Log
         train_returns = pre_training(
             args, hyper_params, data_helper, data_loaders, model, summary_writer=None, logger=logger)
     else:
-        train_returns = {}
+        train_returns = {MODEL: None}
         pass
     return train_returns
 
@@ -911,7 +915,7 @@ def main_function(args: Namespace, *, logger: Logger):
         args, data_helper=data_helper, data_loaders=data_loaders, logger=logger)
     logger.info('----- do train complete -----')
     # return some value
-    return {MODEL: model, DATA_HELPER: data_helper, DATASETS: datasets,
+    return {MODEL: train_returns[MODEL], DATA_HELPER: data_helper, DATASETS: datasets,
             DATA_LOADERS: data_loaders, TRAIN_RETURNS: train_returns}
 
 
