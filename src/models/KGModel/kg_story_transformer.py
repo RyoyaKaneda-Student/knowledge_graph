@@ -33,7 +33,7 @@ WEIGHT_TAIL: Final = 'weight_tail'
 ALL_WEIGHT_LIST = (WEIGHT_HEAD, WEIGHT_RELATION, WEIGHT_TAIL)
 
 
-class KgStoryTransformer(nn.Module, metaclass=ABCMeta):
+class KgStoryTransformer(nn.Module, ABC):
     """KgStoryTransformer
 
     * get head, relation, tail embedding.
