@@ -2792,7 +2792,7 @@ workspace = false
 script = [
 '''
 #!/usr/bin/env bash
-Logfile="models/230205/01"
+Logfile="models/230205/02"
 Lr="1e-4"
 LrStory="5e-5"
 LrRelation="1e-6"
@@ -2811,7 +2811,7 @@ Epoch="1500"
 
 python3 -O src/run_for_KGC.py   \
 	--device cuda --console-level info --pre-train --model-version 03 \
-	--train-valid-test --epoch ${Epoch} --batch-size 128 --train-anyway \
+	--train-valid-test --epoch ${Epoch} --batch-size 128 \
 	--early-stopping --early-stopping-count 10 \
 	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
 	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
