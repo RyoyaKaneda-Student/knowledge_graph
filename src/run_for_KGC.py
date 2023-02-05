@@ -941,6 +941,7 @@ def main(args: Optional[Sequence[str]] = None):
         torch.backends.cudnn.benchmark = True
         args.non_blocking = True
     else:
+        torch.backends.cudnn.benchmark = False
         args.non_blocking = False
 
     version_check(torch, np, pd, h5py, optuna, logger=logger)
