@@ -322,19 +322,7 @@ class MyDataHelperForWN18RR:
 
 
 def main():
-
-
-    limit = 32
-
-    data_helper = MyDataHelperForWN18RR(
-        wn18rr_train_file_path, wn18rr_valid_file_path, wn18rr_test_file_path, limit,
-        entity_special_dicts={0: '<pad_e>'}, relation_special_dicts={0: '<pad_r>'}
-    )
-
-    print(data_helper.get_processed_train_sequence(0, 0, 0).shape)
-    print(data_helper.get_processed_valid_sequence(0, 0, 0).shape)
-    print(data_helper.get_processed_test_sequence(0, 0, 0).shape)
-    print(data_helper.processed_entity_num)
+    pass
 
 
 if __name__ == '__main__':
