@@ -307,8 +307,8 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">head_activate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">entity_embeddings</span><span class="p">(</span><span class="n">x</span><span class="p">))</span></div></div>
 
 
-<div class="viewcode-block" id="KgStoryTransformer02"><a class="viewcode-back" href="../../../../src.models.KGModel.html#src.models.KGModel.kg_story_transformer.KgStoryTransformer02">[ドキュメント]</a><span class="k">class</span> <span class="nc">KgStoryTransformer02</span><span class="p">(</span><span class="n">KgStoryTransformer00</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;KgStoryTransformer02</span>
+<div class="viewcode-block" id="KgStoryTransformer02"><a class="viewcode-back" href="../../../../src.models.KGModel.html#src.models.KGModel.kg_story_transformer.KgStoryTransformer02">[ドキュメント]</a><span class="k">class</span> <span class="nc">KgSequenceTransformer02</span><span class="p">(</span><span class="n">KgStoryTransformer00</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;KgSequenceTransformer02</span>
 
 <span class="sd">    * Changed from 00.</span>
 <span class="sd">    * --- ---</span>
@@ -319,7 +319,7 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">num_entity</span><span class="p">,</span> <span class="n">num_relations</span><span class="p">,</span> <span class="n">special_tokens</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">KgStoryTransformer02</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">num_entity</span><span class="p">,</span> <span class="n">num_relations</span><span class="p">,</span> <span class="n">special_tokens</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">KgSequenceTransformer02</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">num_entity</span><span class="p">,</span> <span class="n">num_relations</span><span class="p">,</span> <span class="n">special_tokens</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">head_maskdlm</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">relation_maskdlm</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tail_maskdlm</span>
 
         <span class="n">embedding_dim</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">embedding_dim</span>
@@ -338,8 +338,8 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">tail_maskdlm</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="KgStoryTransformer0102"><a class="viewcode-back" href="../../../../src.models.KGModel.html#src.models.KGModel.kg_story_transformer.KgStoryTransformer0102">[ドキュメント]</a><span class="k">class</span> <span class="nc">KgStoryTransformer0102</span><span class="p">(</span><span class="n">KgStoryTransformer01</span><span class="p">,</span> <span class="n">KgStoryTransformer02</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;KgStoryTransformer0102</span>
+<div class="viewcode-block" id="KgStoryTransformer0102"><a class="viewcode-back" href="../../../../src.models.KGModel.html#src.models.KGModel.kg_story_transformer.KgStoryTransformer0102">[ドキュメント]</a><span class="k">class</span> <span class="nc">KgSequenceTransformer0102</span><span class="p">(</span><span class="n">KgStoryTransformer01</span><span class="p">,</span> <span class="n">KgSequenceTransformer02</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;KgSequenceTransformer0102</span>
 
 <span class="sd">    * Changed from 00.</span>
 <span class="sd">    * --- ---</span>
@@ -353,11 +353,11 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">num_entity</span><span class="p">,</span> <span class="n">num_relations</span><span class="p">,</span> <span class="n">special_tokens</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">KgStoryTransformer0102</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">num_entity</span><span class="p">,</span> <span class="n">num_relations</span><span class="p">,</span> <span class="n">special_tokens</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+        <span class="nb">super</span><span class="p">(</span><span class="n">KgSequenceTransformer0102</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">num_entity</span><span class="p">,</span> <span class="n">num_relations</span><span class="p">,</span> <span class="n">special_tokens</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="KgStoryTransformer03"><a class="viewcode-back" href="../../../../src.models.KGModel.html#src.models.KGModel.kg_story_transformer.KgStoryTransformer03">[ドキュメント]</a><span class="k">class</span> <span class="nc">KgStoryTransformer03</span><span class="p">(</span><span class="n">KgStoryTransformer02</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;KgStoryTransformer0102</span>
+<div class="viewcode-block" id="KgStoryTransformer03"><a class="viewcode-back" href="../../../../src.models.KGModel.html#src.models.KGModel.kg_story_transformer.KgStoryTransformer03">[ドキュメント]</a><span class="k">class</span> <span class="nc">KgSequenceTransformer03</span><span class="p">(</span><span class="n">KgSequenceTransformer02</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;KgSequenceTransformer0102</span>
 
 <span class="sd">    * Changed from 00.</span>
 <span class="sd">    * --- ---</span>
@@ -371,7 +371,7 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">num_entity</span><span class="p">,</span> <span class="n">num_relations</span><span class="p">,</span> <span class="n">special_tokens</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">KgStoryTransformer03</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">num_entity</span><span class="p">,</span> <span class="n">num_relations</span><span class="p">,</span> <span class="n">special_tokens</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">KgSequenceTransformer03</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">num_entity</span><span class="p">,</span> <span class="n">num_relations</span><span class="p">,</span> <span class="n">special_tokens</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_head</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_relation</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_tail</span>
         <span class="c1"># get from args</span>
         <span class="n">embedding_dim</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">embedding_dim</span>
@@ -386,8 +386,8 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">pe</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="KgStoryTransformer03preInit"><a class="viewcode-back" href="../../../../src.models.KGModel.html#src.models.KGModel.kg_story_transformer.KgStoryTransformer03preInit">[ドキュメント]</a><span class="k">class</span> <span class="nc">KgStoryTransformer03preInit</span><span class="p">(</span><span class="n">KgStoryTransformer03</span><span class="p">,</span> <span class="n">KgStoryTransformerLabelInit</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;KgStoryTransformer03 and pre init by bert model.</span>
+<div class="viewcode-block" id="KgStoryTransformer03preInit"><a class="viewcode-back" href="../../../../src.models.KGModel.html#src.models.KGModel.kg_story_transformer.KgStoryTransformer03preInit">[ドキュメント]</a><span class="k">class</span> <span class="nc">KgSequenceTransformer03preInit</span><span class="p">(</span><span class="n">KgSequenceTransformer03</span><span class="p">,</span> <span class="n">KgStoryTransformerLabelInit</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;KgSequenceTransformer03 and pre init by bert model.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
     
@@ -397,7 +397,7 @@
 <span class="sd">        change entity embeddings by labels.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">KgStoryTransformer03preInit</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div></div>
+        <span class="nb">super</span><span class="p">(</span><span class="n">KgSequenceTransformer03preInit</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div></div>
 
 
 <span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>

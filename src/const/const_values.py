@@ -32,28 +32,29 @@ LR_RELATION: Final[str] = 'lr_relation'
 LR_ENTITY: Final[str] = 'lr_entity'
 LOSS_FUNCTION: Final[str] = 'loss_function'
 # about training loss tags especially for triple.
-STORY_LOSS: Final[str] = 'story_loss'
+HEAD_LOSS: Final[str] = 'story_loss'
 RELATION_LOSS: Final[str] = 'relation_loss'
-OBJECT_LOSS: Final[str] = 'entity_loss'
-LOSS_NAME3: Final[tuple[str, str, str]] = (STORY_LOSS, RELATION_LOSS, OBJECT_LOSS)
+TAIL_LOSS: Final[str] = 'entity_loss'
+LOSS_NAME3: Final[tuple[str, str, str]] = (HEAD_LOSS, RELATION_LOSS, TAIL_LOSS)
 # about predicate loss tags especially for triple.
-STORY_PRED: Final[str] = 'story_pred'
+HEAD_PRED: Final[str] = 'story_pred'
 RELATION_PRED: Final[str] = 'relation_pred'
-ENTITY_PRED: Final[str] = 'entity_pred'
-PRED_NAME3: Final[tuple[str, str, str]] = (STORY_PRED, RELATION_PRED, ENTITY_PRED)
+TAIL_PRED: Final[str] = 'entity_pred'
+PRED_NAME3: Final[tuple[str, str, str]] = (HEAD_PRED, RELATION_PRED, TAIL_PRED)
 # about answer loss tags especially for triple.
-STORY_ANS: Final[str] = 'story_ans'
+HEAD_ANS: Final[str] = 'story_ans'
 RELATION_ANS: Final[str] = 'relation_ans'
-OBJECT_ANS: Final[str] = 'object_ans'
-ANS_NAME3: Final[tuple[str, str, str]] = (STORY_ANS, RELATION_ANS, OBJECT_ANS)
+TAIL_ANS: Final[str] = 'object_ans'
+ANS_NAME3: Final[tuple[str, str, str]] = (HEAD_ANS, RELATION_ANS, TAIL_ANS)
 # about accuracy loss tags especially for triple.
 STORY_ACCURACY: Final[str] = 'story_accuracy'
 RELATION_ACCURACY: Final[str] = 'relation_accuracy'
 ENTITY_ACCURACY: Final[str] = 'entity_accuracy'
 ACCURACY_NAME3: Final[tuple[str, str, str]] = (STORY_ACCURACY, RELATION_ACCURACY, ENTITY_ACCURACY)
 # about metric tags
-METRIC_NAMES: Final[tuple[str, str, str, str, str, str, str]] = (
-    LOSS, STORY_LOSS, RELATION_LOSS, OBJECT_LOSS, STORY_ACCURACY, RELATION_ACCURACY, ENTITY_ACCURACY)
+HEAD_METRIC_NAMES: Final[tuple[str, str]] = (HEAD_LOSS, STORY_ACCURACY)
+RELATION_METRIC_NAMES: Final[tuple[str, str]] = (RELATION_LOSS, RELATION_ACCURACY)
+TAIL_METRIC_NAMES: Final[tuple[str, str]] = (TAIL_LOSS, ENTITY_ACCURACY)
 
 # about train tags
 TRAIN_SCALER_TAG_GETTER: Final[Callable[[str], str]] = lambda _name: f"{TRAIN}/{_name}"

@@ -34,8 +34,8 @@ from torch.utils.data.dataloader import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
 # My Models
 from models.KGModel.kg_story_transformer import (
-    KgStoryTransformer01, KgStoryTransformer02, KgStoryTransformer03, KgStoryTransformer03preInit,
-    KgStoryTransformer00, KgStoryTransformer)
+    KgSequenceTransformer01, KgSequenceTransformer02, KgSequenceTransformer03, KgSequenceTransformer03preInit,
+    KgSequenceTransformer00, KgSequenceTransformer)
 from models.datasets.data_helper import (
     MyDataHelper, DefaultTokens, DefaultIds, SpecialTokens01 as SpecialTokens, MyDataLoaderHelper, )
 from models.datasets.datasets_for_story import add_bos, StoryTriple, StoryTripleForValid
@@ -58,13 +58,13 @@ from utils.torch_ignite import (TRAINER, EVALUATOR, GOOD_LOSS_CHECKPOINTE, LAST_
 # My const words about words used as tags
 from const.const_values import (CPU, MODEL, LOSS, PARAMS, LR,
                                 DATA_HELPER, DATASETS, DATA_LOADERS, TRAIN_RETURNS,
-                                STORY_LOSS, RELATION_LOSS, OBJECT_LOSS,
+                                HEAD_LOSS, RELATION_LOSS, TAIL_LOSS,
                                 STORY_ACCURACY, RELATION_ACCURACY, ENTITY_ACCURACY,
-                                STORY_ANS, RELATION_ANS, OBJECT_ANS,
-                                STORY_PRED, RELATION_PRED, ENTITY_PRED,
+                                HEAD_ANS, RELATION_ANS, TAIL_ANS,
+                                HEAD_PRED, RELATION_PRED, TAIL_PRED,
                                 PRE_TRAIN_SCALER_TAG_GETTER, PRE_VALID_SCALER_TAG_GETTER,
                                 PRE_TRAIN_MODEL_WEIGHT_TAG_GETTER,
-                                METRIC_NAMES)
+                                HEAD_METRIC_NAMES, RELATION_METRIC_NAMES, TAIL_METRIC_NAMES)
 # My const words about file direction and title
 from const.const_values import (
     PROJECT_DIR,
@@ -201,6 +201,9 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
     paa51('--mask-mask-percent', help='default: 0.80', metavar='mask-rate', type=float, default=0.80)
     paa51('--mask-random-percent', help='default: 0.10', metavar='random-rate', type=float, default=0.10)
     paa51('--mask-nomask-percent', help='default: 0.10', metavar='nomask-rate', type=float, default=0.10)
+    paa51('--skip-head-mask', action='store_true', help='', )
+    paa51('--skip-relation-mask', action='store_true', help='', )
+    paa51('--skip-tail-mask', action='store_true', help='', )
     # transformer
     parser_group052 = parser.add_argument_group(
         'model setting of transformer', 'There are the setting of transformer params in model.')
@@ -274,7 +277,7 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         hyper_params(tuple): hyper parameters.
         data_helper(MyDataHelper): MyDataHelper instance.
         data_loaders(MyDataLoaderHelper): MyDataLoaderHelper instance. It has .train_dataloader and .valid_dataloader.
-        model(KgStoryTransformer): model.
+        model(KgSequenceTransformer): model.
         summary_writer(SummaryWriter|None): tensorboard's SummaryWriter instance. if it is None, don't write to tensorboard.
         logger(Logger): logging.Logger.
 
@@ -293,6 +296,9 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
     resume_checkpoint_path = args.resume_checkpoint_path
     is_resume_from_checkpoint = args.resume_from_checkpoint
     is_resume_from_last_point = args.resume_from_last_point
+
+    is_do_head_mask, is_do_relation_mask, is_do_tail_mask = (
+        not args.skip_head_mask, not args.skip_relation_mask, not args.skip_tail_mask)
 
     non_blocking = args.non_blocking
 
@@ -398,32 +404,39 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         assert triple.shape == (batch_size, max_len, 3)
         # train start
         opt.zero_grad()
+
         triple: torch.Tensor = triple.to(device, non_blocking=non_blocking)
 
-        mask_filter_story, mask_ans_story, mask_value_story = mask_function(
-            torch.rand((batch_size, max_len)), triple[:, :, 0], mask_token_e, head_index2count)
-        mask_filter_relation, mask_ans_relation, mask_value_relation = mask_function(
-            torch.rand((batch_size, max_len)), triple[:, :, 1], mask_token_r, relation_index2count)
-        mask_filter_object, mask_ans_object, mask_value_object = mask_function(
-            torch.rand((batch_size, max_len)), triple[:, :, 2], mask_token_e, tail_index2count)
+        mask_filter_head, mask_filter_relation, mask_filter_tail = None, None, None
+        mask_ans_head, mask_ans_relation, mask_ans_tail = None, None, None
+        if is_do_head_mask:
+            mask_filter_head, mask_ans_head, mask_value_head = mask_function(
+                torch.rand((batch_size, max_len)), triple[:, :, 0], mask_token_e, head_index2count)
+            triple[:, :, 0][mask_filter_head] = mask_value_head
+        if is_do_relation_mask:
+            mask_filter_relation, mask_ans_relation, mask_value_relation = mask_function(
+                torch.rand((batch_size, max_len)), triple[:, :, 1], mask_token_r, relation_index2count)
+            triple[:, :, 1][mask_filter_relation] = mask_value_relation
+        if is_do_tail_mask:
+            mask_filter_tail, mask_ans_tail, mask_value_tail = mask_function(
+                torch.rand((batch_size, max_len)), triple[:, :, 2], mask_token_e, tail_index2count)
+            triple[:, :, 2][mask_filter_tail] = mask_value_tail
 
-        triple[:, :, 0][mask_filter_story] = mask_value_story
-        triple[:, :, 1][mask_filter_relation] = mask_value_relation
-        triple[:, :, 2][mask_filter_object] = mask_value_object
-
-        _, (story_pred, relation_pred, entity_pred) = \
-            model(triple, mask_filter_story, mask_filter_relation, mask_filter_object)
+        _, (head_pred, relation_pred, tail_pred) = model(
+            triple, mask_filter_head, mask_filter_relation, mask_filter_tail
+        )
 
         loss: torch.Tensor = torch.tensor(0, dtype=torch.float).to(device)
         story_loss, relation_loss, object_loss = None, None, None
-        if len(mask_ans_story) > 0:
-            story_loss = loss_fn_entity(story_pred, mask_ans_story)
+
+        if is_do_head_mask and len(mask_ans_head) > 0:
+            story_loss = loss_fn_entity(head_pred, mask_ans_head)
             loss += story_loss * loss_weight_story
-        if len(mask_ans_relation) > 0:
+        if is_do_relation_mask and len(mask_ans_relation) > 0:
             relation_loss = loss_fn_relation(relation_pred, mask_ans_relation)
             loss += relation_loss * loss_weight_relation
-        if len(mask_ans_object) > 0:
-            object_loss = loss_fn_entity(entity_pred, mask_ans_object)
+        if is_do_tail_mask and len(mask_ans_tail) > 0:
+            object_loss = loss_fn_entity(tail_pred, mask_ans_tail)
             loss += object_loss * loss_weight_entity
 
         loss.backward()
@@ -431,15 +444,15 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
 
         # return values
         return_dict = {
-            STORY_ANS: cpu_deep_copy_or_none(mask_ans_story),
+            HEAD_ANS: cpu_deep_copy_or_none(mask_ans_head),
             RELATION_ANS: cpu_deep_copy_or_none(mask_ans_relation),
-            OBJECT_ANS: cpu_deep_copy_or_none(mask_ans_object),
-            STORY_PRED: cpu_deep_copy_or_none(story_pred),
+            TAIL_ANS: cpu_deep_copy_or_none(mask_ans_tail),
+            HEAD_PRED: cpu_deep_copy_or_none(head_pred),
             RELATION_PRED: cpu_deep_copy_or_none(relation_pred),
-            ENTITY_PRED: cpu_deep_copy_or_none(entity_pred),
-            STORY_LOSS: cpu_deep_copy_or_none(story_loss),
+            TAIL_PRED: cpu_deep_copy_or_none(tail_pred),
+            HEAD_LOSS: cpu_deep_copy_or_none(story_loss),
             RELATION_LOSS: cpu_deep_copy_or_none(relation_loss),
-            OBJECT_LOSS: cpu_deep_copy_or_none(object_loss),
+            TAIL_LOSS: cpu_deep_copy_or_none(object_loss),
             LOSS: cpu_deep_copy_or_none(loss),
         }
         return return_dict
@@ -455,80 +468,87 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         model.eval()
         triple: torch.Tensor = batch[0].to(device, non_blocking=non_blocking)
         valid_filter: torch.Tensor = batch[1].to(device, non_blocking=non_blocking)
-        # triple.shape == (batch, max_len, 3)
-        # valid_filter.shape == (batch, max_len)
 
-        triple_for_valid = triple.clone()
-        triple_for_valid[:, :, 0][valid_filter] = mask_token_e
-        _, (story_pred, _, _) = model(triple_for_valid, valid_filter, None, None)
+        # triple.shape == (batch, max_len, 3) and valid_filter.shape == (batch, max_len)
 
-        triple_for_valid = triple.clone()
-        triple_for_valid[:, :, 1][valid_filter] = mask_token_r
-        _, (_, relation_pred, _) = model(triple_for_valid, None, valid_filter, None)
-
-        triple_for_valid = triple.clone()
-        triple_for_valid[:, :, 2][valid_filter] = mask_token_e
-        _, (_, _, entity_pred) = model(triple_for_valid, None, None, valid_filter)
-
-        story_valid_ans = triple[:, :, 0][valid_filter]
-        relation_valid_ans = triple[:, :, 1][valid_filter]
-        object_valid_ans = triple[:, :, 2][valid_filter]
+        def get_valid_loss(_index, _loss_fn):
+            _triple_for_valid = triple.clone()
+            _triple_for_valid[:, :, _index][valid_filter] = mask_token_e
+            _model_input = [None, None, None]
+            _model_input[_index] = valid_filter
+            _, _pred_list = model(_triple_for_valid, *_model_input)
+            _pred = _pred_list[_index]
+            _valid_ans = triple[:, :, _index][valid_filter]
+            _loss = _loss_fn(_pred, _valid_ans)
+            return _pred, _valid_ans, _loss
 
         loss: torch.Tensor = torch.tensor(0, dtype=torch.float).to(device)
-        story_loss, relation_loss, object_loss = None, None, None
-        if len(story_valid_ans) > 0:
-            story_loss = loss_fn_entity(story_pred, story_valid_ans)
-            loss += story_loss  # * story_valid_ans
-            relation_loss = loss_fn_relation(relation_pred, relation_valid_ans)
-            loss += relation_loss  # * relation_valid_ans
-            object_loss = loss_fn_entity(entity_pred, object_valid_ans)
-            if object_loss < 0: raise ValueError("error")
-            loss += object_loss  # * object_valid_ans
+        head_valid_ans, relation_valid_ans, tail_valid_ans = None, None, None
+        head_pred, relation_pred, tail_pred = None, None, None
+        head_loss, relation_loss, tail_loss = None, None, None
+        if len(valid_filter) > 0:
+            if is_do_head_mask:
+                head_pred, head_valid_ans, head_loss = get_valid_loss(0, loss_fn_entity)
+                loss += head_loss  # * head_valid_ans
+            if is_do_relation_mask:
+                relation_pred, relation_valid_ans, relation_loss = get_valid_loss(1, loss_fn_relation)
+                loss += relation_loss  # * relation_valid_ans
+            if is_do_tail_mask:
+                tail_pred, tail_valid_ans, tail_loss = get_valid_loss(2, loss_fn_entity)
+                loss += tail_loss  # * object_valid_ans
+                if tail_loss < 0: raise ValueError("error")
 
         # return dict
         return_dict = {
-            STORY_ANS: cpu_deep_copy_or_none(story_valid_ans),
+            HEAD_ANS: cpu_deep_copy_or_none(head_valid_ans),
             RELATION_ANS: cpu_deep_copy_or_none(relation_valid_ans),
-            OBJECT_ANS: cpu_deep_copy_or_none(object_valid_ans),
-            STORY_PRED: cpu_deep_copy_or_none(story_pred),
+            TAIL_ANS: cpu_deep_copy_or_none(tail_valid_ans),
+            HEAD_PRED: cpu_deep_copy_or_none(head_pred),
             RELATION_PRED: cpu_deep_copy_or_none(relation_pred),
-            ENTITY_PRED: cpu_deep_copy_or_none(entity_pred),
+            TAIL_PRED: cpu_deep_copy_or_none(tail_pred),
             LOSS: cpu_deep_copy_or_none(loss),
-            STORY_LOSS: cpu_deep_copy_or_none(story_loss),
+            HEAD_LOSS: cpu_deep_copy_or_none(head_loss),
             RELATION_LOSS: cpu_deep_copy_or_none(relation_loss),
-            OBJECT_LOSS: cpu_deep_copy_or_none(object_loss),
+            TAIL_LOSS: cpu_deep_copy_or_none(tail_loss),
         }
         return return_dict
 
-    def set_engine_metrix(_step: Callable) -> tuple[Engine, dict]:
-        """This is the function to set engine and metrix.
+    metric_names = [LOSS]
+    if is_do_head_mask: metric_names += HEAD_METRIC_NAMES
+    if is_do_relation_mask: metric_names += RELATION_METRIC_NAMES
+    if is_do_tail_mask: metric_names += TAIL_METRIC_NAMES
+    logger.info(f"metric names: {metric_names}")
+
+    def set_engine_metrics(step: Callable) -> tuple[Engine, dict]:
+        """This is the function to set engine and metrics.
 
         Args:
-            _step(Callable): step function.
+            step(Callable): step function.
 
         Returns:
             tuple[Engine, dict]: Engine and matrix dict.
 
         """
-        _engine = Engine(_step)
-        ProgressBar().attach(_engine)
+        engine = Engine(step)
+        ProgressBar().attach(engine)
         # loss and average of trainer
-        _matrix = {
+        metrics = {
             LOSS: Average(itemgetter(LOSS)),
-            STORY_LOSS: Average(itemgetter(STORY_LOSS)),
+            HEAD_LOSS: Average(itemgetter(HEAD_LOSS)),
             RELATION_LOSS: Average(itemgetter(RELATION_LOSS)),
-            OBJECT_LOSS: Average(itemgetter(OBJECT_LOSS)),
-            STORY_ACCURACY: Accuracy(itemgetter(STORY_PRED, STORY_ANS)),
+            TAIL_LOSS: Average(itemgetter(TAIL_LOSS)),
+            STORY_ACCURACY: Accuracy(itemgetter(HEAD_PRED, HEAD_ANS)),
             RELATION_ACCURACY: Accuracy(itemgetter(RELATION_PRED, RELATION_ANS)),
-            ENTITY_ACCURACY: Accuracy(itemgetter(ENTITY_PRED, OBJECT_ANS))
+            ENTITY_ACCURACY: Accuracy(itemgetter(TAIL_PRED, TAIL_ANS))
         }
-        [_value.attach(_engine, _key) for _key, _value in _matrix.items()]
+        [_value.attach(engine, _key) for _key, _value in metrics.items() if _key in metric_names]
 
-        return _engine, _matrix
+        return engine, metrics
 
     model.to(device)
-    trainer, trainer_matrix = set_engine_metrix(train_step)
-    _kwargs = dict(summary_writer=summary_writer, metric_names=METRIC_NAMES, param_names=ALL_WEIGHT_LIST, logger=logger)
+    trainer, trainer_matrix = set_engine_metrics(train_step)
+
+    _kwargs = dict(summary_writer=summary_writer, metric_names=metric_names, param_names=ALL_WEIGHT_LIST, logger=logger)
     set_start_epoch_function(trainer, optional_func=train.dataset.shuffle_per_1scene, logger=logger)
     set_end_epoch_function(trainer, PRE_TRAIN_SCALER_TAG_GETTER, **_kwargs)
     set_write_model_param_function(
@@ -536,7 +556,7 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
 
     # valid function
     if args.train_valid_test:
-        evaluator, evaluator_matrix = set_engine_metrix(valid_step)
+        evaluator, evaluator_matrix = set_engine_metrics(valid_step)
         set_valid_function(trainer, evaluator, valid, args.valid_interval, PRE_VALID_SCALER_TAG_GETTER, **_kwargs)
         # early stopping
         if args.early_stopping:
@@ -719,7 +739,7 @@ def make_get_model(args: Namespace, *, data_helper: MyDataHelper, logger: Logger
         logger(Logger): logger
 
     Returns:
-        KgStoryTransformer: KgStoryTransformer
+        KgSequenceTransformer: KgStoryTransformer
 
     """
     # get from args
@@ -734,13 +754,13 @@ def make_get_model(args: Namespace, *, data_helper: MyDataHelper, logger: Logger
     version_ = args.model_version
 
     # noinspection PyTypeChecker
-    Model_: KgStoryTransformer = (
+    Model_: KgSequenceTransformer = (
         None if version_ not in ModelVersion.ALL_LIST()
-        else KgStoryTransformer01 if version_ == ModelVersion.V01
-        else KgStoryTransformer02 if version_ == ModelVersion.V02
-        else KgStoryTransformer03 if version_ == ModelVersion.V03
-        else KgStoryTransformer03preInit if version_ == ModelVersion.V03a
-        else KgStoryTransformer00
+        else KgSequenceTransformer01 if version_ == ModelVersion.V01
+        else KgSequenceTransformer02 if version_ == ModelVersion.V02
+        else KgSequenceTransformer03 if version_ == ModelVersion.V03
+        else KgSequenceTransformer03preInit if version_ == ModelVersion.V03a
+        else KgSequenceTransformer00
     )
 
     if Model_ is None: raise f"model-version '{version_}' is not defined."
@@ -785,7 +805,6 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, logger: Log
         args(Namespace): args
         data_helper(MyDataHelper): data_helper
         data_loaders(MyDataLoaderHelper): data_loaders
-        model(KgStoryTransformer): model
         logger(Logger): logger
 
     Returns:
@@ -856,9 +875,10 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, logger: Log
                 'info', "lr={}, lr_story={}, lr_relation={}, lr_entity={}, loss_function={}, gamma={}".format(
                     lr, lr_story, lr_relation, lr_entity, loss_function, gamma), )
             _train_returns, _, _, _ = func(_hyper_params, _summary_writer)
+
             _evaluator = _train_returns[EVALUATOR]
             _evaluator.run(data_loaders.valid_dataloader)
-            return _evaluator.state.metrics[OBJECT_LOSS]
+            return _evaluator.state.metrics[TAIL_LOSS]
 
         logger.info("---------- Optuna ----------")
         logger.info(f"---- name: {args.study_name}, trial num: {args.n_trials}, save file: {args.optuna_file} ----")

@@ -31,7 +31,7 @@ from torch.utils.tensorboard.writer import SummaryWriter
 
 # My Models
 from models.KGModel.kg_story_transformer import (
-    KgStoryTransformer, )
+    KgSequenceTransformer, )
 from models.datasets.data_helper import (
     MyDataHelper, DefaultTokens, SpecialTokens01 as SpecialTokens, MyDataLoaderHelper, )
 # My utils
@@ -206,7 +206,7 @@ def make_get_model(args: Namespace, *, data_helper: MyDataHelper, logger: Logger
         logger(Logger): logger
 
     Returns:
-        KgStoryTransformer: KgStoryTransformer
+        KgSequenceTransformer: KgStoryTransformer
 
     """
     # get from args

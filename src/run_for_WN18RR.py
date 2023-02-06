@@ -34,8 +34,8 @@ from torch.utils.data.dataloader import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
 # My Models
 from models.KGModel.kg_story_transformer import (
-    KgStoryTransformer01, KgStoryTransformer02, KgStoryTransformer03, KgStoryTransformer03preInit,
-    KgStoryTransformer00, KgStoryTransformer)
+    KgSequenceTransformer01, KgSequenceTransformer02, KgSequenceTransformer03, KgSequenceTransformer03preInit,
+    KgSequenceTransformer00, KgSequenceTransformer)
 from models.datasets.data_helper import (
     MyDataHelper, DefaultTokens, DefaultIds, SpecialTokens01 as SpecialTokens, MyDataLoaderHelper, )
 from models.datasets.data_helper_for_wn18rr import MyDataHelperForWN18RR
@@ -60,10 +60,10 @@ from utils.torch_ignite import (TRAINER, EVALUATOR, GOOD_LOSS_CHECKPOINTE, LAST_
 # My const words about words used as tags
 from const.const_values import (CPU, MODEL, LOSS, PARAMS, LR,
                                 DATA_HELPER, DATASETS, DATA_LOADERS, TRAIN_RETURNS,
-                                STORY_LOSS, RELATION_LOSS, OBJECT_LOSS,
+                                HEAD_LOSS, RELATION_LOSS, TAIL_LOSS,
                                 STORY_ACCURACY, RELATION_ACCURACY, ENTITY_ACCURACY,
-                                STORY_ANS, RELATION_ANS, OBJECT_ANS,
-                                STORY_PRED, RELATION_PRED, ENTITY_PRED,
+                                HEAD_ANS, RELATION_ANS, TAIL_ANS,
+                                HEAD_PRED, RELATION_PRED, TAIL_PRED,
                                 PRE_TRAIN_SCALER_TAG_GETTER, PRE_VALID_SCALER_TAG_GETTER,
                                 PRE_TRAIN_MODEL_WEIGHT_TAG_GETTER,
                                 METRIC_NAMES)
@@ -382,7 +382,7 @@ def make_get_model(args: Namespace, *, data_helper: MyDataHelper, logger: Logger
         logger(Logger): logger
 
     Returns:
-        KgStoryTransformer: KgStoryTransformer
+        KgSequenceTransformer: KgStoryTransformer
 
     """
     # get from args
@@ -397,13 +397,13 @@ def make_get_model(args: Namespace, *, data_helper: MyDataHelper, logger: Logger
     version_ = args.model_version
 
     # noinspection PyTypeChecker
-    Model_: KgStoryTransformer = (
+    Model_: KgSequenceTransformer = (
         None if version_ not in ModelVersion.ALL_LIST()
-        else KgStoryTransformer01 if version_ == ModelVersion.V01
-        else KgStoryTransformer02 if version_ == ModelVersion.V02
-        else KgStoryTransformer03 if version_ == ModelVersion.V03
-        else KgStoryTransformer03preInit if version_ == ModelVersion.V03a
-        else KgStoryTransformer00
+        else KgSequenceTransformer01 if version_ == ModelVersion.V01
+        else KgSequenceTransformer02 if version_ == ModelVersion.V02
+        else KgSequenceTransformer03 if version_ == ModelVersion.V03
+        else KgSequenceTransformer03preInit if version_ == ModelVersion.V03a
+        else KgSequenceTransformer00
     )
 
     if Model_ is None: raise f"model-version '{version_}' is not defined."
@@ -448,7 +448,7 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
         args(Namespace): args
         data_helper(MyDataHelper): data_helper
         data_loaders(MyDataLoaderHelper): data_loaders
-        model(KgStoryTransformer): model
+        model(KgSequenceTransformer): model
         logger(Logger): logger
 
     Returns:
@@ -517,7 +517,7 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
             _train_returns, _, _, _ = func(_hyper_params, _summary_writer)
             _evaluator = _train_returns[EVALUATOR]
             _evaluator.run(data_loaders.valid_dataloader)
-            return _evaluator.state.metrics[OBJECT_LOSS]
+            return _evaluator.state.metrics[TAIL_LOSS]
 
         logger.info("---------- Optuna ----------")
         logger.info(f"---- name: {args.study_name}, trial num: {args.n_trials}, save file: {args.optuna_file} ----")

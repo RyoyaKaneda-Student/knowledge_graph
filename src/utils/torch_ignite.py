@@ -46,7 +46,8 @@ def save_metrics(epoch, metrics, get_tags, metric_names, summary_writer):
     if summary_writer is not None:
         for _name in metric_names:
             _value = metrics[_name]
-            summary_writer.add_scalar(get_tags(_name), _value, global_step=epoch)
+            if _value is not None:
+                summary_writer.add_scalar(get_tags(_name), _value, global_step=epoch)
 
 
 def set_start_epoch_function(trainer, *, logger: Logger, optional_func: Optional[Callable] = None):
