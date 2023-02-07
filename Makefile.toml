@@ -3014,9 +3014,9 @@ MaskNomaskPercent="0.20"
 
 Epoch="3000"
 
-MaxLenList=(128 256 384 512)
+MaxLenList=(16 32 64 128 256 384 512)
 
-for i in 0 2 3; do
+for i in 0 1 2; do
 
 MaxLen=${MaxLenList[i]}
 LogFolder=${LogFolderFolder}/$(($i+1))
