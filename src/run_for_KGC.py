@@ -284,7 +284,7 @@ def get_all_tokens(args: Namespace):
     )
 
 
-def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger, summary_writer) -> dict:
+def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model, *, logger, summary_writer) -> dict:
     """pre training function.
 
     * main part of my train.

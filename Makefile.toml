@@ -2990,3 +2990,55 @@ done
 '''
 ]
 description = ""
+
+[tasks.kgc_0207_check_MaxLen]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+LogFolderFolder="models/230207_check_MaxLen"
+Lr="1e-4"
+LrHead="5e-5"
+LrRelation="1e-6"
+LrTail="1e-6"
+LossFunction="focal_loss"
+Gamma="2.5"
+#MaxLen=512
+EmbeddingDim="128"
+EEmbeddingDim="768"
+REmbeddingDim="64"
+MaskPercent="0.15"
+MaskMaskPercent="0.70"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.20"
+
+Epoch="2000"
+
+MaxLenList=(128 256 512)
+
+for i in {0..3}; do
+
+MaxLen=${MaxLenList[i]}
+LogFolder=${LogFolderFolder}/${i}
+
+mkdir ${LogFolder}
+echo MaskPercent=${MaskPercent}
+echo LogFolder=${LogFolder}
+
+python3 -O src/run_for_KGC.py \
+	--device cuda --console-level info --pre-train --model-version 03a \
+	--train-valid-test --epoch ${Epoch} --batch-size 64 \
+	--early-stopping --early-stopping-count 5 \
+	--logfile ${LogFolder}/log.log --tensorboard-dir ${LogFolder}/tensorboard/ \
+	--param-file ${LogFolder}/param.pkl --model-path ${LogFolder}/model.pth \
+	--checkpoint-dir ${LogFolder}/checkpoint/ --valid-interval 50 ${@:2} \
+	--lr ${Lr} --lr-head ${LrHead} --lr-relation ${LrRelation} --lr-tail ${LrTail} \
+	--loss-function ${LossFunction} --gamma ${Gamma} --max-len $MaxLen \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent}
+
+done
+'''
+]
+description = ""
