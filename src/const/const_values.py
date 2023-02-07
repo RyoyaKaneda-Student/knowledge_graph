@@ -27,34 +27,34 @@ LOSS: Final[str] = 'loss'
 PRED: Final[str] = 'pred'
 ANS: Final[str] = 'ans'
 # about lr
-LR_STORY: Final[str] = 'lr_story'
+LR_HEAD: Final[str] = 'lr_head'
 LR_RELATION: Final[str] = 'lr_relation'
-LR_ENTITY: Final[str] = 'lr_entity'
+LR_TAIL: Final[str] = 'lr_tail'
 LOSS_FUNCTION: Final[str] = 'loss_function'
 # about training loss tags especially for triple.
-HEAD_LOSS: Final[str] = 'story_loss'
+HEAD_LOSS: Final[str] = 'head_loss'
 RELATION_LOSS: Final[str] = 'relation_loss'
-TAIL_LOSS: Final[str] = 'entity_loss'
+TAIL_LOSS: Final[str] = 'tail_loss'
 LOSS_NAME3: Final[tuple[str, str, str]] = (HEAD_LOSS, RELATION_LOSS, TAIL_LOSS)
 # about predicate loss tags especially for triple.
-HEAD_PRED: Final[str] = 'story_pred'
+HEAD_PRED: Final[str] = 'head_pred'
 RELATION_PRED: Final[str] = 'relation_pred'
-TAIL_PRED: Final[str] = 'entity_pred'
+TAIL_PRED: Final[str] = 'tail_pred'
 PRED_NAME3: Final[tuple[str, str, str]] = (HEAD_PRED, RELATION_PRED, TAIL_PRED)
 # about answer loss tags especially for triple.
-HEAD_ANS: Final[str] = 'story_ans'
+HEAD_ANS: Final[str] = 'head_ans'
 RELATION_ANS: Final[str] = 'relation_ans'
-TAIL_ANS: Final[str] = 'object_ans'
+TAIL_ANS: Final[str] = 'tail_ans'
 ANS_NAME3: Final[tuple[str, str, str]] = (HEAD_ANS, RELATION_ANS, TAIL_ANS)
 # about accuracy loss tags especially for triple.
-STORY_ACCURACY: Final[str] = 'story_accuracy'
+HEAD_ACCURACY: Final[str] = 'head_accuracy'
 RELATION_ACCURACY: Final[str] = 'relation_accuracy'
-ENTITY_ACCURACY: Final[str] = 'entity_accuracy'
-ACCURACY_NAME3: Final[tuple[str, str, str]] = (STORY_ACCURACY, RELATION_ACCURACY, ENTITY_ACCURACY)
+TAIL_ACCURACY: Final[str] = 'tail_accuracy'
+ACCURACY_NAME3: Final[tuple[str, str, str]] = (HEAD_ACCURACY, RELATION_ACCURACY, TAIL_ACCURACY)
 # about metric tags
-HEAD_METRIC_NAMES: Final[tuple[str, str]] = (HEAD_LOSS, STORY_ACCURACY)
+HEAD_METRIC_NAMES: Final[tuple[str, str]] = (HEAD_LOSS, HEAD_ACCURACY)
 RELATION_METRIC_NAMES: Final[tuple[str, str]] = (RELATION_LOSS, RELATION_ACCURACY)
-TAIL_METRIC_NAMES: Final[tuple[str, str]] = (TAIL_LOSS, ENTITY_ACCURACY)
+TAIL_METRIC_NAMES: Final[tuple[str, str]] = (TAIL_LOSS, TAIL_ACCURACY)
 
 # about train tags
 TRAIN_SCALER_TAG_GETTER: Final[Callable[[str], str]] = lambda _name: f"{TRAIN}/{_name}"
@@ -139,7 +139,6 @@ TITLE2SVO_FILE075: Final[dict[str, str]] = {
     'SilverBlaze': f"{SRO_FOLDER}/train_SilverBlaze_l075.hdf5",
     'SpeckledBand': f"{SRO_FOLDER}/train_SpeckledBand_l075.hdf5"
 }
-
 JA_TITLE2LEN_INFO = {
     "僧坊荘園": ("AbbeyGrange", 414, 372, 331, 310),
     "花婿失踪事件": ("ACaseOfIdentity", 580, 522, 464, 435),
@@ -150,7 +149,6 @@ JA_TITLE2LEN_INFO = {
     "白銀号事件": ("SilverBlaze", 397, 367, 317, 297),
     "マダラのひも": ("SpeckledBand", 401, 360, 320, 300)
 }
-
 EN_TITLE2LEN_INFO = {
     AbbeyGrange: (414, 372, 331, 310),
     ACaseOfIdentity: (580, 522, 464, 435),

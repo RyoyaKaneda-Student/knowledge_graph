@@ -30,7 +30,7 @@ from torch.utils.data.dataloader import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
 
 # My Models
-from models.KGModel.kg_story_transformer import (
+from models.KGModel.kg_sequence_transformer import (
     KgSequenceTransformer, )
 from models.datasets.data_helper import (
     MyDataHelper, DefaultTokens, SpecialTokens01 as SpecialTokens, MyDataLoaderHelper, )

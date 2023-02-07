@@ -1,11 +1,11 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-import itertools
 from abc import ABC, abstractmethod
-from collections import OrderedDict
 from argparse import Namespace
+from collections import OrderedDict
 # noinspection PyUnresolvedReferences
 from typing import List, Dict, Tuple, Optional, Union, Callable, overload, Final
+
 import numpy as np
 import pandas as pd
 import torch
@@ -14,6 +14,7 @@ from torch.nn import Embedding, Linear, Sequential
 # from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torch.nn import TransformerEncoderLayer, TransformerEncoder
 from transformers import BertTokenizer, BertModel
+
 # my modules
 from models.utilModules.tranformer import PositionalEncoding, Feedforward
 # my utils
@@ -126,45 +127,24 @@ class _GetEmb(KgSequenceTransformer, ABC):
         """get head embedding function.
 
         """
-        return self.entity_embeddings(x)
+        raise NotImplementedError()
 
     @abstractmethod
     def get_emb_relation(self, x: torch.Tensor):
         """get relation embedding function.
 
         """
-        return self.relation_embeddings(x)
+        raise NotImplementedError()
 
     @abstractmethod
     def get_emb_tail(self, x: torch.Tensor):
         """get tail embedding function.
 
         """
-        return self.entity_embeddings(x)
+        raise NotImplementedError()
 
 
 class _GetTripleEmb(KgSequenceTransformer, ABC):
-    @abstractmethod
-    def get_emb_head(self, x: torch.Tensor):
-        """get head embedding function.
-
-        """
-        return self.entity_embeddings(x)
-
-    @abstractmethod
-    def get_emb_relation(self, x: torch.Tensor):
-        """get relation embedding function.
-
-        """
-        return self.relation_embeddings(x)
-
-    @abstractmethod
-    def get_emb_tail(self, x: torch.Tensor):
-        """get tail embedding function.
-
-        """
-        return self.entity_embeddings(x)
-
     @abstractmethod
     def get_triple_embedding(self, head, relation, tail):
         raise NotImplementedError()

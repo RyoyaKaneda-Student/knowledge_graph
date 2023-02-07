@@ -14,8 +14,6 @@ import math
 from utils.progress_manager import ProgressHelper
 from utils.utils import none_count, is_same_len_in_list
 
-INF = float('inf')
-
 
 class Feedforward(torch.nn.Module):
     """Feedforward module

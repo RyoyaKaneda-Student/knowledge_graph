@@ -10,6 +10,7 @@ Todo:
 
 """
 # ========== python ==========
+import warnings
 from argparse import Namespace
 from itertools import chain
 from logging import Logger
@@ -33,7 +34,7 @@ from torch.utils.data import Dataset
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
 # My Models
-from models.KGModel.kg_story_transformer import (
+from models.KGModel.kg_sequence_transformer import (
     KgSequenceTransformer01, KgSequenceTransformer02, KgSequenceTransformer03, KgSequenceTransformer03preInit,
     KgSequenceTransformer00, KgSequenceTransformer)
 from models.datasets.data_helper import (
@@ -51,7 +52,7 @@ from utils.torch_ignite import (
     set_valid_function, training_with_ignite, set_early_stopping_function
 )
 # My const words about words used as tags
-from models.KGModel.kg_story_transformer import (
+from models.KGModel.kg_sequence_transformer import (
     ALL_WEIGHT_LIST, HEAD_MASKED_LM, TAIL_MASKED_LM, RELATION_MASKED_LM, )
 # My const value about torch ignite
 from utils.torch_ignite import (TRAINER, EVALUATOR, GOOD_LOSS_CHECKPOINTE, LAST_CHECKPOINTE)
@@ -59,7 +60,7 @@ from utils.torch_ignite import (TRAINER, EVALUATOR, GOOD_LOSS_CHECKPOINTE, LAST_
 from const.const_values import (CPU, MODEL, LOSS, PARAMS, LR,
                                 DATA_HELPER, DATASETS, DATA_LOADERS, TRAIN_RETURNS,
                                 HEAD_LOSS, RELATION_LOSS, TAIL_LOSS,
-                                STORY_ACCURACY, RELATION_ACCURACY, ENTITY_ACCURACY,
+                                HEAD_ACCURACY, RELATION_ACCURACY, TAIL_ACCURACY,
                                 HEAD_ANS, RELATION_ANS, TAIL_ANS,
                                 HEAD_PRED, RELATION_PRED, TAIL_PRED,
                                 PRE_TRAIN_SCALER_TAG_GETTER, PRE_VALID_SCALER_TAG_GETTER,
@@ -69,7 +70,7 @@ from const.const_values import (CPU, MODEL, LOSS, PARAMS, LR,
 from const.const_values import (
     PROJECT_DIR,
     ALL_TITLE_LIST, SRO_ALL_TRAIN_FILE, SRO_ALL_INFO_FILE, TITLE2SRO_FILE090, TITLE2SRO_FILE075, ABOUT_KILL_WORDS,
-    LR_STORY, LR_RELATION, LR_ENTITY, LOSS_FUNCTION, STUDY,
+    LR_HEAD, LR_RELATION, LR_TAIL, LOSS_FUNCTION, STUDY,
 )
 
 
@@ -95,6 +96,29 @@ class ModelVersion(metaclass=ConstMeta):
         return cls.V01, cls.V02, cls.V03, cls.V03a
 
 
+def fix_args(args: Namespace):
+    """fix args
+    Args:
+        args(Namespace):
+
+    Returns:
+        Namespace
+    """
+    if args.lr_story is not None:
+        if args.lr_head is not None: raise ValueError()
+        args.lr_head = args.lr_story
+        warnings.warn("The parameter --lr-story is deprecated. please use --lr-head")
+        del args.lr_story
+    if args.lr_entity is not None:
+        if args.lr_tail is not None: raise ValueError()
+        args.lr_tail = args.lr_entity
+        warnings.warn("The parameter --lr-entity is deprecated. please use --lr-tail")
+        del args.lr_entity
+    if getattr(args, 'old_data', None):
+        args.old_data = 0
+    return args
+
+
 def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
     """make parser function
 
@@ -116,8 +140,8 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
     paa('--param-file', help='the path of saving param', type=str, default='log/param.pkl')
     paa('--device-name', help=DeviceName.ALL_INFO, type=str, default=DeviceName.CPU, choices=DeviceName.ALL_LIST)
     paa('--train-anyway', help='It will not be reproducible, but it could be faster.', action='store_true')
-    paa('--old-data', type=int, default=0,
-        help='If you use old data, please enter the number. Basically, do not put anything in.')
+    paa('--train-anyway', help='It will not be reproducible, but it could be faster.', action='store_true')
+    paa('--SEED', type=int, default=42, help='seed. default 42 (It has no mean.) ')
     # save dir setting
     parser_group01 = parser.add_argument_group('dir and path', 'There are the setting of training setting dir or path.')
     paa1 = parser_group01.add_argument
@@ -149,9 +173,8 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
     # special num count
     parser_group04 = parser.add_argument_group('special token setting', 'There are the setting of special token.')
     paa4 = parser_group04.add_argument
-    paa4('--story-special-num', help='story special num', type=int, default=5)
-    paa4('--relation-special-num', help='relation special num', type=int, default=5)
     paa4('--entity-special-num', help='entity special num', type=int, default=5)
+    paa4('--relation-special-num', help='relation special num', type=int, default=5)
     # e special
     parser_group041 = parser.add_argument_group(
         'special (tail) embedding token setting', 'There are the setting of special (tail) embedding token setting.')
@@ -170,15 +193,6 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
     paa42('--mask-token-r', help='mask', type=int, default=DefaultIds.MASK_R_DEFAULT_ID)
     paa42('--sep-token-r', help='sep', type=int, default=DefaultIds.SEP_R_DEFAULT_ID)
     paa42('--bos-token-r', help='bos', type=int, default=DefaultIds.BOS_R_DEFAULT_ID)
-    # story
-    parser_group043 = parser.add_argument_group(
-        'special (tail) embedding token setting', 'There are the setting of special (head) embedding token setting.')
-    paa43 = parser_group043.add_argument
-    paa43('--padding-token-s', help='padding', type=int, default=DefaultIds.PAD_E_DEFAULT_ID)
-    paa43('--cls-token-s', help='cls', type=int, default=DefaultIds.CLS_E_DEFAULT_ID)
-    paa43('--mask-token-s', help='mask', type=int, default=DefaultIds.MASK_E_DEFAULT_ID)
-    paa43('--sep-token-s', help='sep', type=int, default=DefaultIds.SEP_E_DEFAULT_ID)
-    paa43('--bos-token-s', help='bos', type=int, default=DefaultIds.BOS_E_DEFAULT_ID)
     # model
     parser_group05 = parser.add_argument_group('model setting', 'There are the setting of model params.')
     paa5 = parser_group05.add_argument
@@ -219,14 +233,11 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
                                                'There are the setting of model optimizer params.')
     paa6 = parser_group06.add_argument
     paa6('--lr', type=float, default=0.003, help='learning rate (default: 0.003)')
-    paa6('--lr-story', type=float, help='learning rate (default: same as --lr)')
+    paa6('--lr-head', type=float, help='learning rate (default: same as --lr)')
     paa6('--lr-relation', type=float, help='learning rate (default: same as --lr)')
-    paa6('--lr-entity', type=float, help='learning rate (default: same as --lr)')
+    paa6('--lr-tail', type=float, help='learning rate (default: same as --lr)')
     paa6('--loss-function', type=str, default=LossFnName.CROSS_ENTROPY_LOSS, choices=LossFnName.ALL_LIST(),
          help='loss function (default: CrossEntropyLoss)')
-    paa6('--loss-weight-story', type=float, default=1., help='loss-weight-story')
-    paa6('--loss-weight-relation', type=float, default=1., help='loss-weight-relation')
-    paa6('--loss-weight-entity', type=float, default=1., help='loss-weight-entity')
     paa6('--epoch', help='max epoch', type=int, default=2)
     paa6('--early-stopping', action='store_true', help='', )
     paa6('--early-stopping-count', type=int, default=10, )
@@ -238,8 +249,15 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
     paa61 = parser_group061.add_argument
     paa61('--gamma', type=float, help='gamma')
 
+    # deprecated
+    parser_group_deprecated = parser.add_argument_group('deprecated', 'These params ware deprecated.')
+    paa_deprecated = parser_group_deprecated.add_argument
+    paa_deprecated('--lr-story', type=float, help='learning rate (default: same as --lr). This is old parameter.')
+    paa_deprecated('--lr-entity', type=float, help='learning rate (default: same as --lr). This is old parameter.')
+
     args = parser.parse_args(args=args)
-    return args
+    # old to new
+    return fix_args(args)
 
 
 def get_all_tokens(args: Namespace):
@@ -285,8 +303,7 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         dict: keys=(MODEL, TRAINER, EVALUATOR, (CHECKPOINTER_GOOD_LOSS, CHECKPOINTER_LAST))
 
     """
-    (lr, lr_story, lr_relation, lr_entity,
-     loss_fn_name, loss_weight_story, loss_weight_relation, loss_weight_entity, other_params) = hyper_params
+    (lr, lr_head, lr_relation, lr_tail, loss_fn_name, other_params) = hyper_params
     do_weight_loss = False
     device: torch.device = args.device
     max_len = args.max_len
@@ -369,9 +386,9 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
     opt = torch.optim.Adam([
                                {PARAMS: _module.parameters(), LR: lr} for _name, _module in modules.items()
                            ] + [
-                               {PARAMS: model.head_maskdlm.parameters(), LR: lr_story},
+                               {PARAMS: model.head_maskdlm.parameters(), LR: lr_head},
                                {PARAMS: model.relation_maskdlm.parameters(), LR: lr_relation},
-                               {PARAMS: model.tail_maskdlm.parameters(), LR: lr_entity},
+                               {PARAMS: model.tail_maskdlm.parameters(), LR: lr_tail},
                            ])
     # loss function setting
     gamma = other_params.get(GAMMA, None)
@@ -427,17 +444,17 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
         )
 
         loss: torch.Tensor = torch.tensor(0, dtype=torch.float).to(device)
-        story_loss, relation_loss, object_loss = None, None, None
+        head_loss, relation_loss, object_loss = None, None, None
 
         if is_do_head_mask and len(mask_ans_head) > 0:
-            story_loss = loss_fn_entity(head_pred, mask_ans_head)
-            loss += story_loss * loss_weight_story
+            head_loss = loss_fn_entity(head_pred, mask_ans_head)
+            loss += head_loss
         if is_do_relation_mask and len(mask_ans_relation) > 0:
             relation_loss = loss_fn_relation(relation_pred, mask_ans_relation)
-            loss += relation_loss * loss_weight_relation
+            loss += relation_loss
         if is_do_tail_mask and len(mask_ans_tail) > 0:
             object_loss = loss_fn_entity(tail_pred, mask_ans_tail)
-            loss += object_loss * loss_weight_entity
+            loss += object_loss
 
         loss.backward()
         opt.step()
@@ -450,7 +467,7 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
             HEAD_PRED: cpu_deep_copy_or_none(head_pred),
             RELATION_PRED: cpu_deep_copy_or_none(relation_pred),
             TAIL_PRED: cpu_deep_copy_or_none(tail_pred),
-            HEAD_LOSS: cpu_deep_copy_or_none(story_loss),
+            HEAD_LOSS: cpu_deep_copy_or_none(head_loss),
             RELATION_LOSS: cpu_deep_copy_or_none(relation_loss),
             TAIL_LOSS: cpu_deep_copy_or_none(object_loss),
             LOSS: cpu_deep_copy_or_none(loss),
@@ -537,9 +554,9 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
             HEAD_LOSS: Average(itemgetter(HEAD_LOSS)),
             RELATION_LOSS: Average(itemgetter(RELATION_LOSS)),
             TAIL_LOSS: Average(itemgetter(TAIL_LOSS)),
-            STORY_ACCURACY: Accuracy(itemgetter(HEAD_PRED, HEAD_ANS)),
+            HEAD_ACCURACY: Accuracy(itemgetter(HEAD_PRED, HEAD_ANS)),
             RELATION_ACCURACY: Accuracy(itemgetter(RELATION_PRED, RELATION_ANS)),
-            ENTITY_ACCURACY: Accuracy(itemgetter(TAIL_PRED, TAIL_ANS))
+            TAIL_ACCURACY: Accuracy(itemgetter(TAIL_PRED, TAIL_ANS))
         }
         [_value.attach(engine, _key) for _key, _value in metrics.items() if _key in metric_names]
 
@@ -578,6 +595,19 @@ def pre_training(args, hyper_params, data_helper, data_loaders, model, *, logger
             train=train, device=device, non_blocking=non_blocking, logger=logger)
         return {MODEL: model, TRAINER: trainer, EVALUATOR: evaluator,
                 GOOD_LOSS_CHECKPOINTE: good_checkpoint, LAST_CHECKPOINTE: last_checkpoint}
+
+
+def param_init_setting(args: Namespace, *, logger: Logger):
+    """args setting
+
+    """
+    if args.train_anyway:
+        logger.warning("This process do not have reproducible.")
+        torch.backends.cudnn.benchmark = True
+        args.non_blocking = True
+    else:
+        torch.backends.cudnn.benchmark = False
+        args.non_blocking = False
 
 
 def make_get_data_helper(args: Namespace, *, logger: Logger):
@@ -838,9 +868,8 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, logger: Log
         summary_writer = SummaryWriter(log_dir=args.tensorboard_dir) if args.tensorboard_dir is not None else None
         # setting hyper parameter
         hyper_params = (
-            args.lr, args.lr_story or args.lr, args.lr_relation or args.lr, args.lr_entity or args.lr,
-            args.loss_function, args.loss_weight_story, args.loss_weight_relation, args.loss_weight_story,
-            {GAMMA: args.gamma}
+            args.lr, args.lr_head or args.lr, args.lr_relation or args.lr, args.lr_tail or args.lr,
+            args.loss_function, {GAMMA: args.gamma}
         )
         train_returns, good_checkpoint, last_checkpoint, checkpoint_ = func(hyper_params, summary_writer)
         logger.info(f"good model path: {good_checkpoint.last_checkpoint}")
@@ -862,18 +891,16 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, logger: Log
             _summary_writer = SummaryWriter(
                 log_dir=f"{args.tensorboard_dir}/{trial.number}") if args.tensorboard_dir is not None else None
             lr = trial.suggest_float(LR, 1e-6, 1e-4, log=True)
-            lr_story = trial.suggest_float(LR_STORY, 1e-5, 1e-3, log=True)
+            lr_head = trial.suggest_float(LR_HEAD, 1e-5, 1e-3, log=True)
             lr_relation = trial.suggest_float(LR_RELATION, 1e-6, 1e-4, log=True)
-            lr_entity = trial.suggest_float(LR_ENTITY, 1e-6, 1e-4, log=True)
+            lr_tail = trial.suggest_float(LR_TAIL, 1e-6, 1e-4, log=True)
             loss_function = trial.suggest_categorical(LOSS_FUNCTION, LossFnName.ALL_LIST())
             gamma = trial.suggest_float(GAMMA, 1e-6, 5.0) if loss_function == LossFnName.FOCAL_LOSS else None
-            _hyper_params = (lr, lr_story, lr_relation, lr_entity, loss_function,
-                             args.loss_weight_story, args.loss_weight_relation, args.loss_weight_entity,
-                             {GAMMA: gamma})
+            _hyper_params = (lr, lr_head, lr_relation, lr_tail, loss_function, {GAMMA: gamma})
             # check the output of the training.
             _summary_writer.add_text(
-                'info', "lr={}, lr_story={}, lr_relation={}, lr_entity={}, loss_function={}, gamma={}".format(
-                    lr, lr_story, lr_relation, lr_entity, loss_function, gamma), )
+                'info', "lr={}, lr_head={}, lr_relation={}, lr_tail={}, loss_function={}, gamma={}".format(
+                    lr, lr_head, lr_relation, lr_tail, loss_function, gamma), )
             _train_returns, _, _, _ = func(_hyper_params, _summary_writer)
 
             _evaluator = _train_returns[EVALUATOR]
@@ -891,7 +918,7 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, logger: Log
     # if checking the trained items, use this mode.
     elif args.only_load_trainer_evaluator:
         model = make_get_model(args, data_helper=data_helper, logger=logger)
-        hyper_params = (0., 0., 0., 0., LossFnName.CROSS_ENTROPY_LOSS, 1., 1., 1., {})
+        hyper_params = (0., 0., 0., 0., LossFnName.CROSS_ENTROPY_LOSS, {})
         train_returns = pre_training(
             args, hyper_params, data_helper, data_loaders, model, summary_writer=None, logger=logger)
     else:
@@ -917,6 +944,8 @@ def main_function(args: Namespace, *, logger: Logger):
         dict: keys=(MODEL, DATA_HELPER, DATASETS, DATA_LOADERS, TRAIN_RETURNS)
 
     """
+    # other args settings.
+    param_init_setting(args, logger=logger)
     # load raw data and make datahelper. Support for special-tokens by datahelper.
     logger.info('----- make datahelper start. -----')
     data_helper = make_get_data_helper(args, logger=logger)
@@ -939,9 +968,6 @@ def main_function(args: Namespace, *, logger: Logger):
             DATA_LOADERS: data_loaders, TRAIN_RETURNS: train_returns}
 
 
-SEED: Final = 42
-
-
 def main(args: Optional[Sequence[str]] = None):
     """main
 
@@ -954,17 +980,11 @@ def main(args: Optional[Sequence[str]] = None):
 
     """
     from utils.setup import setup, save_param
-    torch_fix_seed(seed=SEED)
-    args, logger, device = setup(setup_parser, PROJECT_DIR, parser_args=args)
-    if args.train_anyway:
-        logger.warning("This process do not have reproducible.")
-        torch.backends.cudnn.benchmark = True
-        args.non_blocking = True
-    else:
-        torch.backends.cudnn.benchmark = False
-        args.non_blocking = False
 
+    args, logger, device = setup(setup_parser, PROJECT_DIR, parser_args=args)
     version_check(torch, np, pd, h5py, optuna, logger=logger)
+    torch_fix_seed(seed=args.SEED)
+    del args.SEED
     try:
         args.project_dir = PROJECT_DIR
         args.logger = logger
