@@ -140,7 +140,6 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
     paa('--param-file', help='the path of saving param', type=str, default='log/param.pkl')
     paa('--device-name', help=DeviceName.ALL_INFO, type=str, default=DeviceName.CPU, choices=DeviceName.ALL_LIST)
     paa('--train-anyway', help='It will not be reproducible, but it could be faster.', action='store_true')
-    paa('--train-anyway', help='It will not be reproducible, but it could be faster.', action='store_true')
     paa('--SEED', type=int, default=42, help='seed. default 42 (It has no mean.) ')
     # save dir setting
     parser_group01 = parser.add_argument_group('dir and path', 'There are the setting of training setting dir or path.')
