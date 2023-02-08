@@ -24,9 +24,10 @@ class TransE(KGE_ERE):
         """
 
         Args:
+            entity_embedding_dim(int): entity_embedding_dim
+            relation_embedding_dim(int): relation_embedding_dim
             entity_num(int): the number of entity.
             relation_num(int): リレーション数
-            emb_dim(int): エンベディングの次元数
         """
         super(TransE, self).__init__(entity_embedding_dim, relation_embedding_dim, entity_num, relation_num, None)
 

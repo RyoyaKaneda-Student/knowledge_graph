@@ -20,7 +20,7 @@ import torch
 
 # My items
 from models.datasets.data_helper import MyDataHelper, DefaultTokens
-from models.datasets.datasets_for_story import StoryTriple
+from models.datasets.datasets_for_sequence import StoryTriple
 # main function
 from run_for_KGC import main_function
 # My utils

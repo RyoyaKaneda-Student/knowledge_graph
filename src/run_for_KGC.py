@@ -15,7 +15,7 @@ from argparse import Namespace
 from itertools import chain
 from logging import Logger
 from operator import itemgetter
-from typing import Optional, Callable, Final, cast, Sequence
+from typing import Optional, Callable, Final, cast, Sequence, Type
 
 import h5py
 # Machine learning
@@ -28,7 +28,7 @@ import torch
 from ignite.contrib.handlers.tqdm_logger import ProgressBar
 from ignite.engine import Engine
 from ignite.handlers import Checkpoint
-from ignite.metrics import Average, Accuracy
+from ignite.metrics import Average, Accuracy, TopKCategoricalAccuracy
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import Dataset
 from torch.utils.data.dataloader import DataLoader
@@ -39,7 +39,7 @@ from models.KGModel.kg_sequence_transformer import (
     KgSequenceTransformer00, KgSequenceTransformer)
 from models.datasets.data_helper import (
     MyDataHelper, DefaultTokens, DefaultIds, SpecialTokens01 as SpecialTokens, MyDataLoaderHelper, )
-from models.datasets.datasets_for_story import add_bos, StoryTriple, StoryTripleForValid
+from models.datasets.datasets_for_sequence import add_bos, StoryTriple, StoryTripleForValid, SimpleTriple
 from models.utilLoss.focal_loss import FocalLoss, GAMMA
 from models.utilLoss.utils import LossFnName
 # My utils
@@ -65,7 +65,9 @@ from const.const_values import (CPU, MODEL, LOSS, PARAMS, LR,
                                 HEAD_PRED, RELATION_PRED, TAIL_PRED,
                                 PRE_TRAIN_SCALER_TAG_GETTER, PRE_VALID_SCALER_TAG_GETTER,
                                 PRE_TRAIN_MODEL_WEIGHT_TAG_GETTER,
-                                HEAD_METRIC_NAMES, RELATION_METRIC_NAMES, TAIL_METRIC_NAMES)
+                                HEAD_METRIC_NAMES, RELATION_METRIC_NAMES, TAIL_METRIC_NAMES, HEAD_TOP1, RELATION_TOP1,
+                                TAIL_TOP1, HEAD_TOP3, RELATION_TOP3, TAIL_TOP3, ACCURACY_NAME3, TOP1_NAME3, TOP3_NAME3,
+                                TOP10_NAME3)
 # My const words about file direction and title
 from const.const_values import (
     PROJECT_DIR,
@@ -114,8 +116,14 @@ def fix_args(args: Namespace):
         args.lr_tail = args.lr_entity
         warnings.warn("The parameter --lr-entity is deprecated. please use --lr-tail")
         del args.lr_entity
-    if getattr(args, 'old_data', None):
+    if getattr(args, 'old_data', None) is None:
         args.old_data = 0
+    if getattr(args, 'skip_head_mask', None) is None:
+        args.skip_head_mask = False
+    if getattr(args, 'skip_relation_mask', None) is None:
+        args.skip_relation_mask = False
+    if getattr(args, 'skip_tail_mask', None) is None:
+        args.skip_tail_mask = False
     return args
 
 
@@ -365,15 +373,19 @@ def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model
         _random = _random_all[_mask_filter]
         _mask_random_filter = _random < mask_random_percent
         _mask_mask_filter = _random >= (mask_nomask_percent + mask_random_percent)
-        _mask_value[_mask_random_filter] = torch.multinomial(
-            weights, torch.count_nonzero(_mask_random_filter).item(), replacement=True)
+
+        _mask_random_filter_count = torch.count_nonzero(_mask_random_filter).item()
+        _mask_mask_filter_count = torch.count_nonzero(_mask_mask_filter).item()
+
+        if _mask_random_filter_count > 0:
+            _mask_value[_mask_random_filter] = torch.multinomial(weights, _mask_random_filter_count, replacement=True)
         _mask_value[_mask_mask_filter] = _mask_token
         return _mask_filter, _mask_ans, _mask_value
 
     entity_num, relation_num = len(data_helper.processed_entities), len(data_helper.processed_relations)
     train = data_loaders.train_dataloader
     valid = data_loaders.valid_dataloader if args.train_valid_test else None
-    train_triple = train.dataset.triple
+    train_triple = train.dataset.triple[:train.dataset.sequence_length]
     # count frequency list
     head_index2count = torch.bincount(train_triple[:, 0], minlength=entity_num).to(torch.float).to(device)
     relation_index2count = torch.bincount(train_triple[:, 1], minlength=relation_num).to(torch.float).to(device)
@@ -547,16 +559,23 @@ def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model
         """
         engine = Engine(step)
         ProgressBar().attach(engine)
+        head_getter = itemgetter(HEAD_PRED, HEAD_ANS)
+        relation_getter = itemgetter(RELATION_PRED, RELATION_ANS)
+        tail_getter = itemgetter(TAIL_PRED, TAIL_ANS)
+        getter_list = (head_getter, relation_getter, tail_getter)
+
         # loss and average of trainer
         metrics = {
             LOSS: Average(itemgetter(LOSS)),
             HEAD_LOSS: Average(itemgetter(HEAD_LOSS)),
             RELATION_LOSS: Average(itemgetter(RELATION_LOSS)),
             TAIL_LOSS: Average(itemgetter(TAIL_LOSS)),
-            HEAD_ACCURACY: Accuracy(itemgetter(HEAD_PRED, HEAD_ANS)),
-            RELATION_ACCURACY: Accuracy(itemgetter(RELATION_PRED, RELATION_ANS)),
-            TAIL_ACCURACY: Accuracy(itemgetter(TAIL_PRED, TAIL_ANS))
+            **{_key: Accuracy(_getter) for _key, _getter in zip(ACCURACY_NAME3, getter_list)},
+            **{_key: TopKCategoricalAccuracy(1, _getter) for _key, _getter in zip(TOP1_NAME3, getter_list)},
+            **{_key: TopKCategoricalAccuracy(3, _getter) for _key, _getter in zip(TOP3_NAME3, getter_list)},
+            **{_key: TopKCategoricalAccuracy(10, _getter) for _key, _getter in zip(TOP10_NAME3, getter_list)},
         }
+
         [_value.attach(engine, _key) for _key, _value in metrics.items() if _key in metric_names]
 
         return engine, metrics
@@ -667,7 +686,7 @@ def make_get_datasets(args: Namespace, *, data_helper: MyDataHelper, logger: Log
         logger(Logger): logger
 
     Returns:
-        tuple[Dataset, Dataset, Dataset]: dataset_train, dataset_valid, dataset_test
+        tuple[Dataset, Dataset, Dataset]: [dataset_train, dataset_valid, dataset_test]
 
     """
     # get from args
@@ -682,7 +701,15 @@ def make_get_datasets(args: Namespace, *, data_helper: MyDataHelper, logger: Log
     len_of_default_triple = len(triple)
     # add bos token in triples
     triple = add_bos(triple, bos_token_e, bos_token_r, bos_token_e)
-    dataset_train, dataset_valid, dataset_test = None, None, None
+
+    # region set type
+    triple_train: np.ndarray
+    triple_valid: np.ndarray
+    triple_test: np.ndarray
+    valid_filter: np.ndarray
+    test_filter: np.ndarray
+    # endregion
+
     if train_valid_test:
         # These words cannot be left out in the search for the criminal.
         kill_entity, notKill_entity, beKilled_entity = [entities.index(_entity) for _entity in ABOUT_KILL_WORDS]
@@ -719,6 +746,7 @@ def make_get_datasets(args: Namespace, *, data_helper: MyDataHelper, logger: Log
         logger.debug("----- show all triple(no remove) -----")
         for i in range(30):
             logger.debug(f"example: {entities[triple[i][0]]}, {relations[triple[i][1]]}, {entities[triple[i][2]]}")
+            pass
         logger.debug("----- show train triple -----")
         for i in range(30):
             logger.debug(
@@ -736,24 +764,34 @@ def make_get_datasets(args: Namespace, *, data_helper: MyDataHelper, logger: Log
                          f"{entities_label[triple[i][2]]}")
         logger.debug("----- show example -----")
         # endregion
-
-        dataset_train = StoryTriple(triple_train, np.where(triple_train[:, 0] == bos_token_e)[0], max_len,
-                                    pad_token_e, pad_token_r, pad_token_e,
-                                    sep_token_e, sep_token_r, sep_token_e)
-        dataset_valid = StoryTripleForValid(triple_valid,
-                                            np.where(triple_valid[:, 0] == bos_token_e)[0], valid_filter, max_len,
-                                            pad_token_e, pad_token_r, pad_token_e,
-                                            sep_token_e, sep_token_r, sep_token_e)
-        dataset_test = StoryTripleForValid(triple_test,
-                                           np.where(triple_test[:, 0] == bos_token_e)[0], test_filter, max_len,
-                                           pad_token_e, pad_token_r, pad_token_e,
-                                           sep_token_e, sep_token_r, sep_token_e)
     elif only_train:
-        dataset_train = StoryTriple(triple, np.where(triple[:, 0] == bos_token_e)[0], max_len,
-                                    pad_token_e, pad_token_r, pad_token_e,
-                                    sep_token_e, sep_token_r, sep_token_e)
+        triple_train = triple
+        triple_valid = triple
+        triple_test = triple
+        valid_filter = np.zeros(len(triple), dtype=bool)
+        test_filter = np.zeros(len(triple), dtype=bool)
     else:
         raise ValueError("Either --train-valid-test or --only-train is required.")
+        pass
+
+    if max_len > 1:
+        logger.info("----- Sequence triple data. -----")
+        dataset_train = StoryTriple(
+            triple_train, np.where(triple_train[:, 0] == bos_token_e)[0], max_len,
+            pad_token_e, pad_token_r, pad_token_e, sep_token_e, sep_token_r, sep_token_e)
+        dataset_valid = StoryTripleForValid(
+            triple_valid, np.where(triple_valid[:, 0] == bos_token_e)[0], valid_filter, max_len,
+            pad_token_e, pad_token_r, pad_token_e, sep_token_e, sep_token_r, sep_token_e)
+        dataset_test = StoryTripleForValid(
+            triple_test, np.where(triple_test[:, 0] == bos_token_e)[0], test_filter, max_len,
+            pad_token_e, pad_token_r, pad_token_e, sep_token_e, sep_token_r, sep_token_e)
+    elif max_len == 1:
+        logger.info("----- Simple triple data. -----")
+        dataset_train = SimpleTriple(triple_train[triple_train[:, 0] != bos_token_e])
+        dataset_valid = SimpleTriple(triple_valid[valid_filter])  # The valid data has no bos_token.
+        dataset_test = SimpleTriple(triple_test[test_filter])  # The test data has no bos_token.
+    else:
+        raise ValueError()
         pass
 
     return dataset_train, dataset_valid, dataset_test
@@ -772,25 +810,19 @@ def make_get_model(args: Namespace, *, data_helper: MyDataHelper, logger: Logger
 
     """
     # get from args
+    model_dict = {
+        ModelVersion.V01: KgSequenceTransformer01,
+        ModelVersion.V02: KgSequenceTransformer02,
+        ModelVersion.V03: KgSequenceTransformer03,
+        ModelVersion.V03a: KgSequenceTransformer03preInit
+    }
 
     all_tokens = [_t for _t in chain.from_iterable(get_all_tokens(args))]
     # get from data_helper
     num_entities, num_relations = len(data_helper.processed_entities), len(data_helper.processed_relations)
-    logger.debug("----- make_model start -----")
-    if 'model_version' not in args or args.model_version is None:
-        raise ValueError("")
-        pass
     version_ = args.model_version
-
-    # noinspection PyTypeChecker
-    Model_: KgSequenceTransformer = (
-        None if version_ not in ModelVersion.ALL_LIST()
-        else KgSequenceTransformer01 if version_ == ModelVersion.V01
-        else KgSequenceTransformer02 if version_ == ModelVersion.V02
-        else KgSequenceTransformer03 if version_ == ModelVersion.V03
-        else KgSequenceTransformer03preInit if version_ == ModelVersion.V03a
-        else KgSequenceTransformer00
-    )
+    logger.debug("----- make_model start -----")
+    Model_: Type[KgSequenceTransformer] = model_dict[version_]
 
     if Model_ is None: raise f"model-version '{version_}' is not defined."
 
@@ -818,10 +850,18 @@ def make_get_dataloader(args: Namespace, *, datasets: tuple[Dataset, Dataset, Da
     train_dataset, valid_dataset, test_dataset = datasets
     dataloader_train = None if train_dataset is None else DataLoader(
         train_dataset, shuffle=True, batch_size=batch_size, num_workers=2, pin_memory=True)
-    dataloader_valid = None if valid_dataset is None else DataLoader(
-        valid_dataset, shuffle=False, batch_size=batch_size * 2, num_workers=2, pin_memory=True)
-    dataloader_test = None if test_dataset is None else DataLoader(
-        test_dataset, shuffle=False, batch_size=batch_size * 2, num_workers=2, pin_memory=True)
+    if args.train_valid_test:
+        dataloader_valid = DataLoader(
+            valid_dataset, shuffle=False, batch_size=batch_size * 2, num_workers=2, pin_memory=True)
+        dataloader_test = DataLoader(
+            test_dataset, shuffle=False, batch_size=batch_size * 2, num_workers=2, pin_memory=True)
+    elif args.only_train:
+        dataloader_valid, dataloader_test = None, None
+        pass
+    else:
+        raise ValueError()
+        pass
+
     data_loaders = MyDataLoaderHelper(datasets, dataloader_train, None, dataloader_valid, dataloader_test)
     logger.debug(f"{dataloader_train=}, {dataloader_valid=}, {dataloader_test=}")
     return data_loaders

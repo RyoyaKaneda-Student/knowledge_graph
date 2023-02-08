@@ -9,6 +9,9 @@ from utils.torch import ZERO_FLOAT32_TENSOR
 
 
 class RankingMetric(Metric):
+    """謎
+
+    """
     def __init__(self, output_transform=lambda x: x, device="cpu"):
         self._ranks: list[torch.Tensor] = []
         self._ZERO: torch.Tensor = ZERO_FLOAT32_TENSOR.detach().to(device)

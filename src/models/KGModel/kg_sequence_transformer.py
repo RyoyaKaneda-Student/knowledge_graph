@@ -456,7 +456,7 @@ class KgSequenceTransformer0102(
 
 
 class KgSequenceTransformer03(
-    _GetEmbSimple, _GetTripleEmbAsCatActivate, _TransformerEncoder, _GetPredByOneHot,
+    _DefaultInit, _GetEmbSimple, _GetTripleEmbAsCatActivate, _TransformerEncoder, _GetPredByOneHot,
 ):
     """KgSequenceTransformer0102
 

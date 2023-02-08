@@ -46,15 +46,29 @@ HEAD_ANS: Final[str] = 'head_ans'
 RELATION_ANS: Final[str] = 'relation_ans'
 TAIL_ANS: Final[str] = 'tail_ans'
 ANS_NAME3: Final[tuple[str, str, str]] = (HEAD_ANS, RELATION_ANS, TAIL_ANS)
-# about accuracy loss tags especially for triple.
+# about accuracy tags especially for triple.
 HEAD_ACCURACY: Final[str] = 'head_accuracy'
 RELATION_ACCURACY: Final[str] = 'relation_accuracy'
 TAIL_ACCURACY: Final[str] = 'tail_accuracy'
 ACCURACY_NAME3: Final[tuple[str, str, str]] = (HEAD_ACCURACY, RELATION_ACCURACY, TAIL_ACCURACY)
+# about topk tags especially for triple.
+HEAD_TOP1: Final[str] = 'head_top1'
+RELATION_TOP1: Final[str] = 'relation_top1'
+TAIL_TOP1: Final[str] = 'tail_top1'
+TOP1_NAME3: Final[tuple[str, str, str]] = (HEAD_TOP1, RELATION_TOP1, TAIL_TOP1)
+HEAD_TOP3: Final[str] = 'head_top3'
+RELATION_TOP3: Final[str] = 'relation_top3'
+TAIL_TOP3: Final[str] = 'tail_top3'
+TOP3_NAME3: Final[tuple[str, str, str]] = (HEAD_TOP3, RELATION_TOP3, TAIL_TOP3)
+HEAD_TOP10: Final[str] = 'head_top10'
+RELATION_TOP10: Final[str] = 'relation_top10'
+TAIL_TOP10: Final[str] = 'tail_top10'
+TOP10_NAME3: Final[tuple[str, str, str]] = (HEAD_TOP10, RELATION_TOP10, TAIL_TOP10)
 # about metric tags
-HEAD_METRIC_NAMES: Final[tuple[str, str]] = (HEAD_LOSS, HEAD_ACCURACY)
-RELATION_METRIC_NAMES: Final[tuple[str, str]] = (RELATION_LOSS, RELATION_ACCURACY)
-TAIL_METRIC_NAMES: Final[tuple[str, str]] = (TAIL_LOSS, TAIL_ACCURACY)
+HEAD_METRIC_NAMES: Final[tuple[str, str, str, str, str]] = (HEAD_LOSS, HEAD_ACCURACY, HEAD_TOP1, HEAD_TOP3, HEAD_TOP10)
+RELATION_METRIC_NAMES: Final[tuple[str, str,  str, str, str]] = (
+    RELATION_LOSS, RELATION_ACCURACY, RELATION_TOP1, RELATION_TOP3, RELATION_TOP10)
+TAIL_METRIC_NAMES: Final[tuple[str, str, str, str, str]] = (TAIL_LOSS, TAIL_ACCURACY, TAIL_TOP1, TAIL_TOP3, TAIL_TOP10)
 
 # about train tags
 TRAIN_SCALER_TAG_GETTER: Final[Callable[[str], str]] = lambda _name: f"{TRAIN}/{_name}"
