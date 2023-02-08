@@ -626,6 +626,9 @@ def param_init_setting(args: Namespace, *, logger: Logger):
     else:
         torch.backends.cudnn.benchmark = False
         args.non_blocking = False
+    if not args.do_optuna:
+        del args.optuna_file, args.device_name, args.pid, args.study_name, args.n_trials
+        pass
 
 
 def make_get_data_helper(args: Namespace, *, logger: Logger):
