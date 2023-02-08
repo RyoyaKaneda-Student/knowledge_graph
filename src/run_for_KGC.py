@@ -284,7 +284,7 @@ def param_init_setting(args: Namespace, *, logger: Logger):
         args.non_blocking = False
     if not args.do_optuna:
         if getattr(args, 'optuna_file', None) is None: del args.optuna_file
-        if getattr(args, 'study_name', None) is None: del args.optuna_file
+        if getattr(args, 'study_name', None) is None: del args.study_name
         if getattr(args, 'n_trials', None) is None: args.n_trials
         del args.optuna_file, args.study_name, args.n_trials
 
