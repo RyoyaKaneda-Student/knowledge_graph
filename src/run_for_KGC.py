@@ -284,7 +284,7 @@ def param_init_setting(args: Namespace, *, logger: Logger):
         args.non_blocking = False
     if not args.do_optuna:
         for key in ('optuna_file', 'study_name', 'n_trials'):
-            if getattr(args, key, None) is None: delattr(args, key)
+            if hasattr(args, key): delattr(args, key)
     return args
 
 
