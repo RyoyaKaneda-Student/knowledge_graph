@@ -110,23 +110,22 @@ def fix_args(args: Namespace):
         if args.lr_head is not None: raise ValueError()
         args.lr_head = args.lr_story
         warnings.warn("The parameter --lr-story is deprecated. please use --lr-head")
-        del args.lr_story
     if args.lr_entity is not None:
         if args.lr_tail is not None: raise ValueError()
         args.lr_tail = args.lr_entity
         warnings.warn("The parameter --lr-entity is deprecated. please use --lr-tail")
         del args.lr_entity
-    if getattr(args, 'old_data', None) is None:
+
+    for key in ('lr_story', 'lr_entity'):
+        if hasattr(args, key): delattr(args, key)
+        pass
+
+    if not hasattr(args, 'old_data'):
         args.old_data = 0
         pass
-    if getattr(args, 'skip_head_mask', None) is None:
-        args.skip_head_mask = False
-        pass
-    if getattr(args, 'skip_relation_mask', None) is None:
-        args.skip_relation_mask = False
-        pass
-    if getattr(args, 'skip_tail_mask', None) is None:
-        args.skip_tail_mask = False
+
+    for key in ('skip_head_mask', 'skip_relation_mask', 'skip_tail_mask'):
+        if not hasattr(args, key): setattr(args, key, False)
         pass
     return args
 
