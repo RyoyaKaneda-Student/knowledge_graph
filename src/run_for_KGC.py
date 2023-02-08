@@ -118,12 +118,16 @@ def fix_args(args: Namespace):
         del args.lr_entity
     if getattr(args, 'old_data', None) is None:
         args.old_data = 0
+        pass
     if getattr(args, 'skip_head_mask', None) is None:
         args.skip_head_mask = False
+        pass
     if getattr(args, 'skip_relation_mask', None) is None:
         args.skip_relation_mask = False
+        pass
     if getattr(args, 'skip_tail_mask', None) is None:
         args.skip_tail_mask = False
+        pass
     return args
 
 
@@ -265,6 +269,26 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
     args = parser.parse_args(args=args)
     # old to new
     return fix_args(args)
+
+
+def param_init_setting(args: Namespace, *, logger: Logger):
+    """args setting
+
+    """
+    if args.train_anyway:
+        logger.warning("This process do not have reproducible.")
+        torch.backends.cudnn.benchmark = True
+        args.non_blocking = True
+    else:
+        torch.backends.cudnn.benchmark = False
+        args.non_blocking = False
+    if not args.do_optuna:
+        if getattr(args, 'optuna_file', None) is None: del args.optuna_file
+        if getattr(args, 'study_name', None) is None: del args.optuna_file
+        if getattr(args, 'n_trials', None) is None: args.n_trials
+        del args.optuna_file, args.study_name, args.n_trials
+
+    return args
 
 
 def get_all_tokens(args: Namespace):
@@ -613,22 +637,6 @@ def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model
             train=train, device=device, non_blocking=non_blocking, logger=logger)
         return {MODEL: model, TRAINER: trainer, EVALUATOR: evaluator,
                 GOOD_LOSS_CHECKPOINTE: good_checkpoint, LAST_CHECKPOINTE: last_checkpoint}
-
-
-def param_init_setting(args: Namespace, *, logger: Logger):
-    """args setting
-
-    """
-    if args.train_anyway:
-        logger.warning("This process do not have reproducible.")
-        torch.backends.cudnn.benchmark = True
-        args.non_blocking = True
-    else:
-        torch.backends.cudnn.benchmark = False
-        args.non_blocking = False
-    if not args.do_optuna:
-        del args.optuna_file, args.device_name, args.pid, args.study_name, args.n_trials
-        pass
 
 
 def make_get_data_helper(args: Namespace, *, logger: Logger):
@@ -987,7 +995,7 @@ def main_function(args: Namespace, *, logger: Logger):
 
     """
     # other args settings.
-    param_init_setting(args, logger=logger)
+    args = param_init_setting(args, logger=logger)
     # load raw data and make datahelper. Support for special-tokens by datahelper.
     logger.info('----- make datahelper start. -----')
     data_helper = make_get_data_helper(args, logger=logger)
