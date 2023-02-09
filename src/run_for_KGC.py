@@ -596,7 +596,8 @@ def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model
             **{_key: TopKCategoricalAccuracy(10, _getter) for _key, _getter in zip(TOP10_NAME3, getter_list)},
         }
 
-        [_value.attach(engine, _key) for _key, _value in metrics.items() if _key in metric_names]
+        [_value.attach(engine, _key) for _key, _value in metrics.items() 
+         if _key in metric_names and _key in metrics]
 
         return engine, metrics
 

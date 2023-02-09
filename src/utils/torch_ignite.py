@@ -45,7 +45,7 @@ def save_metrics(epoch, metrics, get_tags, metric_names, summary_writer):
     """
     if summary_writer is not None:
         for _name in metric_names:
-            _value = metrics[_name]
+            _value = metrics[_name] if _name in metrics else None
             if _value is not None:
                 summary_writer.add_scalar(get_tags(_name), _value, global_step=epoch)
 
