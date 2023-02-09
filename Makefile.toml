@@ -3043,12 +3043,13 @@ done
 ]
 description = ""
 
+
 [tasks.wn18rr_check]
 workspace = false
 script = [
 '''
 #!/usr/bin/env bash
-LogFolder="models/230208/01"
+LogFolder="models/wn18rr_check/01"
 Lr="1e-4"
 LrHead="5e-5"
 LrRelation="1e-6"
