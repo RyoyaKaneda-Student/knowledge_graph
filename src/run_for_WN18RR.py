@@ -86,6 +86,7 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
     paa2 = parser_group02.add_argument
     paa2('--pre-train', help="Put on if you are doing pre-training", action='store_true')
     paa2('--train-valid-test', help='', action='store_true')
+    paa2('--only-train', help='', action='store_true')
     # optuna setting
     parser_group03 = parser.add_argument_group('optuna setting', 'There are the setting of optuna.')
     paa3 = parser_group03.add_argument
@@ -231,9 +232,9 @@ def make_get_datasets(args: Namespace, *, data_helper: MyDataHelperForWN18RR, lo
     # make triple
     train_triple = data_helper.get_processed_triple(data_helper.data.train_df.values[:, :3].tolist())
 
-    train_triple_sequence = data_helper.get_processed_train_sequence(pad_token_e, pad_token_r, 1)
-    valid_triple_sequence = data_helper.get_processed_valid_sequence(pad_token_e, pad_token_r, 2)
-    test_triple_sequence = data_helper.get_processed_test_sequence(pad_token_e, pad_token_r, 3)
+    train_triple_sequence = data_helper.get_processed_train_sequence(pad_token_e, pad_token_r, 0)
+    valid_triple_sequence = data_helper.get_processed_valid_sequence(pad_token_e, pad_token_r, 0)
+    test_triple_sequence = data_helper.get_processed_test_sequence(pad_token_e, pad_token_r, 0)
 
     train_dataset = WN18RRDataset(train_triple, train_triple_sequence, entity_num, relation_num)
     valid_dataset = WN18RRDatasetForValid(None, valid_triple_sequence, entity_num, relation_num, 2)

@@ -64,7 +64,6 @@ seaborn = { version = "^0.12.1", source = "pypi"}
 jupyterlab = { version = "^3.0.16", source = "pypi" }
 ipywidgets = { version = "^7.6.3", source = "pypi" }
 widgetsnbextension = { version = "^3.5.1", source = "pypi" }
-jupyter-contrib-nbextensions = { version = "*", source = "pypi" }
 jupyter-nbextensions-configurator =  { version = "*", source = "pypi" }
 
 [tool.poetry.group.dev.dependencies]

@@ -109,9 +109,8 @@ def get_hypernym_list(key, list_, *, hypernym_dict):
 
 def get_to_top_list_list(df):
     hypernym_df = get_hypernym_df(df)
-    hypernym_bottom_entity_set = set(hypernym_df[HEAD]) - set(hypernym_df[TAIL])
-    hypernym_df = get_hypernym_df(df)
     entities, _ = get_entity_relation(df)
+    hypernym_bottom_entity_set = set(entities) - set(hypernym_df[TAIL])
     hypernym_dict = get_hypernym_dict(hypernym_df, entities)
     to_top_list_list = []
     for e in hypernym_bottom_entity_set:
@@ -378,21 +377,21 @@ class MyDataHelperForWN18RR(MyDataHelper):
         padding_token = [e_pad_id, r_pad_id, e_pad_id, mode_pad]
         return get_sequence_array(processed_array_list, padding_token, self.sequence_length)
 
-    def get_processed_train_sequence(self, e_pad_id, r_pad_id, mode_pad=1) -> np.ndarray:
+    def get_processed_train_sequence(self, e_pad_id, r_pad_id, mode_pad) -> np.ndarray:
         """get_processed_train_sequence
 
         """
         return self._processed_sequence(
             e_pad_id, r_pad_id, mode_pad, self.data.get_train_array_list(self.sequence_length))
 
-    def get_processed_valid_sequence(self, e_pad_id, r_pad_id, mode_pad=2) -> np.ndarray:
+    def get_processed_valid_sequence(self, e_pad_id, r_pad_id, mode_pad) -> np.ndarray:
         """get_processed_valid_sequence
 
         """
         return self._processed_sequence(
             e_pad_id, r_pad_id, mode_pad, self.data.get_valid_array_list(self.sequence_length))
 
-    def get_processed_test_sequence(self, e_pad_id, r_pad_id, mode_pad=3) -> np.ndarray:
+    def get_processed_test_sequence(self, e_pad_id, r_pad_id, mode_pad) -> np.ndarray:
         """get_processed_test_sequence
 
         """
