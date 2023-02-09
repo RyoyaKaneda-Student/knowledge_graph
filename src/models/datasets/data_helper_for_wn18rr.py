@@ -168,10 +168,11 @@ class RawDataForWN18RR:
     """RawDataForWN18RR
 
     """
-    def __init__(self, train_path, valid_path, test_path):
-        train_df = pd.read_table(train_path, header=None, names=(HEAD, RELATION, TAIL)).assign(**{MODE: 1})
-        valid_df = pd.read_table(valid_path, header=None, names=(HEAD, RELATION, TAIL)).assign(**{MODE: 2})
-        test_df = pd.read_table(test_path, header=None, names=(HEAD, RELATION, TAIL)).assign(**{MODE: 3})
+
+    def __init__(self, train_path, valid_path, test_path, train_mode=1, valid_mode=2, test_mode=3):
+        train_df = pd.read_table(train_path, header=None, names=(HEAD, RELATION, TAIL)).assign(**{MODE: train_mode})
+        valid_df = pd.read_table(valid_path, header=None, names=(HEAD, RELATION, TAIL)).assign(**{MODE: valid_mode})
+        test_df = pd.read_table(test_path, header=None, names=(HEAD, RELATION, TAIL)).assign(**{MODE: test_mode})
         all_df = pd.concat([train_df, valid_df, test_df])
         to_top_list_list = get_to_top_list_list(train_df)
         entities, relations = get_entity_relation(all_df)
@@ -240,6 +241,7 @@ class MyDataHelperForWN18RR(MyDataHelper):
     """MyDataHelperForStory For WN18RR
 
     """
+
     def __init__(self, train_path, valid_path, test_path, sequence_length, *,
                  entity_special_dicts: dict[int, str], relation_special_dicts: dict[int, str], logger: Logger = None):
         self.sequence_length = sequence_length

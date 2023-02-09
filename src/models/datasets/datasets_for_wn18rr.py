@@ -113,6 +113,7 @@ class WN18RRDatasetForValid(WN18RRDataset):
 
     def __init__(self, triple, sequence_array, entity_num, relation_num, valid_mode):
         super().__init__(triple, sequence_array, entity_num, relation_num)
+        self.valid_mode_filter = self.sequence_tensor[:, :, 3] == self.valid_mode
         self.valid_mode = valid_mode
 
     def shuffle_per_1scene(self):
@@ -122,7 +123,7 @@ class WN18RRDatasetForValid(WN18RRDataset):
         raise NotImplementedError("If Valid, This function never use.")
 
     def __getitem__(self, index: int):
-        return self.sequence_tensor[index, :, :3], self.sequence_tensor[index, :, 3] == self.valid_mode
+        return self.sequence_tensor[index, :, :3], self.valid_mode_filter[index]
 
 
 def main():
