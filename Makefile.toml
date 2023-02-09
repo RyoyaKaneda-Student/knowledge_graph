@@ -3042,3 +3042,42 @@ done
 '''
 ]
 description = ""
+
+[tasks.wn18rr_check]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+LogFolder="models/230208/01"
+Lr="1e-4"
+LrHead="5e-5"
+LrRelation="1e-6"
+LrTail="1e-6"
+LossFunction="focal_loss"
+Gamma="2.5"
+MaxLen="32"
+EmbeddingDim="128"
+EEmbeddingDim="128"
+REmbeddingDim="128"
+MaskPercent="0.15"
+MaskMaskPercent="0.80"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.10"
+
+Epoch="100"
+
+python3 -O src/run_for_WN18RR.py \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--train-valid-test --epoch ${Epoch} --batch-size 128 \
+	--early-stopping --early-stopping-count 10 \
+	--logfile ${LogFolder}/log.log --tensorboard-dir ${LogFolder}/tensorboard/ \
+	--param-file ${LogFolder}/param.pkl --model-path ${LogFolder}/model.pth \
+	--checkpoint-dir ${LogFolder}/checkpoint/ --valid-interval 25 ${@:2} \
+	--lr ${Lr} --lr-head ${LrHead} --lr-relation ${LrRelation} --lr-tail ${LrTail} \
+	--loss-function ${LossFunction} --gamma ${Gamma} --max-len $MaxLen \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent}
+'''
+]
+description = ""
