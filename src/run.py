@@ -33,7 +33,7 @@ from torch.utils.tensorboard.writer import SummaryWriter
 from models.KGModel.kg_sequence_transformer import (
     KgSequenceTransformer, )
 from models.datasets.data_helper import (
-    MyDataHelper, DefaultTokens, SpecialTokens01 as SpecialTokens, MyDataLoaderHelper, )
+    MyDataHelperForStory, DefaultTokens, SpecialTokens01 as SpecialTokens, MyDataLoaderHelper, )
 # My utils
 from utils.torch import torch_fix_seed, DeviceName
 from utils.utils import version_check
@@ -149,7 +149,7 @@ def make_get_data_helper(args: Namespace, *, logger: Logger):
         logger(Logger): logging.Logger
 
     Returns:
-        MyDataHelper: MyDataHelper()
+        MyDataHelperForStory: MyDataHelperForStory()
 
     """
     use_title = args.use_title
@@ -169,18 +169,18 @@ def make_get_data_helper(args: Namespace, *, logger: Logger):
         pad_token_r: DefaultTokens.PAD_R, cls_token_r: DefaultTokens.CLS_R, mask_token_r: DefaultTokens.MASK_R,
         sep_token_r: DefaultTokens.SEP_R, bos_token_r: DefaultTokens.BOS_R
     }
-    data_helper = MyDataHelper(SVO_ALL_INFO_FILE, train_file, None, None, logger=logger,
-                               entity_special_dicts=entity_special_dicts, relation_special_dicts=relation_special_dicts)
+    data_helper = MyDataHelperForStory(SVO_ALL_INFO_FILE, train_file, None, None, logger=logger,
+                                       entity_special_dicts=entity_special_dicts, relation_special_dicts=relation_special_dicts)
     data_helper.show(logger)
     return data_helper
 
 
-def make_get_datasets(args: Namespace, *, data_helper: MyDataHelper, logger: Logger):
+def make_get_datasets(args: Namespace, *, data_helper: MyDataHelperForStory, logger: Logger):
     """make and get datasets
     
     Args:
         args(Namespace): args
-        data_helper(MyDataHelper): data_helper
+        data_helper(MyDataHelperForStory): data_helper
         logger(Logger): logger
 
     Returns:
@@ -197,12 +197,12 @@ def make_get_datasets(args: Namespace, *, data_helper: MyDataHelper, logger: Log
     triple = data_helper.processed_train_triple
 
 
-def make_get_model(args: Namespace, *, data_helper: MyDataHelper, logger: Logger):
+def make_get_model(args: Namespace, *, data_helper: MyDataHelperForStory, logger: Logger):
     """make and get model
 
     Args:
         args(Namespace): args
-        data_helper(MyDataHelper): data_helper
+        data_helper(MyDataHelperForStory): data_helper
         logger(Logger): logger
 
     Returns:
@@ -254,7 +254,7 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, model, logg
 
     Args:
         args(Namespace): args
-        data_helper(MyDataHelper): data_helper
+        data_helper(MyDataHelperForStory): data_helper
         data_loaders(MyDataLoaderHelper): data_loaders
         model(nn.Module): model
         logger(Logger): logger

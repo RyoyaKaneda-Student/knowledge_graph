@@ -61,7 +61,7 @@
 <span class="kn">from</span> <span class="nn">const.const_values</span> <span class="kn">import</span> <span class="n">PROJECT_DIR</span>
 <span class="kn">from</span> <span class="nn">models.KGModel.kg_model</span> <span class="kn">import</span> <span class="n">HEAD</span><span class="p">,</span> <span class="n">RELATION</span><span class="p">,</span> <span class="n">TAIL</span>
 <span class="c1"># My items</span>
-<span class="kn">from</span> <span class="nn">models.datasets.data_helper</span> <span class="kn">import</span> <span class="n">MyDataHelper</span><span class="p">,</span> <span class="n">DefaultTokens</span>
+<span class="kn">from</span> <span class="nn">models.datasets.data_helper</span> <span class="kn">import</span> <span class="n">MyDataHelperForStory</span><span class="p">,</span> <span class="n">DefaultTokens</span>
 <span class="kn">from</span> <span class="nn">models.datasets.datasets_for_story</span> <span class="kn">import</span> <span class="n">StoryTriple</span>
 <span class="c1"># main function</span>
 <span class="kn">from</span> <span class="nn">run_for_KGC</span> <span class="kn">import</span> <span class="n">main_function</span>
@@ -106,7 +106,7 @@
 
     <span class="n">dataset_train</span><span class="p">:</span> <span class="n">StoryTriple</span> <span class="o">=</span> <span class="n">return_dict</span><span class="p">[</span><span class="n">DATASETS</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
     <span class="n">triple</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">=</span> <span class="n">dataset_train</span><span class="o">.</span><span class="n">triple</span>
-    <span class="n">data_helper</span><span class="p">:</span> <span class="n">MyDataHelper</span> <span class="o">=</span> <span class="n">return_dict</span><span class="p">[</span><span class="n">DATA_HELPER</span><span class="p">]</span>
+    <span class="n">data_helper</span><span class="p">:</span> <span class="n">MyDataHelperForStory</span> <span class="o">=</span> <span class="n">return_dict</span><span class="p">[</span><span class="n">DATA_HELPER</span><span class="p">]</span>
     <span class="c1"># evaluator: Checkpoint = return_dict[TRAIN_RETURNS][EVALUATOR]</span>
 
     <span class="n">load_model</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">model_path</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>

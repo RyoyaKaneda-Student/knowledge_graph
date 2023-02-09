@@ -19,7 +19,7 @@ import seaborn as sns
 import torch
 
 # My items
-from models.datasets.data_helper import MyDataHelper, DefaultTokens
+from models.datasets.data_helper import MyDataHelperForStory, DefaultTokens
 from models.datasets.datasets_for_sequence import StoryTriple
 # main function
 from run_for_KGC import main_function
@@ -115,7 +115,7 @@ def get_from_return_dict(args, return_dict):
 
     dataset_train: StoryTriple = return_dict[DATASETS][0]
     triple: torch.Tensor = dataset_train.triple
-    data_helper: MyDataHelper = return_dict[DATA_HELPER]
+    data_helper: MyDataHelperForStory = return_dict[DATA_HELPER]
     # evaluator: Checkpoint = return_dict[TRAIN_RETURNS][EVALUATOR]
 
     load_model(model, args.model_path, args.device)

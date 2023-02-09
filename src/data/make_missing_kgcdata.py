@@ -1,5 +1,5 @@
 from utils.setup import setup_logger
-from models.datasets.data_helper import MyDataHelper
+from models.datasets.data_helper import MyDataHelperForStory
 import torch
 import numpy as np
 import h5py
@@ -40,8 +40,8 @@ def main():
     """
     global logger
     logger = setup_logger(__name__, 'log/make_missing_all_data.log', console_level='debug')
-    data_helper = MyDataHelper(SRO_ALL_INFO_FILE, SRO_ALL_TRAIN_FILE, None, None, logger=logger,
-                               entity_special_dicts={}, relation_special_dicts={})
+    data_helper = MyDataHelperForStory(SRO_ALL_INFO_FILE, SRO_ALL_TRAIN_FILE, None, None, logger=logger,
+                                       entity_special_dicts={}, relation_special_dicts={})
     
     for title_ja, (title_en, l100, l090, l080, l075) in JA_TITLE2LEN_INFO.items():
         missing_make(data_helper, title_ja, title_en, l100, l090, L090)

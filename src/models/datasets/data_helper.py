@@ -13,7 +13,9 @@ Todo:
 """
 
 # region !import area!
+import abc
 import os
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 # python
 from logging import Logger
@@ -357,8 +359,30 @@ class MyRawData:
             del self.train_triple, self.valid_triple, self.test_triple
 
 
+class MyDataHelper(ABC):
+    @property
+    @abstractmethod
+    def processed_entities(self):
+        raise ValueError()
+
+    @property
+    @abstractmethod
+    def processed_relations(self):
+        raise ValueError()
+
+    @property
+    @abstractmethod
+    def processed_entity_num(self):
+        raise ValueError()
+
+    @property
+    @abstractmethod
+    def processed_relation_num(self):
+        raise ValueError()
+
+
 @dataclass(init=False)
-class MyDataHelper:
+class MyDataHelperForStory(MyDataHelper):
     """ Data Helper class
 
     * This class is the data helper class.
@@ -713,10 +737,10 @@ def main():
     logger = easy_logger(console_level='debug')
     logger.debug(f"{PROJECT_DIR=}")
     version_check(torch, pd, optuna, logger=logger)
-    data_helper = MyDataHelper(SRO_ALL_INFO_FILE, SRO_ALL_TRAIN_FILE, None, None,
-                               entity_special_dicts={0: '<pad>', 1: 'cls'},
-                               relation_special_dicts={0: '<pad>', 1: 'cls'},
-                               logger=logger)
+    data_helper = MyDataHelperForStory(SRO_ALL_INFO_FILE, SRO_ALL_TRAIN_FILE, None, None,
+                                       entity_special_dicts={0: '<pad>', 1: 'cls'},
+                                       relation_special_dicts={0: '<pad>', 1: 'cls'},
+                                       logger=logger)
     logger.debug(data_helper.processed_train_triple_geometric)
     logger.debug(data_helper.processed_entities)
 

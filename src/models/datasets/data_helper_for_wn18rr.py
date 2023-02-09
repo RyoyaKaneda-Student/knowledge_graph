@@ -28,7 +28,7 @@ from utils.setup import easy_logger
 from utils.typing import ConstMeta
 from utils.utils import version_check
 
-from models.datasets.data_helper import make_change_index_func
+from models.datasets.data_helper import make_change_index_func, MyDataHelper
 
 from const.const_values import PROJECT_DIR
 
@@ -165,6 +165,9 @@ def make_get_sequence_array(df, entity2idx, relation2idx, to_top_list_list, limi
 
 @dataclass(init=False)
 class RawDataForWN18RR:
+    """RawDataForWN18RR
+
+    """
     def __init__(self, train_path, valid_path, test_path):
         train_df = pd.read_table(train_path, header=None, names=(HEAD, RELATION, TAIL)).assign(**{MODE: 1})
         valid_df = pd.read_table(valid_path, header=None, names=(HEAD, RELATION, TAIL)).assign(**{MODE: 2})
@@ -181,29 +184,64 @@ class RawDataForWN18RR:
         self.all_df = all_df
         self.to_top_list_list = to_top_list_list
 
-    def _sequence_array(self, df, limit):
+    def _sequence_array(self, df, limit) -> list[np.ndarray]:
         to_top_list_list = self.to_top_list_list
         entity2idx, relation2idx = get_entity2idx_relation2idx(self.all_df)
         return make_get_sequence_array(df, entity2idx, relation2idx, to_top_list_list, limit)
 
+    def _get_triple(self, df) -> np.ndarray:
+        entity2idx, relation2idx = get_entity2idx_relation2idx(self.all_df)
+        return np.ndarray([
+            (entity2idx[row[HEAD]], relation2idx[row[RELATION]], entity2idx[row[TAIL]]) for index, row in df.iterrows()
+        ], dtype=int)
+
+    def get_train_triple(self):
+        """get train triple
+
+        """
+        return self._get_triple(self.train_df)
+
+    def get_valid_triple(self):
+        """get valid triple
+
+        """
+        return self._get_triple(self.valid_df)
+
+    def get_test_triple(self):
+        """get test triple
+
+        """
+        return self._get_triple(self.test_df)
+
     def get_train_array_list(self, limit):
+        """get_train_array_list
+
+        """
         df = self.train_df
         return self._sequence_array(df, limit)
 
     def get_valid_array_list(self, limit):
+        """get_valid_array_list
+
+        """
         df = pd.concat([self.train_df, self.valid_df])
         return self._sequence_array(df, limit)
 
     def get_test_array_list(self, limit):
+        """get_test_array_list
+
+        """
         df = pd.concat([self.train_df, self.valid_df, self.test_df])
         return self._sequence_array(df, limit)
 
 
 @dataclass(init=False)
-class MyDataHelperForWN18RR:
+class MyDataHelperForWN18RR(MyDataHelper):
+    """MyDataHelperForStory For WN18RR
+
+    """
     def __init__(self, train_path, valid_path, test_path, sequence_length, *,
-                 entity_special_dicts: dict[int, str], relation_special_dicts: dict[int, str], logger: Logger = None
-                 ):
+                 entity_special_dicts: dict[int, str], relation_special_dicts: dict[int, str], logger: Logger = None):
         self.sequence_length = sequence_length
         self._data = RawDataForWN18RR(train_path, valid_path, test_path)
         self._entity_special_dicts: dict[int, str] = entity_special_dicts
@@ -214,6 +252,9 @@ class MyDataHelperForWN18RR:
         self.change_special_dicts(entity_special_dicts, relation_special_dicts)
 
     def change_special_dicts(self, entity_special_dicts, relation_special_dicts):
+        """change_special_dicts
+
+        """
         entity_num, relation_length = self.data.entity_num, self.data.relation_num
         entity_special_ids = tuple(entity_special_dicts.keys())
         relation_special_ids = tuple(relation_special_dicts.keys())
@@ -303,25 +344,64 @@ class MyDataHelperForWN18RR:
             relations.insert(index, value)
         return relations
 
+    @property
+    def processed_entity2index(self) -> dict[str, int]:
+        """entity2index considering special_ids.
+
+        Returns:
+            dict[str, int]: entity2index considering special_ids.
+        """
+        return {e: i for i, e in enumerate(self.processed_entities)}
+
+    @property
+    def processed_relation2index(self) -> dict[str, int]:
+        """relation2index considering special_ids.
+
+        Returns:
+            dict[str, int]: relation2index considering special_ids.
+        """
+        return {r: i for i, r in enumerate(self.processed_relations)}
+
+    def get_processed_triple(self, str_triple) -> np.ndarray:
+        """get_processed_triple
+
+        """
+        entity2index, relation2index = self.processed_entity2index, self.processed_relation2index
+        return np.array([
+            (entity2index[h], relation2index[r], entity2index[t]) for h, r, t in str_triple
+        ])
+
     def _processed_sequence(self, e_pad_id, r_pad_id, mode_pad, array_list) -> np.ndarray:
         processed_array_list = [self._processed_triple(array_) for array_ in array_list]
         padding_token = [e_pad_id, r_pad_id, e_pad_id, mode_pad]
         return get_sequence_array(processed_array_list, padding_token, self.sequence_length)
 
-    def get_processed_train_sequence(self, e_pad_id, r_pad_id, mode_pad) -> np.ndarray:
+    def get_processed_train_sequence(self, e_pad_id, r_pad_id, mode_pad=1) -> np.ndarray:
+        """get_processed_train_sequence
+
+        """
         return self._processed_sequence(
             e_pad_id, r_pad_id, mode_pad, self.data.get_train_array_list(self.sequence_length))
 
-    def get_processed_valid_sequence(self, e_pad_id, r_pad_id, mode_pad) -> np.ndarray:
+    def get_processed_valid_sequence(self, e_pad_id, r_pad_id, mode_pad=2) -> np.ndarray:
+        """get_processed_valid_sequence
+
+        """
         return self._processed_sequence(
             e_pad_id, r_pad_id, mode_pad, self.data.get_valid_array_list(self.sequence_length))
 
-    def get_processed_test_sequence(self, e_pad_id, r_pad_id, mode_pad) -> np.ndarray:
+    def get_processed_test_sequence(self, e_pad_id, r_pad_id, mode_pad=3) -> np.ndarray:
+        """get_processed_test_sequence
+
+        """
         return self._processed_sequence(
             e_pad_id, r_pad_id, mode_pad, self.data.get_test_array_list(self.sequence_length))
 
 
 def main():
+    """main
+
+    """
     pass
 
 

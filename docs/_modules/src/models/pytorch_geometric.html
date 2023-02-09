@@ -71,7 +71,7 @@
 <span class="kn">from</span> <span class="nn">utils.setup</span> <span class="kn">import</span> <span class="n">setup</span><span class="p">,</span> <span class="n">save_param</span>
 <span class="c1"># from utilModules.torch import cuda_empty_cache as _ccr, load_model, save_model, decorate_loader, onehot</span>
 <span class="c1"># ========== Made by me ==========</span>
-<span class="kn">from</span> <span class="nn">models.datasets.data_helper</span> <span class="kn">import</span> <span class="n">MyDataHelper</span><span class="p">,</span> <span class="n">KGDATA_ALL</span>
+<span class="kn">from</span> <span class="nn">models.datasets.data_helper</span> <span class="kn">import</span> <span class="n">MyDataHelperForStory</span><span class="p">,</span> <span class="n">KGDATA_ALL</span>
 
 
 <span class="c1"># endregion</span>
@@ -168,7 +168,7 @@
         <span class="k">return</span> <span class="n">x</span></div></div>
 
 
-<div class="viewcode-block" id="make_geodata"><a class="viewcode-back" href="../../../src.models.html#src.models.pytorch_geometric.make_geodata">[ドキュメント]</a><span class="k">def</span> <span class="nf">make_geodata</span><span class="p">(</span><span class="n">data_helper</span><span class="p">:</span> <span class="n">MyDataHelper</span><span class="p">,</span>
+<div class="viewcode-block" id="make_geodata"><a class="viewcode-back" href="../../../src.models.html#src.models.pytorch_geometric.make_geodata">[ドキュメント]</a><span class="k">def</span> <span class="nf">make_geodata</span><span class="p">(</span><span class="n">data_helper</span><span class="p">:</span> <span class="n">MyDataHelperForStory</span><span class="p">,</span>
                  <span class="o">*</span><span class="p">,</span> <span class="n">is_del_reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">is_add_self_loop</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">num_self_loop</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TorchGeoData</span><span class="p">:</span>
     <span class="n">e_length</span> <span class="o">=</span> <span class="n">data_helper</span><span class="o">.</span><span class="n">processed_entity_num</span>
     <span class="n">r_length</span> <span class="o">=</span> <span class="n">data_helper</span><span class="o">.</span><span class="n">processed_relation_num</span>

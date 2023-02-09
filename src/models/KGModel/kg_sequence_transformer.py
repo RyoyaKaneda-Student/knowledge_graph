@@ -198,7 +198,7 @@ class _LabelInit(_Init, ABC):
 
     def init(self, args, *args_, **kwargs):
         super(_LabelInit, self).init(args, *args_, **kwargs)
-        from models.datasets.data_helper import MyDataHelper
+        from models.datasets.data_helper import MyDataHelperForStory
 
         if not args.init_embedding_using_bert:
             return
@@ -206,7 +206,7 @@ class _LabelInit(_Init, ABC):
         embedding_dim, num_embeddings = self.entity_embeddings.embedding_dim, self.entity_embeddings.num_embeddings
         assert embedding_dim == 768, f"The entity_embedding_dim must 768 but entity_embedding_dim=={embedding_dim}"
 
-        data_helper: MyDataHelper = kwargs['data_helper']
+        data_helper: MyDataHelperForStory = kwargs['data_helper']
         bert_model = BertModel.from_pretrained('bert-base-uncased')
         bert_model.to(device)
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')

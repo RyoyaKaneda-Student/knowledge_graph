@@ -69,7 +69,7 @@
 <span class="kn">from</span> <span class="nn">models.KGModel.kg_story_transformer</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">KgStoryTransformer</span><span class="p">,</span> <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">models.datasets.data_helper</span> <span class="kn">import</span> <span class="p">(</span>
-    <span class="n">MyDataHelper</span><span class="p">,</span> <span class="n">DefaultTokens</span><span class="p">,</span> <span class="n">SpecialTokens01</span> <span class="k">as</span> <span class="n">SpecialTokens</span><span class="p">,</span> <span class="n">MyDataLoaderHelper</span><span class="p">,</span> <span class="p">)</span>
+    <span class="n">MyDataHelperForStory</span><span class="p">,</span> <span class="n">DefaultTokens</span><span class="p">,</span> <span class="n">SpecialTokens01</span> <span class="k">as</span> <span class="n">SpecialTokens</span><span class="p">,</span> <span class="n">MyDataLoaderHelper</span><span class="p">,</span> <span class="p">)</span>
 <span class="c1"># My utils</span>
 <span class="kn">from</span> <span class="nn">utils.torch</span> <span class="kn">import</span> <span class="n">torch_fix_seed</span><span class="p">,</span> <span class="n">DeviceName</span>
 <span class="kn">from</span> <span class="nn">utils.utils</span> <span class="kn">import</span> <span class="n">version_check</span>
@@ -185,7 +185,7 @@
 <span class="sd">        logger(Logger): logging.Logger</span>
 
 <span class="sd">    Returns:</span>
-<span class="sd">        MyDataHelper: MyDataHelper()</span>
+<span class="sd">        MyDataHelperForStory: MyDataHelperForStory()</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">use_title</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">use_title</span>
@@ -205,18 +205,18 @@
         <span class="n">pad_token_r</span><span class="p">:</span> <span class="n">DefaultTokens</span><span class="o">.</span><span class="n">PAD_R</span><span class="p">,</span> <span class="n">cls_token_r</span><span class="p">:</span> <span class="n">DefaultTokens</span><span class="o">.</span><span class="n">CLS_R</span><span class="p">,</span> <span class="n">mask_token_r</span><span class="p">:</span> <span class="n">DefaultTokens</span><span class="o">.</span><span class="n">MASK_R</span><span class="p">,</span>
         <span class="n">sep_token_r</span><span class="p">:</span> <span class="n">DefaultTokens</span><span class="o">.</span><span class="n">SEP_R</span><span class="p">,</span> <span class="n">bos_token_r</span><span class="p">:</span> <span class="n">DefaultTokens</span><span class="o">.</span><span class="n">BOS_R</span>
     <span class="p">}</span>
-    <span class="n">data_helper</span> <span class="o">=</span> <span class="n">MyDataHelper</span><span class="p">(</span><span class="n">SVO_ALL_INFO_FILE</span><span class="p">,</span> <span class="n">train_file</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">,</span>
+    <span class="n">data_helper</span> <span class="o">=</span> <span class="n">MyDataHelperForStory</span><span class="p">(</span><span class="n">SVO_ALL_INFO_FILE</span><span class="p">,</span> <span class="n">train_file</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">,</span>
                                <span class="n">entity_special_dicts</span><span class="o">=</span><span class="n">entity_special_dicts</span><span class="p">,</span> <span class="n">relation_special_dicts</span><span class="o">=</span><span class="n">relation_special_dicts</span><span class="p">)</span>
     <span class="n">data_helper</span><span class="o">.</span><span class="n">show</span><span class="p">(</span><span class="n">logger</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">data_helper</span></div>
 
 
-<div class="viewcode-block" id="make_get_datasets"><a class="viewcode-back" href="../../src.html#src.run.make_get_datasets">[ドキュメント]</a><span class="k">def</span> <span class="nf">make_get_datasets</span><span class="p">(</span><span class="n">args</span><span class="p">:</span> <span class="n">Namespace</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">data_helper</span><span class="p">:</span> <span class="n">MyDataHelper</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">Logger</span><span class="p">):</span>
+<div class="viewcode-block" id="make_get_datasets"><a class="viewcode-back" href="../../src.html#src.run.make_get_datasets">[ドキュメント]</a><span class="k">def</span> <span class="nf">make_get_datasets</span><span class="p">(</span><span class="n">args</span><span class="p">:</span> <span class="n">Namespace</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">data_helper</span><span class="p">:</span> <span class="n">MyDataHelperForStory</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">Logger</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;make and get datasets</span>
 <span class="sd">    </span>
 <span class="sd">    Args:</span>
 <span class="sd">        args(Namespace): args</span>
-<span class="sd">        data_helper(MyDataHelper): data_helper</span>
+<span class="sd">        data_helper(MyDataHelperForStory): data_helper</span>
 <span class="sd">        logger(Logger): logger</span>
 
 <span class="sd">    Returns:</span>
@@ -233,12 +233,12 @@
     <span class="n">triple</span> <span class="o">=</span> <span class="n">data_helper</span><span class="o">.</span><span class="n">processed_train_triple</span></div>
 
 
-<div class="viewcode-block" id="make_get_model"><a class="viewcode-back" href="../../src.html#src.run.make_get_model">[ドキュメント]</a><span class="k">def</span> <span class="nf">make_get_model</span><span class="p">(</span><span class="n">args</span><span class="p">:</span> <span class="n">Namespace</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">data_helper</span><span class="p">:</span> <span class="n">MyDataHelper</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">Logger</span><span class="p">):</span>
+<div class="viewcode-block" id="make_get_model"><a class="viewcode-back" href="../../src.html#src.run.make_get_model">[ドキュメント]</a><span class="k">def</span> <span class="nf">make_get_model</span><span class="p">(</span><span class="n">args</span><span class="p">:</span> <span class="n">Namespace</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">data_helper</span><span class="p">:</span> <span class="n">MyDataHelperForStory</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">Logger</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;make and get model</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        args(Namespace): args</span>
-<span class="sd">        data_helper(MyDataHelper): data_helper</span>
+<span class="sd">        data_helper(MyDataHelperForStory): data_helper</span>
 <span class="sd">        logger(Logger): logger</span>
 
 <span class="sd">    Returns:</span>
@@ -290,7 +290,7 @@
 
 <span class="sd">    Args:</span>
 <span class="sd">        args(Namespace): args</span>
-<span class="sd">        data_helper(MyDataHelper): data_helper</span>
+<span class="sd">        data_helper(MyDataHelperForStory): data_helper</span>
 <span class="sd">        data_loaders(MyDataLoaderHelper): data_loaders</span>
 <span class="sd">        model(nn.Module): model</span>
 <span class="sd">        logger(Logger): logger</span>

@@ -36,9 +36,9 @@ from torch.utils.tensorboard.writer import SummaryWriter
 # My Models
 from models.KGModel.kg_sequence_transformer import (
     KgSequenceTransformer01, KgSequenceTransformer02, KgSequenceTransformer03, KgSequenceTransformer03preInit,
-    KgSequenceTransformer00, KgSequenceTransformer)
+    KgSequenceTransformer)
 from models.datasets.data_helper import (
-    MyDataHelper, DefaultTokens, DefaultIds, SpecialTokens01 as SpecialTokens, MyDataLoaderHelper, )
+    MyDataHelperForStory, DefaultTokens, DefaultIds, SpecialTokens01 as SpecialTokens, MyDataLoaderHelper, )
 from models.datasets.datasets_for_sequence import add_bos, StoryTriple, StoryTripleForValid, SimpleTriple
 from models.utilLoss.focal_loss import FocalLoss, GAMMA
 from models.utilLoss.utils import LossFnName
@@ -60,13 +60,12 @@ from utils.torch_ignite import (TRAINER, EVALUATOR, GOOD_LOSS_CHECKPOINTE, LAST_
 from const.const_values import (CPU, MODEL, LOSS, PARAMS, LR,
                                 DATA_HELPER, DATASETS, DATA_LOADERS, TRAIN_RETURNS,
                                 HEAD_LOSS, RELATION_LOSS, TAIL_LOSS,
-                                HEAD_ACCURACY, RELATION_ACCURACY, TAIL_ACCURACY,
                                 HEAD_ANS, RELATION_ANS, TAIL_ANS,
                                 HEAD_PRED, RELATION_PRED, TAIL_PRED,
                                 PRE_TRAIN_SCALER_TAG_GETTER, PRE_VALID_SCALER_TAG_GETTER,
                                 PRE_TRAIN_MODEL_WEIGHT_TAG_GETTER,
-                                HEAD_METRIC_NAMES, RELATION_METRIC_NAMES, TAIL_METRIC_NAMES, HEAD_TOP1, RELATION_TOP1,
-                                TAIL_TOP1, HEAD_TOP3, RELATION_TOP3, TAIL_TOP3, ACCURACY_NAME3, TOP1_NAME3, TOP3_NAME3,
+                                HEAD_METRIC_NAMES, RELATION_METRIC_NAMES, TAIL_METRIC_NAMES,
+                                ACCURACY_NAME3, TOP1_NAME3, TOP3_NAME3,
                                 TOP10_NAME3)
 # My const words about file direction and title
 from const.const_values import (
@@ -96,38 +95,6 @@ class ModelVersion(metaclass=ConstMeta):
 
         """
         return cls.V01, cls.V02, cls.V03, cls.V03a
-
-
-def fix_args(args: Namespace):
-    """fix args
-    Args:
-        args(Namespace):
-
-    Returns:
-        Namespace
-    """
-    if args.lr_story is not None:
-        if args.lr_head is not None: raise ValueError()
-        args.lr_head = args.lr_story
-        warnings.warn("The parameter --lr-story is deprecated. please use --lr-head")
-    if args.lr_entity is not None:
-        if args.lr_tail is not None: raise ValueError()
-        args.lr_tail = args.lr_entity
-        warnings.warn("The parameter --lr-entity is deprecated. please use --lr-tail")
-        del args.lr_entity
-
-    for key in ('lr_story', 'lr_entity'):
-        if hasattr(args, key): delattr(args, key)
-        pass
-
-    if not hasattr(args, 'old_data'):
-        args.old_data = 0
-        pass
-
-    for key in ('skip_head_mask', 'skip_relation_mask', 'skip_tail_mask'):
-        if not hasattr(args, key): setattr(args, key, False)
-        pass
-    return args
 
 
 def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
@@ -270,6 +237,38 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
     return fix_args(args)
 
 
+def fix_args(args: Namespace):
+    """fix args
+    Args:
+        args(Namespace):
+
+    Returns:
+        Namespace
+    """
+    if args.lr_story is not None:
+        if args.lr_head is not None: raise ValueError()
+        args.lr_head = args.lr_story
+        warnings.warn("The parameter --lr-story is deprecated. please use --lr-head")
+    if args.lr_entity is not None:
+        if args.lr_tail is not None: raise ValueError()
+        args.lr_tail = args.lr_entity
+        warnings.warn("The parameter --lr-entity is deprecated. please use --lr-tail")
+        del args.lr_entity
+
+    for key in ('lr_story', 'lr_entity'):
+        if hasattr(args, key): delattr(args, key)
+        pass
+
+    if not hasattr(args, 'old_data'):
+        args.old_data = 0
+        pass
+
+    for key in ('skip_head_mask', 'skip_relation_mask', 'skip_tail_mask'):
+        if not hasattr(args, key): setattr(args, key, False)
+        pass
+    return args
+
+
 def param_init_setting(args: Namespace, *, logger: Logger):
     """args setting
 
@@ -313,7 +312,7 @@ def get_all_tokens(args: Namespace):
 
 
 def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model, *, logger, summary_writer) -> dict:
-    """pre training function.
+    """pre-training function.
 
     * main part of my train.
 
@@ -323,7 +322,8 @@ def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model
         data_helper(MyDataHelper): MyDataHelper instance.
         data_loaders(MyDataLoaderHelper): MyDataLoaderHelper instance. It has .train_dataloader and .valid_dataloader.
         model(KgSequenceTransformer): model.
-        summary_writer(SummaryWriter|None): tensorboard's SummaryWriter instance. if it is None, don't write to tensorboard.
+        summary_writer(SummaryWriter|None):
+            tensorboard's SummaryWriter instance. if it is None, don't write to tensorboard.
         logger(Logger): logging.Logger.
 
     Returns:
@@ -402,21 +402,18 @@ def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model
         _mask_value[_mask_mask_filter] = _mask_token
         return _mask_filter, _mask_ans, _mask_value
 
-    entity_num, relation_num = len(data_helper.processed_entities), len(data_helper.processed_relations)
+    entity_num, relation_num = data_helper.processed_entity_num, data_helper.processed_relation_num
     train = data_loaders.train_dataloader
+    train_dataset = train.dataset
     valid = data_loaders.valid_dataloader if args.train_valid_test else None
-    train_triple = train.dataset.triple[:train.dataset.sequence_length]
     # count frequency list
-    head_index2count = torch.bincount(train_triple[:, 0], minlength=entity_num).to(torch.float).to(device)
-    relation_index2count = torch.bincount(train_triple[:, 1], minlength=relation_num).to(torch.float).to(device)
-    tail_index2count = torch.bincount(train_triple[:, 2], minlength=entity_num).to(torch.float).to(device)
+    head_index2count, relation_index2count, tail_index2count = train_dataset.get_index2count(device)
 
     # optimizer setting
-    modules = {_name: _module for _name, _module in model.named_children()}
-    del modules[HEAD_MASKED_LM], modules[RELATION_MASKED_LM], modules[TAIL_MASKED_LM]
-    opt = torch.optim.Adam([
-                               {PARAMS: _module.parameters(), LR: lr} for _name, _module in modules.items()
-                           ] + [
+    modules = {_name: _module for _name, _module in model.named_children()
+               if _name not in (HEAD_MASKED_LM, RELATION_MASKED_LM, TAIL_MASKED_LM)}
+    opt = torch.optim.Adam([{PARAMS: _module.parameters(), LR: lr} for _name, _module in modules.items()
+                            ] + [
                                {PARAMS: model.head_maskdlm.parameters(), LR: lr_head},
                                {PARAMS: model.relation_maskdlm.parameters(), LR: lr_relation},
                                {PARAMS: model.tail_maskdlm.parameters(), LR: lr_tail},
@@ -520,6 +517,9 @@ def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model
         # triple.shape == (batch, max_len, 3) and valid_filter.shape == (batch, max_len)
 
         def get_valid_loss(_index, _loss_fn):
+            """get valid loss
+
+            """
             _triple_for_valid = triple.clone()
             _triple_for_valid[:, :, _index][valid_filter] = mask_token_e
             _model_input = [None, None, None]
@@ -604,7 +604,7 @@ def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model
     trainer, trainer_matrix = set_engine_metrics(train_step)
 
     _kwargs = dict(summary_writer=summary_writer, metric_names=metric_names, param_names=ALL_WEIGHT_LIST, logger=logger)
-    set_start_epoch_function(trainer, optional_func=train.dataset.shuffle_per_1scene, logger=logger)
+    set_start_epoch_function(trainer, optional_func=train_dataset.per1epoch, logger=logger)
     set_end_epoch_function(trainer, PRE_TRAIN_SCALER_TAG_GETTER, **_kwargs)
     set_write_model_param_function(
         trainer, model, PRE_TRAIN_MODEL_WEIGHT_TAG_GETTER, lambda _key: getattr(model, _key).data, **_kwargs)
@@ -627,6 +627,7 @@ def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model
         return {MODEL: model, TRAINER: trainer, EVALUATOR: evaluator,
                 GOOD_LOSS_CHECKPOINTE: None, LAST_CHECKPOINTE: None}
     else:
+        logger.info("training with pytorch ignite")
         good_checkpoint, last_checkpoint, dict_ = training_with_ignite(
             model, opt, max_epoch, trainer, evaluator, checkpoint_dir,
             resume_checkpoint_path, is_resume_from_checkpoint, is_resume_from_last_point,
@@ -643,7 +644,7 @@ def make_get_data_helper(args: Namespace, *, logger: Logger):
         logger(Logger): logging.Logger
 
     Returns:
-        MyDataHelper: MyDataHelper()
+        MyDataHelperForStory: MyDataHelperForStory()
 
     """
     use_title = args.use_title
@@ -678,13 +679,14 @@ def make_get_data_helper(args: Namespace, *, logger: Logger):
         pad_token_r: DefaultTokens.PAD_R, cls_token_r: DefaultTokens.CLS_R, mask_token_r: DefaultTokens.MASK_R,
         sep_token_r: DefaultTokens.SEP_R, bos_token_r: DefaultTokens.BOS_R
     }
-    data_helper = MyDataHelper(info_file, train_file, None, None, logger=logger,
-                               entity_special_dicts=entity_special_dicts, relation_special_dicts=relation_special_dicts)
+    data_helper = MyDataHelperForStory(
+        info_file, train_file, None, None, logger=logger,
+        entity_special_dicts=entity_special_dicts, relation_special_dicts=relation_special_dicts)
     data_helper.show(logger)
     return data_helper
 
 
-def make_get_datasets(args: Namespace, *, data_helper: MyDataHelper, logger: Logger):
+def make_get_datasets(args: Namespace, *, data_helper, logger: Logger):
     """make and get datasets
     
     Args:
@@ -783,15 +785,22 @@ def make_get_datasets(args: Namespace, *, data_helper: MyDataHelper, logger: Log
 
     if max_len > 1:
         logger.info("----- Sequence triple data. -----")
+        entity_num, relation_num = data_helper.processed_entity_num, data_helper.processed_relation_num
         dataset_train = StoryTriple(
             triple_train, np.where(triple_train[:, 0] == bos_token_e)[0], max_len,
-            pad_token_e, pad_token_r, pad_token_e, sep_token_e, sep_token_r, sep_token_e)
+            pad_token_e, pad_token_r, pad_token_e, sep_token_e, sep_token_r, sep_token_e,
+            entity_num, relation_num
+        )
         dataset_valid = StoryTripleForValid(
             triple_valid, np.where(triple_valid[:, 0] == bos_token_e)[0], valid_filter, max_len,
-            pad_token_e, pad_token_r, pad_token_e, sep_token_e, sep_token_r, sep_token_e)
+            pad_token_e, pad_token_r, pad_token_e, sep_token_e, sep_token_r, sep_token_e,
+            entity_num, relation_num
+        )
         dataset_test = StoryTripleForValid(
             triple_test, np.where(triple_test[:, 0] == bos_token_e)[0], test_filter, max_len,
-            pad_token_e, pad_token_r, pad_token_e, sep_token_e, sep_token_r, sep_token_e)
+            pad_token_e, pad_token_r, pad_token_e, sep_token_e, sep_token_r, sep_token_e,
+            entity_num, relation_num
+        )
     elif max_len == 1:
         logger.info("----- Simple triple data. -----")
         dataset_train = SimpleTriple(triple_train[triple_train[:, 0] != bos_token_e])
@@ -804,7 +813,7 @@ def make_get_datasets(args: Namespace, *, data_helper: MyDataHelper, logger: Log
     return dataset_train, dataset_valid, dataset_test
 
 
-def make_get_model(args: Namespace, *, data_helper: MyDataHelper, logger: Logger):
+def make_get_model(args: Namespace, *, data_helper, logger: Logger):
     """make and get model
 
     Args:
@@ -826,14 +835,14 @@ def make_get_model(args: Namespace, *, data_helper: MyDataHelper, logger: Logger
 
     all_tokens = [_t for _t in chain.from_iterable(get_all_tokens(args))]
     # get from data_helper
-    num_entities, num_relations = len(data_helper.processed_entities), len(data_helper.processed_relations)
+    entity_num, relation_num = data_helper.processed_entity_num, data_helper.processed_relation_num
     version_ = args.model_version
     logger.debug("----- make_model start -----")
     Model_: Type[KgSequenceTransformer] = model_dict[version_]
 
     if Model_ is None: raise f"model-version '{version_}' is not defined."
 
-    model = Model_(args, num_entities, num_relations, special_tokens=SpecialTokens(*all_tokens))
+    model = Model_(args, entity_num, relation_num, special_tokens=SpecialTokens(*all_tokens))
     model.assert_check()
     model.init(args, data_helper=data_helper)
     logger.info(f"\n{model}")

@@ -35,7 +35,7 @@ from utils.str_process import info_str as _info_str
 from utils.setup import setup, save_param
 # from utilModules.torch import cuda_empty_cache as _ccr, load_model, save_model, decorate_loader, onehot
 # ========== Made by me ==========
-from models.datasets.data_helper import MyDataHelper, KGDATA_ALL
+from models.datasets.data_helper import MyDataHelperForStory, KGDATA_ALL
 
 
 # endregion
@@ -132,7 +132,7 @@ class GAT(torch.nn.Module):
         return x
 
 
-def make_geodata(data_helper: MyDataHelper,
+def make_geodata(data_helper: MyDataHelperForStory,
                  *, is_del_reverse=True, is_add_self_loop=False, num_self_loop=-1, logger=None) -> TorchGeoData:
     e_length = data_helper.processed_entity_num
     r_length = data_helper.processed_relation_num

@@ -12,7 +12,8 @@
 
 # ========== python ==========
 # noinspection PyUnresolvedReferences
-from typing import List, Dict, Tuple, Optional, Union, Callable, Final
+import abc
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import itertools
 from operator import itemgetter
@@ -62,20 +63,50 @@ class SimpleTriple(Dataset):
         return len(self.triple)
 
 
+class SequenceTriple(ABC, Dataset):
+    """SequenceTriple
+
+    """
+    def __init__(self):
+        super(SequenceTriple, self).__init__()
+
+    @abstractmethod
+    def per1epoch(self):
+        """per1epoch
+
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def get_index2count(self, device):
+        """get_index2count
+
+        """
+        raise NotImplementedError()
+
+
 @dataclass(init=False)
-class StoryTriple(Dataset):
+class StoryTriple(SequenceTriple):
     """Dataset using for Story Triple.
 
     """
     story_count: int
     sequence_length: int
     max_len: int
+    #
     padding_tensor: torch.Tensor
     sep_tensor: torch.Tensor
+    #
+    head_index2count: torch.Tensor
+    relation_index2count: torch.Tensor
+    tail_index2count: torch.Tensor
+    #
     triple: torch.Tensor
     bos_indexes: torch.Tensor
 
-    def __init__(self, triple, bos_indexes, max_len, padding_h, padding_r, padding_t, sep_h, sep_r, sep_t, ):
+    def __init__(self, triple, bos_indexes, max_len,
+                 padding_h, padding_r, padding_t, sep_h, sep_r, sep_t,
+                 entity_num, relation_num):
         """Dataset using for Story Triple.
 
         * One output shape is [series_len, 3], not [3]
@@ -91,8 +122,13 @@ class StoryTriple(Dataset):
             sep_r(int): relation sep token
             sep_t(int): tail sep token
         """
+        super(StoryTriple, self).__init__()
         story_count = len(bos_indexes)
         sequence_length = len(triple)
+        head_index2count = torch.bincount(torch.from_numpy(triple[:, 0]), minlength=entity_num).to(torch.float)
+        relation_index2count = torch.bincount(torch.from_numpy(triple[:, 1]), minlength=relation_num).to(torch.float)
+        tail_index2count = torch.bincount(torch.from_numpy(triple[:, 2]), minlength=entity_num).to(torch.float)
+
         triple = np.concatenate([triple, triple[:max_len]])
         bos_indexes = np.concatenate([bos_indexes, bos_indexes + sequence_length])
         bos_indexes = bos_indexes[bos_indexes < sequence_length+max_len]
@@ -104,12 +140,23 @@ class StoryTriple(Dataset):
         # set tensor
         self.padding_tensor = torch.tensor([padding_h, padding_r, padding_t])
         self.sep_tensor = torch.tensor([sep_h, sep_r, sep_t])
+        # set index2count
+        self.head_index2count = head_index2count
+        self.relation_index2count = relation_index2count
+        self.tail_index2count = tail_index2count
         # set items
         self.triple = torch.from_numpy(triple).clone()
         self.bos_indexes = torch.from_numpy(bos_indexes).clone()
         # only use in this class
         # make bos_end
         self._bos_end = torch.stack((self.bos_indexes, self.bos_indexes + max_len)).T
+
+    def per1epoch(self):
+        """run per 1 epoch
+
+        """
+        self.shuffle_per_1scene()
+        pass
 
     def shuffle_per_1scene(self):
         """shuffle per one scene.
@@ -127,6 +174,12 @@ class StoryTriple(Dataset):
         assert len_ == len(triple)
         self.triple = triple
 
+    def get_index2count(self, device) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """get index2count
+
+        """
+        return self.head_index2count.to(device), self.relation_index2count.to(device), self.tail_index2count.to(device)
+
     def __getitem__(self, index: int):
         bos_index, end_index = self._bos_end[index]
         return self.triple[bos_index: end_index]
@@ -143,7 +196,10 @@ class StoryTripleForValid(StoryTriple):
     valid_filter: torch.Tensor
 
     def __init__(
-            self, triple, bos_indexes, valid_filter, max_len, padding_h, padding_r, padding_t, sep_h, sep_r, sep_t):
+            self, triple, bos_indexes, valid_filter, max_len,
+            padding_h, padding_r, padding_t, sep_h, sep_r, sep_t,
+            entity_num, relation_num
+    ):
         """Dataset using for Valid Story Triple.
 
         * One output shape is [series_len, 3], not [3]
@@ -160,7 +216,9 @@ class StoryTripleForValid(StoryTriple):
             sep_r(int): relation sep token
             sep_t(int): tail sep token
         """
-        super().__init__(triple, bos_indexes, max_len, padding_h, padding_r, padding_t, sep_h, sep_r, sep_t)
+        super().__init__(triple, bos_indexes, max_len,
+                         padding_h, padding_r, padding_t, sep_h, sep_r, sep_t,
+                         entity_num, relation_num)
         self.valid_filter = torch.from_numpy(np.concatenate((valid_filter, valid_filter[:max_len])))
         if not len(triple) == len(valid_filter):
             raise ValueError("len of triple and len of filter must have same size.")
