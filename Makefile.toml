@@ -3069,11 +3069,11 @@ Epoch="100"
 
 python3 -O src/run_for_WN18RR.py \
 	--device cuda --console-level info --pre-train --model-version 03 \
-	--train-valid-test --epoch ${Epoch} --batch-size 128 \
-	--early-stopping --early-stopping-count 10 \
+	--train-valid-test --epoch ${Epoch} --batch-size 64 \
 	--logfile ${LogFolder}/log.log --tensorboard-dir ${LogFolder}/tensorboard/ \
 	--param-file ${LogFolder}/param.pkl --model-path ${LogFolder}/model.pth \
-	--checkpoint-dir ${LogFolder}/checkpoint/ --valid-interval 25 ${@:2} \
+	--checkpoint-dir ${LogFolder}/checkpoint/ --valid-interval 10 ${@:2} \
+	--early-stopping --early-stopping-count 5 \
 	--lr ${Lr} --lr-head ${LrHead} --lr-relation ${LrRelation} --lr-tail ${LrTail} \
 	--loss-function ${LossFunction} --gamma ${Gamma} --max-len $MaxLen \
 	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
