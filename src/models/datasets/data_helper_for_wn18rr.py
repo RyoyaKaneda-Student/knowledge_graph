@@ -113,7 +113,7 @@ def get_to_top_list_list(df):
     hypernym_bottom_entity_set = set(entities) - set(hypernym_df[TAIL])
     hypernym_dict = get_hypernym_dict(hypernym_df, entities)
     to_top_list_list = []
-    for e in hypernym_bottom_entity_set:
+    for e in sorted(hypernym_bottom_entity_set):
         to_top_list = get_hypernym_list(e, [], hypernym_dict=hypernym_dict)
         to_top_list_list.extend(to_top_list)
     return to_top_list_list
