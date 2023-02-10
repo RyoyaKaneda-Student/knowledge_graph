@@ -36,7 +36,7 @@ from torch.utils.tensorboard.writer import SummaryWriter
 # My Models
 from models.KGModel.kg_sequence_transformer import (
     KgSequenceTransformer01, KgSequenceTransformer02, KgSequenceTransformer03, KgSequenceTransformer03preInit,
-    KgSequenceTransformer)
+    KgSequenceTransformer, ENTITY_EMBEDDINGS, RELATION_EMBEDDINGS)
 from models.datasets.data_helper import (
     MyDataHelperForStory, DefaultTokens, DefaultIds, SpecialTokens01 as SpecialTokens, MyDataLoaderHelper, )
 from models.datasets.datasets_for_sequence import add_bos, StoryTriple, StoryTripleForValid, SimpleTriple
@@ -184,6 +184,10 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
     paa5('--no-use-pe', action='store_true', help='to check pe(position encoding) power, we have to make no pe model')
     paa5('--init-embedding-using-bert', action='store_true',
          help='if it is set and the model is 03a, it will be pre_init by bert')
+    paa5('--force-set-label', action='store_true',
+         help='If true, however there has no label, the entity name set as label.')
+    paa5('--no-change-first-entity', action='store_true', help='If true, entity embedding not change')
+    paa5('--no-change-first-relation', action='store_true', help='If true,  entity embedding not change')
     # mask percent
     parser_group051 = parser.add_argument_group(
         'model setting of mask-percent', 'MUST mask-mask + mask-random + mask-nomask == 1.00.')
@@ -412,6 +416,9 @@ def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model
     # optimizer setting
     modules = {_name: _module for _name, _module in model.named_children()
                if _name not in (HEAD_MASKED_LM, RELATION_MASKED_LM, TAIL_MASKED_LM)}
+    if args.no_change_first_entity: modules.pop(ENTITY_EMBEDDINGS)
+    if args.no_change_first_relation: modules.pop(RELATION_EMBEDDINGS)
+
     opt = torch.optim.Adam([{PARAMS: _module.parameters(), LR: lr} for _name, _module in modules.items()
                             ] + [
                                {PARAMS: model.head_maskdlm.parameters(), LR: lr_head},

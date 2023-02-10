@@ -23,6 +23,9 @@ from utils.utils import tqdm, version_check
 LINEAR: Final = 'linear'
 ACTIVATION: Final = 'activation'
 
+ENTITY_EMBEDDINGS: Final = 'entity_embeddings'
+RELATION_EMBEDDINGS: Final = 'relation_embeddings'
+
 MASKED_LM: Final = 'maskdlm'
 HEAD_MASKED_LM: Final = 'head_maskdlm'
 RELATION_MASKED_LM: Final = 'relation_maskdlm'
@@ -203,15 +206,21 @@ class _LabelInit(_Init, ABC):
         if not args.init_embedding_using_bert:
             return
         device = args.device
+        force_set_label: bool = getattr(args, 'force_set_label', False)
+        data_helper: MyDataHelperForStory = kwargs['data_helper']
+
         embedding_dim, num_embeddings = self.entity_embeddings.embedding_dim, self.entity_embeddings.num_embeddings
         assert embedding_dim == 768, f"The entity_embedding_dim must 768 but entity_embedding_dim=={embedding_dim}"
 
-        data_helper: MyDataHelperForStory = kwargs['data_helper']
         bert_model = BertModel.from_pretrained('bert-base-uncased')
         bert_model.to(device)
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         processed_entities_label = [
-            "[CLS] {}".format(x) if x != '' else '' for x in data_helper.processed_entities_label]
+            f"[CLS] {label}" if label != '' or label is None else
+            f"[CLS] {entity_name}" if force_set_label else
+            ''
+            for label, entity_name in zip(data_helper.processed_entities_label, data_helper.processed_entities)
+        ]
         result = tokenizer.batch_encode_plus(processed_entities_label, add_special_tokens=False)
         input_ids_list = result['input_ids']
 
