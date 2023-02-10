@@ -41,6 +41,7 @@ class KgSequenceTransformer(nn.Module, ABC):
     """KnowledgeGraph Sequence Transformer
 
     """
+
     def __init__(self, args, num_entity, num_relations, special_tokens,
                  do_head_pred=True, do_relation_pred=True, do_tail_pred=True,
                  *args_, **kwargs):
@@ -75,11 +76,6 @@ class KgSequenceTransformer(nn.Module, ABC):
         self.entity_embeddings = Embedding(num_entity, entity_embedding_dim, padding_idx=padding_token_e)
         self.relation_embeddings = Embedding(num_relations, relation_embedding_dim, padding_idx=padding_token_r)
 
-    def _forward(self, triple: torch.Tensor):
-        x = self.get_triple_embedding(triple[:, :, 0], triple[:, :, 1], triple[:, :, 2])
-        x = self.encoder(x)
-        return x
-
     def forward(self, triple, mask_head_filter, mask_relation_filter, mask_tail_filter):
         """
 
@@ -92,21 +88,16 @@ class KgSequenceTransformer(nn.Module, ABC):
         Returns:
             tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         """
-        # get item
-        x = self._forward(triple)
-        # entity mask
-        x = x.reshape(-1, self.embedding_dim)
-        head_pred, relation_pred, tail_pred = None, None, None
-        if mask_head_filter is not None:
-            head_pred = self.get_head_pred(x[flatten(mask_head_filter)])
-            pass
-        if mask_relation_filter is not None:
-            relation_pred = self.get_relation_pred(x[flatten(mask_relation_filter)])
-            pass
-        if mask_tail_filter is not None:
-            tail_pred = self.get_tail_pred(x[flatten(mask_tail_filter)])
-            pass
-        return x, (head_pred, relation_pred, tail_pred)
+        # get entity id, relation id
+        head, relation, tail = triple[:, :, 0], triple[:, :, 1], triple[:, :, 2]
+        # get (head, relation, tail) embeddings
+        head, relation, tail = self.get_emb_head(head), self.get_emb_relation(relation), self.get_emb_tail(tail)
+        # get triples embeddings
+        triples = self.get_triple_embedding(head, relation, tail)
+        # get encoding embeddings
+        triples = self.encoder(triples)
+        # get pred items
+        return triples, self.get_pred(triples, mask_head_filter, mask_relation_filter, mask_tail_filter)
 
     def assert_check(self, *args_, **kwargs):
         """check assertion
@@ -126,21 +117,21 @@ class _Init(KgSequenceTransformer, ABC):
 
 class _GetEmb(KgSequenceTransformer, ABC):
     @abstractmethod
-    def get_emb_head(self, x: torch.Tensor):
+    def get_emb_head(self, head: torch.Tensor):
         """get head embedding function.
 
         """
         raise NotImplementedError()
 
     @abstractmethod
-    def get_emb_relation(self, x: torch.Tensor):
+    def get_emb_relation(self, relation: torch.Tensor):
         """get relation embedding function.
 
         """
         raise NotImplementedError()
 
     @abstractmethod
-    def get_emb_tail(self, x: torch.Tensor):
+    def get_emb_tail(self, tail: torch.Tensor):
         """get tail embedding function.
 
         """
@@ -149,7 +140,7 @@ class _GetEmb(KgSequenceTransformer, ABC):
 
 class _GetTripleEmb(KgSequenceTransformer, ABC):
     @abstractmethod
-    def get_triple_embedding(self, head, relation, tail):
+    def get_triple_embedding(self, head_emb, relation_emb, tail_emb):
         raise NotImplementedError()
 
 
@@ -168,6 +159,10 @@ class _Encoder(KgSequenceTransformer, ABC):
 
 
 class _GetPred(KgSequenceTransformer, ABC):
+    @abstractmethod
+    def get_pred(self, x, mask_head_filter, mask_relation_filter, mask_tail_filter):
+        raise NotImplementedError()
+
     @abstractmethod
     def get_head_pred(self, x: torch.Tensor):
         raise NotImplementedError()
@@ -244,7 +239,7 @@ class _LabelInit(_Init, ABC):
                 pre_embedding_mean, pre_embedding_mean_var, size=(num_embeddings - num_pre_emb, embedding_dim))
 
 
-# Get embedding
+# Get (head, relation, tail) embeddings
 
 
 class _GetEmbSimple(_GetEmb):
@@ -271,7 +266,7 @@ class _GetEmbByActivateHead(_GetEmbSimple):
         return self.head_activate(self.entity_embeddings(x))
 
 
-# Get triple embedding
+# Get triples embeddings
 
 
 class _GetTripleEmbAsSum(_GetTripleEmb):
@@ -281,8 +276,7 @@ class _GetTripleEmbAsSum(_GetTripleEmb):
         self.weight_relation = torch.nn.Parameter(torch.tensor(1.0))
         self.weight_tail = torch.nn.Parameter(torch.tensor(1.0))
 
-    def get_triple_embedding(self, head, relation, tail):
-        emb_head, emb_rel, emb_tail = self.get_emb_head(head), self.get_emb_relation(relation), self.get_emb_tail(tail)
+    def get_triple_embedding(self, emb_head, emb_rel, emb_tail):
         x = emb_head * self.weight_head + emb_rel * self.weight_relation + emb_tail * self.weight_tail
         return x
 
@@ -297,13 +291,12 @@ class _GetTripleEmbAsCatActivate(_GetTripleEmb):
         # set new module
         self.input_activate = Feedforward(2 * entity_embedding_dim + relation_embedding_dim, embedding_dim)
 
-    def get_triple_embedding(self, head, relation, tail):
-        emb_head, emb_rel, emb_tail = self.get_emb_head(head), self.get_emb_relation(relation), self.get_emb_tail(tail)
+    def get_triple_embedding(self, emb_head, emb_rel, emb_tail):
         x = self.input_activate(torch.cat([emb_head, emb_rel, emb_tail], dim=2))
         return x
 
 
-# get encode item
+# Get encoding embeddings
 
 
 class _TransformerEncoder(KgSequenceTransformer):
@@ -330,6 +323,7 @@ class _TransformerEncoder(KgSequenceTransformer):
         self.is_use_position_encoding = not args.no_use_pe
         if self.is_use_position_encoding:
             self.pe = PositionalEncoding(embedding_dim, dropout=position_encoder_drop, max_len=max_len)
+            pass
         self.transformer = TransformerEncoder(TransformerEncoderLayer(
             d_model=embedding_dim, nhead=nhead, dropout=transformer_drop,
             batch_first=True, dim_feedforward=dim_feedforward,
@@ -342,43 +336,77 @@ class _TransformerEncoder(KgSequenceTransformer):
         return self.norm_after_transformer(self.transformer(x))
 
 
-# get pred
+# Get pred items
 
-class _GetPredByNearValue(_GetPred):
+class _GetPredSimple(_GetPred, ABC):
+    def __init__(self, args, *args_, **kwargs):
+        super(_GetPredSimple, self).__init__(args, *args_, **kwargs)
+
+    def get_pred(self, x, mask_head_filter, mask_relation_filter, mask_tail_filter):
+        x = x.reshape(-1, self.embedding_dim)
+        head_pred, relation_pred, tail_pred = None, None, None
+        if mask_head_filter is not None:
+            head_pred = self.get_head_pred(x[flatten(mask_head_filter)])
+            pass
+        if mask_relation_filter is not None:
+            relation_pred = self.get_relation_pred(x[flatten(mask_relation_filter)])
+            pass
+        if mask_tail_filter is not None:
+            tail_pred = self.get_tail_pred(x[flatten(mask_tail_filter)])
+            pass
+        return head_pred, relation_pred, tail_pred
+
+
+class _GetPredByNearValue(_GetPredSimple):
     def __init__(self, args, *args_, **kwargs):
         super(_GetPredByNearValue, self).__init__(args, *args_, **kwargs)
         embedding_dim = args.embedding_dim
-        maskdlm_maker = lambda: OrderedDict(
-            [(LINEAR, Linear(embedding_dim, embedding_dim)), (ACTIVATION, torch.nn.Tanh())])
+        entity_embedding_dim = args.entity_embedding_dim
+        relation_embedding_dim = args.entity_embedding_dim
         # maskdlm for head, relation, tail
-        self.head_maskdlm = Sequential(maskdlm_maker())
-        self.relation_maskdlm = Sequential(maskdlm_maker())
-        self.tail_maskdlm = Sequential(maskdlm_maker())
+        self.head_maskdlm = Feedforward(
+            embedding_dim, entity_embedding_dim, dim_feedforward=embedding_dim, add_norm=False)
+        self.relation_maskdlm = Feedforward(
+            embedding_dim, relation_embedding_dim, dim_feedforward=embedding_dim, add_norm=False)
+        self.tail_maskdlm = Feedforward(
+            embedding_dim, entity_embedding_dim, dim_feedforward=embedding_dim, add_norm=False)
+
+    def get_head_embeddings(self, x: torch.Tensor):
+        return self.head_maskdlm(x)
+
+    def get_relation_embeddings(self, x: torch.Tensor):
+        return self.relation_maskdlm(x)
+
+    def get_tail_embeddings(self, x: torch.Tensor):
+        return self.tail_maskdlm(x)
 
     def get_head_pred(self, x: torch.Tensor):
         entity_embeddings = self.entity_embeddings.weight.transpose(1, 0)
-        x = mm(self.head_maskdlm(x), entity_embeddings)
+        x = mm(self.get_head_embeddings(x), entity_embeddings)
         return x
 
     def get_relation_pred(self, x: torch.Tensor):
         relation_embeddings = self.relation_embeddings.weight.transpose(1, 0)
-        x = mm(self.relation_maskdlm(x), relation_embeddings)
+        x = mm(self.get_relation_embeddings(x), relation_embeddings)
         return x  # x.shape = [semi_batch, (num_relation + some special entity num)]
 
     def get_tail_pred(self, x: torch.Tensor):
         entity_embeddings = self.entity_embeddings.weight.transpose(1, 0)
-        x = mm(self.tail_maskdlm(x), entity_embeddings)
+        x = mm(self.get_tail_embeddings(x), entity_embeddings)
         return x  # F.softmax(x)  # x.shape = [semi_batch, (num_entities + some special entity num)]
 
 
-class _GetPredByOneHot(_GetPred):
+class _GetPredByOneHot(_GetPredSimple):
     def __init__(self, args, num_entity, num_relations, *args_, **kwargs):
         super(_GetPredByOneHot, self).__init__(args, num_entity, num_relations, *args_, **kwargs)
         embedding_dim = args.embedding_dim
 
-        self.head_maskdlm = Feedforward(embedding_dim, num_entity, dim_feedforward=embedding_dim, add_norm=False)
-        self.relation_maskdlm = Feedforward(embedding_dim, num_relations, dim_feedforward=embedding_dim, add_norm=False)
-        self.tail_maskdlm = Feedforward(embedding_dim, num_entity, dim_feedforward=embedding_dim, add_norm=False)
+        self.head_maskdlm = Feedforward(
+            embedding_dim, num_entity, dim_feedforward=embedding_dim, add_norm=False)
+        self.relation_maskdlm = Feedforward(
+            embedding_dim, num_relations, dim_feedforward=embedding_dim, add_norm=False)
+        self.tail_maskdlm = Feedforward(
+            embedding_dim, num_entity, dim_feedforward=embedding_dim, add_norm=False)
 
     def get_head_pred(self, x: torch.Tensor):
         return self.head_maskdlm(x)
@@ -394,7 +422,7 @@ class _GetPredByOneHot(_GetPred):
 
 
 class KgSequenceTransformer00(
-    _GetEmbSimple, _GetTripleEmbAsSum, _TransformerEncoder, _GetPredByNearValue
+    _DefaultInit, _GetEmbSimple, _GetTripleEmbAsSum, _TransformerEncoder, _GetPredByNearValue
 ):
     """KgSequenceTransformer00
 
@@ -421,7 +449,7 @@ class KgSequenceTransformer00(
 
 
 class KgSequenceTransformer01(
-    _GetEmbByActivateHead, _GetTripleEmbAsSum, _TransformerEncoder, _GetPredByNearValue,
+    _DefaultInit, _GetEmbByActivateHead, _GetTripleEmbAsSum, _TransformerEncoder, _GetPredByNearValue,
 ):
     """01
 
@@ -430,7 +458,7 @@ class KgSequenceTransformer01(
 
 
 class KgSequenceTransformer02(
-    _GetEmbSimple, _GetTripleEmbAsSum, _TransformerEncoder, _GetPredByOneHot,
+    _DefaultInit, _GetEmbSimple, _GetTripleEmbAsSum, _TransformerEncoder, _GetPredByOneHot,
 ):
     """KgSequenceTransformer02
 
@@ -445,7 +473,7 @@ class KgSequenceTransformer02(
 
 
 class KgSequenceTransformer0102(
-    _GetEmbByActivateHead, _GetTripleEmbAsSum, _TransformerEncoder, _GetPredByOneHot,
+    _DefaultInit, _GetEmbByActivateHead, _GetTripleEmbAsSum, _TransformerEncoder, _GetPredByOneHot,
 ):
     """KgSequenceTransformer0102
 
@@ -467,7 +495,7 @@ class KgSequenceTransformer0102(
 class KgSequenceTransformer03(
     _DefaultInit, _GetEmbSimple, _GetTripleEmbAsCatActivate, _TransformerEncoder, _GetPredByOneHot,
 ):
-    """KgSequenceTransformer0102
+    """KgSequenceTransformer03
 
     * Changed from 00.
     * --- ---
@@ -481,7 +509,9 @@ class KgSequenceTransformer03(
     """
 
 
-class KgSequenceTransformer03preInit(_LabelInit, KgSequenceTransformer03):
+class KgSequenceTransformer03preInit(
+    _LabelInit, _GetEmbSimple, _GetTripleEmbAsCatActivate, _TransformerEncoder, _GetPredByOneHot,
+):
     """KgSequenceTransformer03 and pre init by bert model.
 
     """

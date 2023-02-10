@@ -186,8 +186,8 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
          help='if it is set and the model is 03a, it will be pre_init by bert')
     paa5('--force-set-label', action='store_true',
          help='If true, however there has no label, the entity name set as label.')
-    paa5('--no-change-first-entity', action='store_true', help='If true, entity embedding not change')
-    paa5('--no-change-first-relation', action='store_true', help='If true,  entity embedding not change')
+    paa5('--no-grad-entity-embedding', action='store_true', help='If true, entity embedding not change')
+    paa5('--no-grad-relation-embedding', action='store_true', help='If true,  entity embedding not change')
     # mask percent
     parser_group051 = parser.add_argument_group(
         'model setting of mask-percent', 'MUST mask-mask + mask-random + mask-nomask == 1.00.')
@@ -416,8 +416,13 @@ def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model
     # optimizer setting
     modules = {_name: _module for _name, _module in model.named_children()
                if _name not in (HEAD_MASKED_LM, RELATION_MASKED_LM, TAIL_MASKED_LM)}
-    if args.no_change_first_entity: modules.pop(ENTITY_EMBEDDINGS)
-    if args.no_change_first_relation: modules.pop(RELATION_EMBEDDINGS)
+    if args.no_grad_entity_embedding:
+        logger.info("entity embeddings is not change.")
+        modules.pop(ENTITY_EMBEDDINGS).requires_grad = False
+    if args.no_grad_relation_embedding:
+        logger.info("relation embeddings is not change.")
+        modules.pop(RELATION_EMBEDDINGS).requires_grad = False
+        pass
 
     opt = torch.optim.Adam([{PARAMS: _module.parameters(), LR: lr} for _name, _module in modules.items()
                             ] + [
@@ -603,7 +608,7 @@ def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model
             **{_key: TopKCategoricalAccuracy(10, _getter) for _key, _getter in zip(TOP10_NAME3, getter_list)},
         }
 
-        [_value.attach(engine, _key) for _key, _value in metrics.items() 
+        [_value.attach(engine, _key) for _key, _value in metrics.items()
          if _key in metric_names and _key in metrics]
 
         return engine, metrics
