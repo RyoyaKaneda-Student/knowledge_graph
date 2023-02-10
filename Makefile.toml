@@ -2980,6 +2980,46 @@ python3 -O src/run_for_KGC.py   \
 	]
 description = "same as 0201"
 
+[tasks.kgc_0205_5]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/230205/05"
+Lr="1e-4"
+LrStory="5e-5"
+LrRelation="1e-6"
+LREntity="1e-6"
+EmbeddingDim="128"
+EEmbeddingDim="768"
+REmbeddingDim="64"
+MaskPercent="0.30"
+MaskMaskPercent="0.60"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.30"
+LossFunction="focal_loss"
+Gamma="2.5"
+
+Epoch="1500"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train \
+	--model-version 03a --init-embedding-using-bert --force-set-label --no-grad-entity-embedding \
+	--train-valid-test --epoch ${Epoch} --batch-size 128 \
+	--early-stopping --early-stopping-count 10 \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--max-len 512 \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--loss-function ${LossFunction} --gamma ${Gamma} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--valid-interval 50 ${@:2}
+	'''
+	]
+description = "same as 0201"
 
 [tasks.kgc_0207_check_MaskPercent]
 workspace = false
@@ -3056,12 +3096,12 @@ MaskNomaskPercent="0.20"
 
 Epoch="3000"
 
-MaxLenList=(16 32 64 128 256 384 512)
+MaxLenList=(8 16 32 64 128 256 384 512)
 
-for i in 0 1 2; do
+for i in 0 1 2 3 4 5 6 7; do
 
 MaxLen=${MaxLenList[i]}
-LogFolder=${LogFolderFolder}/$(($i+1))
+LogFolder=${LogFolderFolder}/MaxLen\=${MaxLen}
 
 mkdir ${LogFolder}
 echo MaxLen=${MaxLen}
