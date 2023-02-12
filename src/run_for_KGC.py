@@ -196,6 +196,7 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
     paa51('--mask-mask-percent', help='default: 0.80', metavar='mask-rate', type=float, default=0.80)
     paa51('--mask-random-percent', help='default: 0.10', metavar='random-rate', type=float, default=0.10)
     paa51('--mask-nomask-percent', help='default: 0.10', metavar='nomask-rate', type=float, default=0.10)
+    paa51('--no-bos-mask', action='store_true', help='', )
     paa51('--skip-head-mask', action='store_true', help='', )
     paa51('--skip-relation-mask', action='store_true', help='', )
     paa51('--skip-tail-mask', action='store_true', help='', )
@@ -340,6 +341,7 @@ def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model
     max_len = args.max_len
     max_epoch = args.epoch
     mask_token_e, mask_token_r = args.mask_token_e, args.mask_token_r
+    bos_token_e, bos_token_r = args.bos_token_e, args.bos_token_r
     checkpoint_dir = args.checkpoint_dir
     resume_checkpoint_path = args.resume_checkpoint_path
     is_resume_from_checkpoint = args.resume_from_checkpoint
@@ -377,19 +379,24 @@ def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model
 
     # optional function
     # noinspection PyTypeChecker
-    def mask_function(_random_all, _value, _mask_token, weights) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def mask_function(_random_all, _value, _mask_token, _bos_token, weights) -> tuple[
+        torch.Tensor, torch.Tensor, torch.Tensor]:
         """ Mask by mask_token
 
         Args:
             _random_all(torch.Tensor): random values. All parameters are within 0.0 ~ 1.0.
             _value(torch.Tensor): Correct value.
             _mask_token(int): mask token
+            _bos_token(int): bos token
             weights(torch.Tensor): the weight of random values frequency.
 
         Returns:
             tuple[torch.Tensor, torch.Tensor, torch.Tensor]
 
         """
+        if args.no_bos_mask:
+            _random_all[_value == _bos_token] = 1.0
+            pass
         _mask_filter = _random_all < mask_percent
         _mask_ans = _value[_mask_filter].detach().clone()
         _mask_value = _value[_mask_filter]
@@ -468,15 +475,15 @@ def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model
         mask_ans_head, mask_ans_relation, mask_ans_tail = None, None, None
         if is_do_head_mask:
             mask_filter_head, mask_ans_head, mask_value_head = mask_function(
-                torch.rand((batch_size, max_len)), triple[:, :, 0], mask_token_e, head_index2count)
+                torch.rand((batch_size, max_len)), triple[:, :, 0], mask_token_e, bos_token_e, head_index2count)
             triple[:, :, 0][mask_filter_head] = mask_value_head
         if is_do_relation_mask:
             mask_filter_relation, mask_ans_relation, mask_value_relation = mask_function(
-                torch.rand((batch_size, max_len)), triple[:, :, 1], mask_token_r, relation_index2count)
+                torch.rand((batch_size, max_len)), triple[:, :, 1], mask_token_r, bos_token_r, relation_index2count)
             triple[:, :, 1][mask_filter_relation] = mask_value_relation
         if is_do_tail_mask:
             mask_filter_tail, mask_ans_tail, mask_value_tail = mask_function(
-                torch.rand((batch_size, max_len)), triple[:, :, 2], mask_token_e, tail_index2count)
+                torch.rand((batch_size, max_len)), triple[:, :, 2], mask_token_e, bos_token_e, tail_index2count)
             triple[:, :, 2][mask_filter_tail] = mask_value_tail
 
         _, (head_pred, relation_pred, tail_pred) = model(
