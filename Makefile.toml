@@ -3146,7 +3146,7 @@ workspace = false
 script = [
 '''
 #!/usr/bin/env bash
-Logfile="models/230205/07"
+Logfile="models/230205/09"
 Lr="1e-4"
 LrStory="5e-5"
 LrRelation="1e-6"
