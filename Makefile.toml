@@ -3082,12 +3082,11 @@ MaskNomaskPercent="0.30"
 LossFunction="focal_loss"
 Gamma="2.5"
 
-Epoch="1500"
+Epoch="500"
 
 python3 -O src/run_for_KGC.py   \
 	--device cuda --console-level info --pre-train --model-version 03 \
-	--train-valid-test --epoch ${Epoch} --batch-size 128 \
-	--early-stopping --early-stopping-count 10 \
+	--train-only --epoch ${Epoch} --batch-size 128 \
 	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
 	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
 	--checkpoint-dir ${Logfile}/checkpoint/ \
@@ -3100,7 +3099,7 @@ python3 -O src/run_for_KGC.py   \
 	--valid-interval 50 ${@:2}
 	'''
 	]
-description = "same as 0201"
+description = "same as 0201 check hannnin"
 
 [tasks.kgc_0205_8]
 workspace = false
