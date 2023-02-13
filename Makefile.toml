@@ -3086,7 +3086,7 @@ Epoch="500"
 
 python3 -O src/run_for_KGC.py   \
 	--device cuda --console-level info --pre-train --model-version 03 \
-	--train-only --epoch ${Epoch} --batch-size 128 \
+	--only-train --epoch ${Epoch} --batch-size 128 \
 	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
 	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
 	--checkpoint-dir ${Logfile}/checkpoint/ \
