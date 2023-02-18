@@ -3217,7 +3217,7 @@ python3 -O src/run_for_KGC.py   \
 	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
 	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
 	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
-	--SEED 42 --train-SEED ${i} ${@:2}
+	--SEED 42 --training-SEED ${i} ${@:2}
 
 done
 '''
