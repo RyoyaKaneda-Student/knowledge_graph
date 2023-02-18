@@ -18,7 +18,7 @@ from torch.utils.tensorboard.writer import SummaryWriter
 from ignite.engine import Events, Engine
 from ignite.handlers import Timer, Checkpoint, DiskSaver, global_step_from_engine, EarlyStopping
 
-from utils.torch import force_cpu
+from utils.torch import force_cpu, torch_fix_seed
 from utils.utils import elapsed_time_str
 
 from const.const_values import (LOSS, MODEL, OPTIMIZER)
@@ -308,8 +308,10 @@ def load_from_checkpoints_if_you_need(
 
 
 def training_with_ignite(
-        model, opt, max_epoch, trainer, evaluator, checkpoint_dir, resume_checkpoint_path,
-        is_resume_from_good_checkpoint, is_resume_from_last_checkpoint, *, train, device, non_blocking, logger
+        model, opt, max_epoch, trainer, evaluator,
+        checkpoint_dir, resume_checkpoint_path,
+        is_resume_from_good_checkpoint, is_resume_from_last_checkpoint,
+        *, train, device, non_blocking, train_seed, logger,
 ) -> tuple[Checkpoint, Checkpoint, dict]:
     """training
 
@@ -326,6 +328,7 @@ def training_with_ignite(
         train:
         device:
         non_blocking:
+        train_seed:
         logger:
 
     Returns:
@@ -362,6 +365,9 @@ def training_with_ignite(
 
     if max_epoch > trainer.state.epoch:
         logger.info(f"max epoch {max_epoch}. start training.")
+        if train_seed is not None:
+            torch_fix_seed(seed=train_seed)
+            logger.info(f"training seed: {train_seed}")
         trainer.run(train, max_epochs=max_epoch)
 
     return good_checkpoint, last_checkpoint, to_load

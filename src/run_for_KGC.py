@@ -119,6 +119,7 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
     paa('--device-name', help=DeviceName.ALL_INFO, type=str, default=DeviceName.CPU, choices=DeviceName.ALL_LIST)
     paa('--train-anyway', help='It will not be reproducible, but it could be faster.', action='store_true')
     paa('--SEED', type=int, default=42, help='seed. default 42 (It has no mean.) ')
+    paa('--training-SEED', type=int, help='training seed. default 42 (It has no mean.) ')
     # save dir setting
     parser_group01 = parser.add_argument_group('dir and path', 'There are the setting of training setting dir or path.')
     paa1 = parser_group01.add_argument
@@ -379,8 +380,8 @@ def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model
 
     # optional function
     # noinspection PyTypeChecker
-    def mask_function(_random_all, _value, _mask_token, _bos_token, weights) -> tuple[
-        torch.Tensor, torch.Tensor, torch.Tensor]:
+    def mask_function(
+            _random_all, _value, _mask_token, _bos_token, weights) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """ Mask by mask_token
 
         Args:
@@ -415,7 +416,7 @@ def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model
 
     entity_num, relation_num = data_helper.processed_entity_num, data_helper.processed_relation_num
     train = data_loaders.train_dataloader
-    train_dataset = train.dataset
+    train_dataset: StoryTriple = train.dataset
     valid = data_loaders.valid_dataloader if args.train_valid_test else None
     # count frequency list
     head_index2count, relation_index2count, tail_index2count = train_dataset.get_index2count(device)
@@ -463,31 +464,34 @@ def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model
 
         """
         model.train()
-        triple = batch
-        batch_size = triple.shape[0]
-        assert triple.shape == (batch_size, max_len, 3)
+        triple_sequence = batch
+        batch_size = triple_sequence.shape[0]
+        assert triple_sequence.shape == (batch_size, max_len, 3)
         # train start
         opt.zero_grad()
 
-        triple: torch.Tensor = triple.to(device, non_blocking=non_blocking)
+        triple_sequence: torch.Tensor = triple_sequence.to(device, non_blocking=non_blocking)
 
         mask_filter_head, mask_filter_relation, mask_filter_tail = None, None, None
         mask_ans_head, mask_ans_relation, mask_ans_tail = None, None, None
         if is_do_head_mask:
             mask_filter_head, mask_ans_head, mask_value_head = mask_function(
-                torch.rand((batch_size, max_len)), triple[:, :, 0], mask_token_e, bos_token_e, head_index2count)
-            triple[:, :, 0][mask_filter_head] = mask_value_head
+                torch.rand((batch_size, max_len)), triple_sequence[:, :, 0], mask_token_e, bos_token_e,
+                head_index2count)
+            triple_sequence[:, :, 0][mask_filter_head] = mask_value_head
         if is_do_relation_mask:
             mask_filter_relation, mask_ans_relation, mask_value_relation = mask_function(
-                torch.rand((batch_size, max_len)), triple[:, :, 1], mask_token_r, bos_token_r, relation_index2count)
-            triple[:, :, 1][mask_filter_relation] = mask_value_relation
+                torch.rand((batch_size, max_len)), triple_sequence[:, :, 1], mask_token_r, bos_token_r,
+                relation_index2count)
+            triple_sequence[:, :, 1][mask_filter_relation] = mask_value_relation
         if is_do_tail_mask:
             mask_filter_tail, mask_ans_tail, mask_value_tail = mask_function(
-                torch.rand((batch_size, max_len)), triple[:, :, 2], mask_token_e, bos_token_e, tail_index2count)
-            triple[:, :, 2][mask_filter_tail] = mask_value_tail
+                torch.rand((batch_size, max_len)), triple_sequence[:, :, 2], mask_token_e, bos_token_e,
+                tail_index2count)
+            triple_sequence[:, :, 2][mask_filter_tail] = mask_value_tail
 
         _, (head_pred, relation_pred, tail_pred) = model(
-            triple, mask_filter_head, mask_filter_relation, mask_filter_tail
+            triple_sequence, mask_filter_head, mask_filter_relation, mask_filter_tail
         )
 
         loss: torch.Tensor = torch.tensor(0, dtype=torch.float).to(device)
@@ -533,7 +537,7 @@ def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model
         triple: torch.Tensor = batch[0].to(device, non_blocking=non_blocking)
         valid_filter: torch.Tensor = batch[1].to(device, non_blocking=non_blocking)
 
-        # triple.shape == (batch, max_len, 3) and valid_filter.shape == (batch, max_len)
+        # triple_sequence.shape == (batch, max_len, 3) and valid_filter.shape == (batch, max_len)
 
         def get_valid_loss(_index, _loss_fn):
             """get valid loss
@@ -651,7 +655,8 @@ def pre_training(args: Namespace, hyper_params, data_helper, data_loaders, model
         good_checkpoint, last_checkpoint, dict_ = training_with_ignite(
             model, opt, max_epoch, trainer, evaluator, checkpoint_dir,
             resume_checkpoint_path, is_resume_from_checkpoint, is_resume_from_last_point,
-            train=train, device=device, non_blocking=non_blocking, logger=logger)
+            train=train, device=device, non_blocking=non_blocking,
+            train_seed=args.training_SEED, logger=logger)
         return {MODEL: model, TRAINER: trainer, EVALUATOR: evaluator,
                 GOOD_LOSS_CHECKPOINTE: good_checkpoint, LAST_CHECKPOINTE: last_checkpoint}
 
@@ -903,11 +908,14 @@ def make_get_dataloader(args: Namespace, *, datasets: tuple[Dataset, Dataset, Da
     return data_loaders
 
 
-def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, logger: Logger):
+def do_train_test_ect(args: Namespace, make_get_model_func, pre_training_func, *, data_helper, data_loaders,
+                      logger: Logger):
     """do train test ect
 
     Args:
         args(Namespace): args
+        make_get_model_func(Callable): make_get_model_func
+        pre_training_func(Callable): pre_training_func
         data_helper(MyDataHelper): data_helper
         data_loaders(MyDataLoaderHelper): data_loaders
         logger(Logger): logger
@@ -927,7 +935,7 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, logger: Log
         _model_path = args.model_path
         if _model_path is None: raise ValueError("model path must not None")
         # training.
-        _train_returns = pre_training(
+        _train_returns = pre_training_func(
             args, _hyper_params, data_helper, data_loaders, model, summary_writer=_summary_writer, logger=logger)
         # check the output of the training.
         _good_checkpoint, _last_checkpoint = map(_train_returns.get, (GOOD_LOSS_CHECKPOINTE, LAST_CHECKPOINTE))
@@ -939,7 +947,7 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, logger: Log
 
     # default mode
     if args.pre_train and not args.do_optuna:
-        model = make_get_model(args, data_helper=data_helper, logger=logger)
+        model = make_get_model_func(args, data_helper=data_helper, logger=logger)
         summary_writer = SummaryWriter(log_dir=args.tensorboard_dir) if args.tensorboard_dir is not None else None
         # setting hyper parameter
         hyper_params = (
@@ -962,7 +970,7 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, logger: Log
 
             """
             nonlocal model
-            model = make_get_model(args, data_helper=data_helper, logger=logger)
+            model = make_get_model_func(args, data_helper=data_helper, logger=logger)
             _summary_writer = SummaryWriter(
                 log_dir=f"{args.tensorboard_dir}/{trial.number}") if args.tensorboard_dir is not None else None
             lr = trial.suggest_float(LR, 1e-6, 1e-4, log=True)
@@ -992,9 +1000,9 @@ def do_train_test_ect(args: Namespace, *, data_helper, data_loaders, logger: Log
         train_returns = {STUDY: study, MODEL: None}
     # if checking the trained items, use this mode.
     elif args.only_load_trainer_evaluator:
-        model = make_get_model(args, data_helper=data_helper, logger=logger)
+        model = make_get_model_func(args, data_helper=data_helper, logger=logger)
         hyper_params = (0., 0., 0., 0., LossFnName.CROSS_ENTROPY_LOSS, {})
-        train_returns = pre_training(
+        train_returns = pre_training_func(
             args, hyper_params, data_helper, data_loaders, model, summary_writer=None, logger=logger)
     else:
         train_returns = {MODEL: None}
@@ -1036,7 +1044,7 @@ def main_function(args: Namespace, *, logger: Logger):
     # train test ect
     logger.info('----- do train start -----')
     train_returns = do_train_test_ect(
-        args, data_helper=data_helper, data_loaders=data_loaders, logger=logger)
+        args, make_get_model, pre_training, data_helper=data_helper, data_loaders=data_loaders, logger=logger)
     logger.info('----- do train complete -----')
     # return some value
     return {MODEL: train_returns[MODEL], DATA_HELPER: data_helper, DATASETS: datasets,
