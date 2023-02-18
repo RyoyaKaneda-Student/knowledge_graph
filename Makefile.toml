@@ -3202,7 +3202,7 @@ Gamma="2.5"
 Epoch="750"
 
 for i in 0 1 2 3 4; do
-Logfile=${LogfileTmp}/$(printf "%03d" "${i}")
+Logfile=${LogfileTmp}/$(printf "%02d" "${i}")
 
 python3 -O src/run_for_KGC.py   \
 	--device cuda --console-level info --pre-train --model-version 03 \
