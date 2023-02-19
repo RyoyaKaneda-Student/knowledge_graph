@@ -189,6 +189,7 @@ def setup_parser(args: Optional[Sequence[str]] = None) -> Namespace:
          help='If true, however there has no label, the entity name set as label.')
     paa5('--no-grad-entity-embedding', action='store_true', help='If true, entity embedding not change')
     paa5('--no-grad-relation-embedding', action='store_true', help='If true,  entity embedding not change')
+    paa5('--delete-bos', action='store_true', help='If true,  entity embedding not change')
     # mask percent
     parser_group051 = parser.add_argument_group(
         'model setting of mask-percent', 'MUST mask-mask + mask-random + mask-nomask == 1.00.')
@@ -251,27 +252,23 @@ def fix_args(args: Namespace):
     Returns:
         Namespace
     """
-    if args.lr_story is not None:
+    if getattr(args, 'lr_story', None) is not None:
         if args.lr_head is not None: raise ValueError()
         args.lr_head = args.lr_story
         warnings.warn("The parameter --lr-story is deprecated. please use --lr-head")
-    if args.lr_entity is not None:
+        delattr(args, 'lr_story')
+    if getattr(args, 'lr_entity', None) is not None:
         if args.lr_tail is not None: raise ValueError()
         args.lr_tail = args.lr_entity
         warnings.warn("The parameter --lr-entity is deprecated. please use --lr-tail")
-        del args.lr_entity
-
-    for key in ('lr_story', 'lr_entity'):
-        if hasattr(args, key): delattr(args, key)
-        pass
-
+        delattr(args, 'lr_entity')
     if not hasattr(args, 'old_data'):
         args.old_data = 0
         pass
-
-    for key in ('skip_head_mask', 'skip_relation_mask', 'skip_tail_mask'):
-        if not hasattr(args, key): setattr(args, key, False)
-        pass
+    if not hasattr(args, 'skip_head_mask'): setattr(args, 'skip_head_mask', False)
+    if not hasattr(args, 'skip_relation_mask'): setattr(args, 'skip_relation_mask', False)
+    if not hasattr(args, 'skip_tail_mask'): setattr(args, 'skip_tail_mask', False)
+    if not hasattr(args, 'delete_bos'): setattr(args, 'delete_bos', False)
     return args
 
 
@@ -814,17 +811,17 @@ def make_get_datasets(args: Namespace, *, data_helper, logger: Logger):
         dataset_train = StoryTriple(
             triple_train, np.where(triple_train[:, 0] == bos_token_e)[0], max_len,
             pad_token_e, pad_token_r, pad_token_e, sep_token_e, sep_token_r, sep_token_e,
-            entity_num, relation_num
+            entity_num, relation_num, not args.delete_bos, args.delete_bos
         )
         dataset_valid = StoryTripleForValid(
             triple_valid, np.where(triple_valid[:, 0] == bos_token_e)[0], valid_filter, max_len,
             pad_token_e, pad_token_r, pad_token_e, sep_token_e, sep_token_r, sep_token_e,
-            entity_num, relation_num
+            entity_num, relation_num, not args.delete_bos, args.delete_bos
         )
         dataset_test = StoryTripleForValid(
             triple_test, np.where(triple_test[:, 0] == bos_token_e)[0], test_filter, max_len,
             pad_token_e, pad_token_r, pad_token_e, sep_token_e, sep_token_r, sep_token_e,
-            entity_num, relation_num
+            entity_num, relation_num, not args.delete_bos, args.delete_bos
         )
     elif max_len == 1:
         logger.info("----- Simple triple data. -----")

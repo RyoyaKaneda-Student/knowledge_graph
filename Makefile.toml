@@ -3224,6 +3224,48 @@ done
 ]
 description = "same as 0201"
 
+[tasks.kgc_0205_10]
+workspace = false
+script = [
+'''
+#!/usr/bin/env bash
+Logfile="models/230205/10"
+Lr="1e-4"
+LrStory="5e-5"
+LrRelation="1e-6"
+LREntity="1e-6"
+EmbeddingDim="128"
+EEmbeddingDim="768"
+REmbeddingDim="64"
+MaskPercent="0.30"
+MaskMaskPercent="0.60"
+MaskRandomPercent="0.10"
+MaskNomaskPercent="0.30"
+LossFunction="focal_loss"
+Gamma="2.5"
+
+Epoch="1000"
+
+python3 -O src/run_for_KGC.py   \
+	--device cuda --console-level info --pre-train --model-version 03 \
+	--train-valid-test --epoch ${Epoch} --batch-size 128 \
+	--logfile ${Logfile}/log.log --tensorboard-dir ${Logfile}/tensorboard \
+	--param-file ${Logfile}/param.pkl --model-path ${Logfile}/model.pth \
+	--checkpoint-dir ${Logfile}/checkpoint/ \
+	--valid-interval 50 --early-stopping --early-stopping-count 10 \
+	--max-len 512 --delete-bos \
+	--embedding-dim ${EmbeddingDim} --entity-embedding-dim ${EEmbeddingDim} --relation-embedding-dim ${REmbeddingDim} \
+	--loss-function ${LossFunction} --gamma ${Gamma} \
+	--mask-percent ${MaskPercent} --mask-mask-percent ${MaskMaskPercent} \
+	--mask-random-percent ${MaskRandomPercent} --mask-nomask-percent ${MaskNomaskPercent} \
+	--lr ${Lr} --lr-story ${LrStory} --lr-relation ${LrRelation} --lr-entity ${LREntity} \
+	--SEED 42 ${@:2}
+
+done
+'''
+]
+description = "delete bos"
+
 [tasks.kgc_0207_check_MaskPercent]
 workspace = false
 script = [

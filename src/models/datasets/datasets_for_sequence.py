@@ -53,8 +53,29 @@ class SimpleTriple(Dataset):
     """
     triple: torch.Tensor
 
-    def __init__(self, triple: np.ndarray):
+    def __init__(self, triple: np.ndarray, entity_num, relation_num):
+        """init
+
+        Args:
+            triple(np.ndarray):
+            entity_num(int):
+            relation_num(int):
+        """
+        triple = torch.from_numpy(triple)
+        head_index2count = torch.bincount(torch.from_numpy(triple[:, 0]), minlength=entity_num).to(torch.float)
+        relation_index2count = torch.bincount(torch.from_numpy(triple[:, 1]), minlength=relation_num).to(torch.float)
+        tail_index2count = torch.bincount(torch.from_numpy(triple[:, 2]), minlength=entity_num).to(torch.float)
+
         self.triple = torch.from_numpy(triple)
+        self.head_index2count = head_index2count
+        self.relation_index2count = relation_index2count
+        self.tail_index2count = tail_index2count
+
+    def get_index2count(self, device) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """get index2count
+
+        """
+        return self.head_index2count.to(device), self.relation_index2count.to(device), self.tail_index2count.to(device)
 
     def __getitem__(self, index: int):
         return self.triple[index]
@@ -67,6 +88,7 @@ class SequenceTriple(ABC, Dataset):
     """SequenceTriple
 
     """
+
     def __init__(self):
         super(SequenceTriple, self).__init__()
 
@@ -93,6 +115,7 @@ class StoryTriple(SequenceTriple):
     story_count: int
     sequence_length: int
     max_len: int
+    is_contain_bos: bool
     #
     padding_tensor: torch.Tensor
     sep_tensor: torch.Tensor
@@ -106,7 +129,7 @@ class StoryTriple(SequenceTriple):
 
     def __init__(self, triple, bos_indexes, max_len,
                  padding_h, padding_r, padding_t, sep_h, sep_r, sep_t,
-                 entity_num, relation_num):
+                 entity_num, relation_num, is_contain_bos=True, del_bos=False):
         """Dataset using for Story Triple.
 
         * One output shape is [series_len, 3], not [3]
@@ -115,6 +138,8 @@ class StoryTriple(SequenceTriple):
             triple(np.ndarray): triple.shape==[len_of_triple, 3]
             bos_indexes(np.ndarray): the list of indexes
             max_len(int): the max size of time series
+            is_contain_bos(bool): is_contain_bos
+            del_bos(bool): del_bos
             padding_h(int): head padding token
             padding_r(int): relation padding token
             padding_t(int): tail padding token
@@ -123,6 +148,13 @@ class StoryTriple(SequenceTriple):
             sep_t(int): tail sep token
         """
         super(StoryTriple, self).__init__()
+        if del_bos and (not is_contain_bos):
+            triple = triple[triple[:, 0] != triple[0, 0]]
+            bos_indexes = bos_indexes - np.arange(len(bos_indexes))
+        elif del_bos and is_contain_bos:
+            raise ValueError("if del_bos is True, is_contain_bos must be False")
+            pass
+
         story_count = len(bos_indexes)
         sequence_length = len(triple)
         head_index2count = torch.bincount(torch.from_numpy(triple[:, 0]), minlength=entity_num).to(torch.float)
@@ -131,12 +163,12 @@ class StoryTriple(SequenceTriple):
 
         triple = np.concatenate([triple, triple[:max_len]])
         bos_indexes = np.concatenate([bos_indexes, bos_indexes + sequence_length])
-        bos_indexes = bos_indexes[bos_indexes < sequence_length+max_len]
-        assert ((np.array([i for i, _t in enumerate(triple) if _t[0] == 4])) == bos_indexes).all()
+        bos_indexes = bos_indexes[bos_indexes < sequence_length + max_len]
         # set number
         self.story_count = story_count
         self.sequence_length = sequence_length
         self.max_len = max_len
+        self.is_contain_bos = is_contain_bos
         # set tensor
         self.padding_tensor = torch.tensor([padding_h, padding_r, padding_t])
         self.sep_tensor = torch.tensor([sep_h, sep_r, sep_t])
@@ -169,8 +201,10 @@ class StoryTriple(SequenceTriple):
         """
         triple = self.triple
         len_ = len(triple)
+        is_contain_bos = self.is_contain_bos
         for i, i_next in itertools.pairwise(list(self.bos_indexes) + [len(triple)]):
-            triple[i + 1: i_next] = triple[i + 1: i_next][torch.randperm(i_next - (i + 1))]
+            if is_contain_bos: i = i + 1
+            triple[i: i_next] = triple[i: i_next][torch.randperm(i_next - i)]
         assert len_ == len(triple)
         self.triple = triple
 
@@ -198,7 +232,7 @@ class StoryTripleForValid(StoryTriple):
     def __init__(
             self, triple, bos_indexes, valid_filter, max_len,
             padding_h, padding_r, padding_t, sep_h, sep_r, sep_t,
-            entity_num, relation_num
+            entity_num, relation_num, is_contain_bos=True, del_bos=False
     ):
         """Dataset using for Valid Story Triple.
 
@@ -218,7 +252,7 @@ class StoryTripleForValid(StoryTriple):
         """
         super().__init__(triple, bos_indexes, max_len,
                          padding_h, padding_r, padding_t, sep_h, sep_r, sep_t,
-                         entity_num, relation_num)
+                         entity_num, relation_num, is_contain_bos, del_bos)
         self.valid_filter = torch.from_numpy(np.concatenate((valid_filter, valid_filter[:max_len])))
         if not len(triple) == len(valid_filter):
             raise ValueError("len of triple and len of filter must have same size.")
